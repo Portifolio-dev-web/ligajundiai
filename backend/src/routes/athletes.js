@@ -73,9 +73,28 @@ async function createAthlete(client, { userId, managerId, team, input }) {
   return athlete
 }
 
-athletesRouter.post('/biometry-upload', authenticate, authorize('gestor'), asyncRoute(async (req, res) => {
-  const input = parse(z.object({ content_type: z.enum(['image/jpeg', 'image/png', 'image/webp']) }).strict(), req.body)
-  const upload = await createBiometryUpload(req.user.id, input.content_type)
+athletesRouter.post('/biometry-upload', authenticate, authorize('gestor', 'atleta'), asyncRoute(async (req, res) => {
+  const input = parse(z.object({
+    content_type: z.enum(['image/jpeg', 'image/png', 'image/webp']),
+    team_id: uuidSchema.optional(),
+  }).strict(), req.body)
+  let managerId
+  if (req.user.role === 'gestor') {
+    const team = await userTeam(req.user.id)
+    if (!team || team.status !== 'approved' || (input.team_id && team.id !== input.team_id)) {
+      throw new AppError(403, 'TEAM_NOT_AVAILABLE', 'Selecione sua equipe aprovada antes de enviar a foto')
+    }
+    managerId = req.user.id
+  } else {
+    if (!input.team_id) throw new AppError(400, 'TEAM_REQUIRED', 'Selecione uma equipe aprovada')
+    const team = await query(
+      "SELECT manager_user_id FROM teams WHERE id = $1 AND status = 'approved' AND deleted_at IS NULL",
+      [input.team_id],
+    )
+    if (!team.rowCount) throw new AppError(400, 'TEAM_NOT_AVAILABLE', 'Selecione uma equipe aprovada')
+    managerId = team.rows[0].manager_user_id
+  }
+  const upload = await createBiometryUpload(managerId, input.content_type)
   if (!upload) throw new AppError(400, 'INVALID_CONTENT_TYPE', 'Formato de imagem não suportado')
   res.status(201).json(upload)
 }))

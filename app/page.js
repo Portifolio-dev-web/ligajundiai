@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -55,6 +56,7 @@ import {
   Plus,
 } from 'lucide-react'
 import { api, CATEGORY_FALLBACK } from '@/lib/lvjApi'
+import { formatCpf, isValidCpf } from '@/lib/athlete'
 
 const PURPLE = '#6D28D9'
 const ORANGE = '#F97316'
@@ -93,6 +95,12 @@ function App() {
     api('/categories').then((d) => setCategories(d.categories || CATEGORY_FALLBACK)).catch(() => {})
     loadMe().finally(() => setBooting(false))
   }, [loadMe])
+
+  useEffect(() => {
+    const authReason = new URLSearchParams(window.location.search).get('auth')
+    if (authReason === 'required') setLoginOpen(true)
+    if (authReason === 'forbidden') toast.error('Seu perfil não tem permissão para acessar essa área.')
+  }, [])
 
   const onAuthed = (authenticatedUser) => {
     setToken('cookie-session')
@@ -133,6 +141,8 @@ function App() {
         <AdminPanel token={token} categories={categories} />
       ) : user?.role === 'gestor' ? (
         <GestorPanel token={token} categories={categories} user={user} myTeam={myTeam} refreshMe={() => loadMe(token)} />
+      ) : user?.role === 'atleta' ? (
+        <AthletePanel user={user} />
       ) : (
         <PublicSite categories={categories} onLoginClick={() => setLoginOpen(true)} />
       )}
@@ -165,11 +175,31 @@ function TopNav({ user, token, onLoginClick, onLogout }) {
         <div className="flex items-center gap-3">
           {user ? (
             <>
+              {user.role === 'admin' && (
+                <Link href="/admin/aprovacoes" className="hidden text-sm text-slate-200 hover:text-white sm:inline">
+                  Aprovações
+                </Link>
+              )}
+              {user.role === 'gestor' && (
+                <>
+                  <Link href="/cadastro-atleta" className="hidden text-sm text-slate-200 hover:text-white sm:inline">
+                    Cadastrar atleta
+                  </Link>
+                  <Link href="/gestor/aprovar-atletas" className="hidden text-sm text-slate-200 hover:text-white sm:inline">
+                    Aprovar atletas
+                  </Link>
+                </>
+              )}
+              {user.role === 'atleta' && (
+                <Link href="/atleta/jogos" className="hidden text-sm text-slate-200 hover:text-white sm:inline">
+                  Jogos e frequência
+                </Link>
+              )}
               <Badge
                 className="hidden sm:inline-flex text-white border-0"
                 style={{ background: user.role === 'admin' ? PURPLE : ORANGE }}
               >
-                {user.role === 'admin' ? 'Administrador' : 'Gestor de Equipe'}
+                {user.role === 'admin' ? 'Administrador' : user.role === 'atleta' ? 'Atleta' : 'Gestor de Equipe'}
               </Badge>
               <span className="hidden sm:block text-sm text-slate-200">{user.name}</span>
               <Button size="sm" variant="secondary" onClick={onLogout}>
@@ -189,6 +219,24 @@ function TopNav({ user, token, onLoginClick, onLogout }) {
         </div>
       </div>
     </header>
+  )
+}
+
+function AthletePanel({ user }) {
+  return (
+    <main className="container py-12">
+      <Card className="mx-auto max-w-2xl">
+        <CardHeader>
+          <CardTitle>Olá, {user.name}</CardTitle>
+          <CardDescription>Acompanhe seus jogos, frequência e declarações de participação.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button asChild className="text-white" style={{ background: PURPLE }}>
+            <Link href="/atleta/jogos"><CalendarDays className="mr-2 h-4 w-4" /> Abrir jogos e frequência</Link>
+          </Button>
+        </CardContent>
+      </Card>
+    </main>
   )
 }
 
@@ -486,6 +534,8 @@ function LoginDialog({ open, onOpenChange, onAuthed }) {
 
   // Register
   const [reg, setReg] = useState({ name: '', email: '', phone: '', cpf: '', password: '', consent: false })
+  const [termsAccepted, setTermsAccepted] = useState(false)
+  const [sensitiveConsent, setSensitiveConsent] = useState(false)
 
   const [loading, setLoading] = useState(false)
 
@@ -527,7 +577,10 @@ function LoginDialog({ open, onOpenChange, onAuthed }) {
   const doRegister = async () => {
     setLoading(true)
     try {
-      const d = await api('/auth/register', { method: 'POST', body: reg })
+      const d = await api('/auth/register', {
+        method: 'POST',
+        body: { ...reg, consent: termsAccepted && sensitiveConsent },
+      })
       onAuthed(d.user)
     } catch (e) {
       toast.error(e.message)
@@ -620,10 +673,14 @@ function LoginDialog({ open, onOpenChange, onAuthed }) {
               <Input type="password" value={reg.password} onChange={(e) => setReg({ ...reg, password: e.target.value })} />
             </div>
             <label className="flex items-start gap-2 text-sm text-slate-600">
-              <input type="checkbox" checked={reg.consent} onChange={(e) => setReg({ ...reg, consent: e.target.checked })} />
-              <span>Consinto com o tratamento dos meus dados para gestão da liga, conforme a política de privacidade.</span>
+              <input type="checkbox" checked={termsAccepted} onChange={(e) => setTermsAccepted(e.target.checked)} required />
+              <span>Aceito os <Link href="/termos-de-uso" className="text-violet-700 underline">Termos de Uso</Link>.</span>
             </label>
-            <Button className="w-full text-white border-0" style={{ background: ORANGE }} onClick={doRegister} disabled={loading || !reg.name || !reg.email || reg.password.length < 12 || !reg.consent}>
+            <label className="flex items-start gap-2 text-sm text-slate-600">
+              <input type="checkbox" checked={sensitiveConsent} onChange={(e) => setSensitiveConsent(e.target.checked)} required />
+              <span>Consinto com o tratamento dos meus dados pessoais e sensíveis para gestão da liga, conforme a <Link href="/privacidade" className="text-violet-700 underline">Política de Privacidade</Link>.</span>
+            </label>
+            <Button className="w-full text-white border-0" style={{ background: ORANGE }} onClick={doRegister} disabled={loading || !reg.name || !reg.email || reg.password.length < 12 || !termsAccepted || !sensitiveConsent}>
               <UserPlus className="h-4 w-4 mr-2" /> Criar conta de Gestor
             </Button>
           </TabsContent>
@@ -661,6 +718,11 @@ function AdminPanel({ token, categories }) {
           <p className="text-slate-500 text-sm">Gestão completa da Liga de Voleibol Jundiaí</p>
         </div>
         <NotificationBell notif={notif} token={token} reload={loadNotif} />
+      </div>
+      <div className="mb-6">
+        <Button asChild size="sm" variant="outline">
+          <Link href="/admin/aprovacoes"><ShieldCheck className="mr-2 h-4 w-4" /> Aprovações e datas</Link>
+        </Button>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
@@ -1379,6 +1441,12 @@ function GestorPanel({ token, categories, user, myTeam, refreshMe }) {
         <Users className="h-6 w-6" style={{ color: PURPLE }} /> Painel do Gestor
       </h1>
       <p className="text-slate-500 text-sm mb-6">Olá {user.name}, gerencie sua equipe e elenco.</p>
+      {team?.status === 'approved' && (
+        <div className="mb-6 flex flex-wrap gap-2">
+          <Button asChild size="sm" variant="outline"><Link href="/cadastro-atleta"><UserPlus className="mr-2 h-4 w-4" /> Cadastrar atleta</Link></Button>
+          <Button asChild size="sm" variant="outline"><Link href="/gestor/aprovar-atletas"><CheckCircle2 className="mr-2 h-4 w-4" /> Aprovar atletas</Link></Button>
+        </div>
+      )}
 
       {!team ? (
         <Card className="max-w-lg">
@@ -1438,9 +1506,10 @@ function GestorPanel({ token, categories, user, myTeam, refreshMe }) {
 
 function GestorRoster({ token, team }) {
   const [athletes, setAthletes] = useState([])
-  const [form, setForm] = useState({ name: '', cpf: '', position: '', birthdate: '', email: '', photo: null, consent: false })
+  const [form, setForm] = useState({ name: '', cpf: '', position: '', birthdate: '', email: '', photo: null, terms: false, consent: false })
   const [rejectId, setRejectId] = useState(null)
   const [justification, setJustification] = useState('')
+  const cpfValid = isValidCpf(form.cpf)
 
   const load = useCallback(() => {
     api('/athletes/mine', { token }).then((d) => setAthletes(d.athletes || [])).catch(() => {})
@@ -1472,12 +1541,12 @@ function GestorRoster({ token, team }) {
           position: form.position,
           birthdate: form.birthdate || undefined,
           email: form.email || undefined,
-          consent: form.consent,
+          consent: form.terms && form.consent,
           ...(biometry_key ? { biometry_key } : {}),
         },
       })
       toast.success('Atleta cadastrado e aguardando aprovação do gestor.')
-      setForm({ name: '', cpf: '', position: '', birthdate: '', email: '', photo: null, consent: false })
+      setForm({ name: '', cpf: '', position: '', birthdate: '', email: '', photo: null, terms: false, consent: false })
       load()
     } catch (e) {
       toast.error(e.message)
@@ -1511,7 +1580,7 @@ function GestorRoster({ token, team }) {
             </div>
             <div>
               <Label className="text-xs">CPF</Label>
-              <Input value={form.cpf} onChange={(e) => setForm({ ...form, cpf: e.target.value })} />
+              <Input value={form.cpf} inputMode="numeric" placeholder="000.000.000-00" onChange={(e) => setForm({ ...form, cpf: formatCpf(e.target.value) })} aria-invalid={form.cpf.length > 13 && !cpfValid} />
             </div>
             <div>
               <Label className="text-xs">Posição</Label>
@@ -1532,11 +1601,15 @@ function GestorRoster({ token, team }) {
               <Label className="text-xs">Foto para biometria (máx. 5 MB)</Label>
               <Input type="file" accept="image/jpeg,image/png,image/webp" capture="user" onChange={(e) => setForm({ ...form, photo: e.target.files?.[0] || null })} />
             </div>
+            <label className="flex items-start gap-2 text-xs text-slate-600">
+              <input type="checkbox" checked={form.terms} onChange={(e) => setForm({ ...form, terms: e.target.checked })} />
+              <span>Li e aceito os <Link href="/termos-de-uso" className="text-violet-700 underline">Termos de Uso</Link>.</span>
+            </label>
             <label className="flex items-start gap-2 text-xs text-slate-600 md:col-span-2">
               <input type="checkbox" checked={form.consent} onChange={(e) => setForm({ ...form, consent: e.target.checked })} />
-              <span>Confirmo que obtive o consentimento do atleta (ou responsável legal) para tratar seus dados e a foto biométrica.</span>
+              <span>Confirmo que obtive consentimento explícito do atleta (ou responsável legal) para tratar seus dados e a foto biométrica, conforme a <Link href="/privacidade" className="text-violet-700 underline">Política de Privacidade</Link>.</span>
             </label>
-            <Button className="text-white border-0" style={{ background: PURPLE }} onClick={add} disabled={!form.name || !form.cpf || !form.position || !form.consent || (form.photo && form.photo.size > 5 * 1024 * 1024)}>
+            <Button className="text-white border-0" style={{ background: PURPLE }} onClick={add} disabled={!form.name || !cpfValid || !form.position || !form.terms || !form.consent || (form.photo && form.photo.size > 5 * 1024 * 1024)}>
               <UserPlus className="h-4 w-4 mr-1" /> Adicionar
             </Button>
           </div>
