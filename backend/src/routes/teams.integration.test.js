@@ -12,18 +12,21 @@ const teamName = `Integracao ${randomUUID()}`
 const createdUsers = []
 const createdTeams = []
 const createdAthletes = []
-let adminId
-let adminJti
+const createdAdminIds = []
+const createdAdminJtis = []
+let latestAdminId
 
 async function createAdminSession() {
   const id = randomUUID()
-  adminJti = randomUUID()
+  const adminJti = randomUUID()
   await pool.query(
     `INSERT INTO users (id, role, name, email, password_hash, consent_version)
      VALUES ($1, 'admin', 'Admin de integração', $2, '!test-only!', 'test')`,
     [id, `admin-${randomUUID()}@example.test`],
   )
-  adminId = id
+  latestAdminId = id
+  createdAdminIds.push(id)
+  createdAdminJtis.push(adminJti)
   const token = jwt.sign({ sub: id, role: 'admin' }, process.env.JWT_SECRET, {
     algorithm: 'HS256',
     expiresIn: 3600,
@@ -58,11 +61,11 @@ describe('team creation constraints', () => {
   })
 
   afterAll(async () => {
-    if (adminJti) await pool.query('DELETE FROM sessions WHERE jti = $1', [adminJti])
+    if (createdAdminJtis.length) await pool.query('DELETE FROM sessions WHERE jti = ANY($1::uuid[])', [createdAdminJtis])
     if (createdAthletes.length) await pool.query('DELETE FROM athletes WHERE id = ANY($1::uuid[])', [createdAthletes])
     if (createdTeams.length) await pool.query('DELETE FROM teams WHERE id = ANY($1::uuid[])', [createdTeams])
     if (createdUsers.length) await pool.query('DELETE FROM users WHERE id = ANY($1::uuid[])', [createdUsers])
-    if (adminId) await pool.query('DELETE FROM users WHERE id = $1', [adminId])
+    if (createdAdminIds.length) await pool.query('DELETE FROM users WHERE id = ANY($1::uuid[])', [createdAdminIds])
     await pool.end()
   })
 
@@ -83,30 +86,6 @@ describe('team creation constraints', () => {
 
     expect(duplicate.status).toBe(409)
     expect(duplicate.body.code).toBe('CONFLICT')
-  })
-
-  test('registers athlete accounts with the athlete role and an authenticated session', async () => {
-    const response = await request(app)
-      .post('/api/auth/register-athlete')
-      .send({
-        name: 'Atleta de integração',
-        email: `atleta-${randomUUID()}@example.test`,
-        password: 'Senha-Forte-Integracao-2026',
-        consent: true,
-      })
-
-    expect(response.status).toBe(201)
-    expect(response.body.user.role).toBe('atleta')
-    expect(response.headers['set-cookie']).toBeDefined()
-    createdUsers.push(response.body.user.id)
-
-    const session = await request(app)
-      .get('/api/auth/me')
-      .set('Cookie', response.headers['set-cookie'])
-
-    expect(session.status).toBe(200)
-    expect(session.body.user.role).toBe('atleta')
-    expect(session.body.team).toBeNull()
   })
 
   test('enforces gestor then admin approval and blocks admin membership as team manager', async () => {
@@ -132,12 +111,19 @@ describe('team creation constraints', () => {
       .send({
         name: 'Atleta de integração',
         cpf: '529.982.247-25',
+        age: 24,
         position: 'levantador',
         consent: true,
       })
     expect(athleteResponse.status).toBe(201)
     const athleteId = athleteResponse.body.athlete.id
     createdAthletes.push(athleteId)
+    expect(athleteResponse.body.athlete.age_at_registration).toBe(24)
+    const managerQueue = await request(app)
+      .get('/api/gestor/athletes?status=awaiting_manager')
+      .set('Cookie', manager.headers['set-cookie'])
+    expect(managerQueue.status).toBe(200)
+    expect(managerQueue.body.athletes.map((athlete) => athlete.id)).toContain(athleteId)
 
     const adminBeforeManager = await request(app)
       .post(`/api/admin/athletes/${athleteId}/approve`)
@@ -161,7 +147,76 @@ describe('team creation constraints', () => {
 
     await expect(pool.query(
       'INSERT INTO teams (name, category, manager_user_id) VALUES ($1, $2, $3)',
-      [`Admin team ${randomUUID()}`, 'Adulto Masculino', adminId],
+      [`Admin team ${randomUUID()}`, 'Adulto Masculino', latestAdminId],
     )).rejects.toMatchObject({ code: '23514' })
+  })
+
+  test('allows public athlete registration only for approved teams', async () => {
+    const manager = await createManager('cadastro-publico')
+    const teamResponse = await request(app)
+      .post('/api/teams')
+      .set('Cookie', manager.headers['set-cookie'])
+      .send({ name: `${teamName} Cadastro`, category: 'Adulto Feminino' })
+    expect(teamResponse.status).toBe(201)
+    const team = teamResponse.body.team
+    createdTeams.push(team.id)
+
+    const beforeApproval = await request(app).get('/api/approved-teams')
+    expect(beforeApproval.status).toBe(200)
+    expect(beforeApproval.body.teams.map((item) => item.id)).not.toContain(team.id)
+    const pendingPresign = await request(app)
+      .post('/api/athletes/biometry-upload-public')
+      .send({ team_id: team.id, content_type: 'image/jpeg' })
+    expect(pendingPresign.status).toBe(400)
+
+    const adminCookie = await createAdminSession()
+    const approval = await request(app)
+      .post(`/api/admin/teams/${team.id}/approve`)
+      .set('Cookie', adminCookie)
+      .send({})
+    expect(approval.status).toBe(200)
+
+    const approvedTeams = await request(app).get('/api/approved-teams')
+    expect(approvedTeams.body.teams.map((item) => item.id)).toContain(team.id)
+
+    const presign = await request(app)
+      .post('/api/athletes/biometry-upload-public')
+      .send({ team_id: team.id, content_type: 'image/jpeg' })
+    expect(presign.status).toBe(201)
+    expect(presign.body.key).toMatch(new RegExp(`^biometry/${team.manager_user_id}/`))
+
+    const registration = await request(app)
+      .post('/api/athletes/self-register')
+      .send({
+        team_id: team.id,
+        name: 'Atleta de cadastro público',
+        email: `atleta-${randomUUID()}@example.test`,
+        password: 'Senha-Forte-Atleta-2026',
+        cpf: '529.982.247-25',
+        age: 22,
+        positions: ['levantador'],
+        biometry_key: presign.body.key,
+        consent: true,
+      })
+
+    expect(registration.status).toBe(201)
+    expect(registration.body.user.role).toBe('atleta')
+    expect(registration.body.athlete.status).toBe('awaiting_manager')
+    expect(registration.headers['set-cookie']).toEqual(
+      expect.arrayContaining([expect.stringContaining('lvj_session=')]),
+    )
+    createdUsers.push(registration.body.user.id)
+    createdAthletes.push(registration.body.athlete.id)
+
+    const managerQueue = await request(app)
+      .get('/api/gestor/athletes?status=awaiting_manager')
+      .set('Cookie', manager.headers['set-cookie'])
+    expect(managerQueue.body.athletes.map((athlete) => athlete.id)).toContain(registration.body.athlete.id)
+
+    const athleteProfile = await request(app)
+      .get('/api/athletes/me')
+      .set('Cookie', registration.headers['set-cookie'])
+    expect(athleteProfile.status).toBe(200)
+    expect(athleteProfile.body.athletes.map((athlete) => athlete.id)).toContain(registration.body.athlete.id)
   })
 })

@@ -1,0 +1,8 @@
+[    6505ms] [INFO] Autofocus processing was blocked because a document already has a focused element. @ https://www.google.com/search?q=claude+ai&oq=claude&gs_lcrp=EgZjaHJvbWUqCggBEAAYsQMYgAQyBggAEEUYOTIKCAEQABixAxiABDINCAIQABiDARixAxiABDIKCAMQABixAxiABDIKCAQQABixAxiABDINCAUQABiDARixAxiABDINCAYQABiDARixAxiABDIGCAcQBRhA0gEINDM4N2owajeoAgCwAgA&sourceid=chrome&source=chrome.ob&ie=UTF-8&sei=iQTRatmqDZHm1sQPrLuV8AQ:0
+[    6891ms] [WARNING] Error with Permissions-Policy header: Unrecognized feature: 'attribution-reporting'. @ :0
+[    8352ms] [INFO] [O11Y] [DatadogRUM] Initialized {service: claude-ai, env: production, version: 044690ba68} @ https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/vendor-datadog-BURiVPfB.js:4
+[    8823ms] [LOG] recaptchacompat disabled @ https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/vendor-datadog-BURiVPfB.js:4
+[    9103ms] [ERROR] Not signed in with the identity provider. @ https://claude.ai/login:0
+[   10592ms] [ERROR] [GSI_LOGGER]: FedCM get() rejects with AbortError: signal is aborted without reason @ https://assets-proxy.anthropic.com/claude-ai/v2/assets/v1/vendor-datadog-BURiVPfB.js:4
+[   11555ms] [ERROR] Cross-Origin-Opener-Policy policy would block the window.closed call. @ https://accounts.google.com/gsi/client:137
+[   11555ms] [ERROR] Cross-Origin-Opener-Policy policy would block the window.closed call. @ https://accounts.google.com/gsi/client:137

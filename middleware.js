@@ -1,53 +1,72 @@
 import { NextResponse } from 'next/server'
 
-const protectedRoles = [
-  { prefix: '/admin', roles: ['admin'] },
-  { prefix: '/gestor', roles: ['gestor'] },
-  { prefix: '/atleta', roles: ['atleta'] },
-  { prefix: '/cadastro-atleta', roles: ['gestor', 'atleta'] },
-]
+const roleForPath = (pathname) => {
+  if (pathname.startsWith('/admin')) return 'admin'
+  if (pathname.startsWith('/gestor')) return 'gestor'
+  if (pathname.startsWith('/atleta')) return 'atleta'
+  if (pathname.startsWith('/jogos')) return ['gestor', 'atleta']
+  return null
+}
+
+function decodeBase64Url(value) {
+  const base64 = value.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - value.length % 4) % 4)
+  return Uint8Array.from(atob(base64), (character) => character.charCodeAt(0))
+}
+
+async function verifySession(token) {
+  const secret = process.env.JWT_SECRET
+  if (!secret) return null
+  const parts = token.split('.')
+  if (parts.length !== 3) return null
+
+  try {
+    const header = JSON.parse(new TextDecoder().decode(decodeBase64Url(parts[0])))
+    const payload = JSON.parse(new TextDecoder().decode(decodeBase64Url(parts[1])))
+    if (header.alg !== 'HS256' || header.typ && header.typ !== 'JWT') return null
+    const key = await crypto.subtle.importKey(
+      'raw',
+      new TextEncoder().encode(secret),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['verify'],
+    )
+    const valid = await crypto.subtle.verify(
+      'HMAC',
+      key,
+      decodeBase64Url(parts[2]),
+      new TextEncoder().encode(`${parts[0]}.${parts[1]}`),
+    )
+    if (!valid || !payload.sub || !payload.jti || !payload.exp || payload.exp <= Date.now() / 1000) return null
+    if (payload.iss !== 'ligajundiai-api') return null
+    const audiences = Array.isArray(payload.aud) ? payload.aud : [payload.aud]
+    if (!audiences.includes('ligajundiai-web')) return null
+    if (!['admin', 'gestor', 'atleta'].includes(payload.role)) return null
+    return payload
+  } catch {
+    return null
+  }
+}
 
 export async function middleware(request) {
-  const required = protectedRoles.find(({ prefix }) =>
-    request.nextUrl.pathname === prefix || request.nextUrl.pathname.startsWith(`${prefix}/`),
-  )
-  if (!required) return NextResponse.next()
+  const requiredRole = roleForPath(request.nextUrl.pathname)
+  if (!requiredRole) return NextResponse.next()
 
-  const cookie = request.headers.get('cookie')
-  if (!cookie) return redirectToLogin(request, 'required')
-
-  const apiOrigin = process.env.API_INTERNAL_URL || 'http://localhost:4000'
-  let response
-  try {
-    response = await fetch(`${apiOrigin}/api/auth/me`, {
-      headers: { cookie },
-      cache: 'no-store',
-      signal: AbortSignal.timeout(5000),
-    })
-  } catch {
-    return new NextResponse('O serviço de autenticação está indisponível.', { status: 503 })
+  const session = request.cookies.get('lvj_session')?.value
+  const payload = session ? await verifySession(session) : null
+  if (!payload) {
+    const destination = new URL('/', request.url)
+    destination.searchParams.set('next', request.nextUrl.pathname)
+    return NextResponse.redirect(destination)
   }
 
-  if (response.status === 401 || response.status === 403) {
-    return redirectToLogin(request, 'required')
+  const allowedRoles = Array.isArray(requiredRole) ? requiredRole : [requiredRole]
+  if (!allowedRoles.includes(payload.role)) {
+    const destination = new URL(payload.role === 'admin' ? '/admin/aprovacoes' : `/${payload.role}`, request.url)
+    return NextResponse.redirect(destination)
   }
-  if (!response.ok) {
-    return new NextResponse('Não foi possível validar sua sessão.', { status: 503 })
-  }
-
-  const { user } = await response.json()
-  if (!user?.role) return redirectToLogin(request, 'required')
-  if (!required.roles.includes(user.role)) return redirectToLogin(request, 'forbidden')
-
   return NextResponse.next()
 }
 
-function redirectToLogin(request, reason) {
-  const url = new URL('/', request.url)
-  url.searchParams.set('auth', reason)
-  return NextResponse.redirect(url)
-}
-
 export const config = {
-  matcher: ['/admin/:path*', '/gestor/:path*', '/atleta/:path*', '/cadastro-atleta'],
+  matcher: ['/admin/:path*', '/gestor/:path*', '/atleta/:path*', '/jogos/:path*'],
 }

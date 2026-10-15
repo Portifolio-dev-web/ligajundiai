@@ -12,7 +12,7 @@ export const categories = [
 
 publicRouter.get('/', (_req, res) => res.json({ message: 'LVJ API online', app: 'Liga de Voleibol Jundiaí' }))
 publicRouter.get('/categories', (_req, res) => res.json({ categories }))
-publicRouter.get('/teams/approved', asyncRoute(async (_req, res) => {
+publicRouter.get('/approved-teams', asyncRoute(async (_req, res) => {
   const result = await query(
     `SELECT id, name, category FROM teams
      WHERE status = 'approved' AND deleted_at IS NULL ORDER BY category, name`,

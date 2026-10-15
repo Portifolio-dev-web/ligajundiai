@@ -3,12 +3,13 @@ import { z } from 'zod'
 import { config } from '../config.js'
 import { query, transaction } from '../db/pool.js'
 import { AppError, notFound } from '../errors.js'
-import { authenticate, authorize } from '../security/auth.js'
+import { authenticate, authorize, createSession, hashPassword } from '../security/auth.js'
 import { cpfDigest, encryptSensitive, maskCpf } from '../security/crypto.js'
-import { cleanText, parse, requireValidCpf, validatePositions, uuidSchema } from '../security/validation.js'
+import { cleanText, emailSchema, parse, requireValidCpf, validatePositions, uuidSchema } from '../security/validation.js'
 import { enqueueEmail, escapeHtml } from '../services/email.js'
 import { createBiometryUpload } from '../services/storage.js'
 import { asyncRoute, audit, notify, toPublicAthlete, userTeam } from '../utils.js'
+import { authRateLimit } from '../security/rate-limit.js'
 
 export const athletesRouter = Router()
 export const adminAthletesRouter = Router()
@@ -20,7 +21,7 @@ function positionsFrom(input) {
   return validatePositions(positions)
 }
 
-async function createAthlete(client, { userId, managerId, team, input }) {
+async function createAthlete(client, { userId, managerId, team, input, actor }) {
   if (!input.consent) throw new AppError(400, 'CONSENT_REQUIRED', 'É necessário registrar o consentimento explícito')
   const cpf = requireValidCpf(input.cpf)
   const positions = positionsFrom(input)
@@ -35,8 +36,12 @@ async function createAthlete(client, { userId, managerId, team, input }) {
   if (existing.rowCount) throw new AppError(409, 'ATHLETE_ALREADY_EXISTS', 'Este CPF já está cadastrado nesta equipe')
   const date = input.birthdate ? new Date(`${input.birthdate}T00:00:00Z`) : null
   if (date && Number.isNaN(date.getTime())) throw new AppError(400, 'INVALID_BIRTHDATE', 'Data de nascimento inválida')
-  const age = date ? Math.floor((Date.now() - date.getTime()) / (365.2425 * 24 * 60 * 60 * 1000)) : null
+  const calculatedAge = date ? Math.floor((Date.now() - date.getTime()) / (365.2425 * 24 * 60 * 60 * 1000)) : null
+  const age = calculatedAge ?? input.age ?? null
   if (age !== null && (age < 0 || age > 120)) throw new AppError(400, 'INVALID_BIRTHDATE', 'Data de nascimento inválida')
+  if (calculatedAge !== null && input.age !== undefined && calculatedAge !== input.age) {
+    throw new AppError(400, 'AGE_MISMATCH', 'A idade informada não corresponde à data de nascimento')
+  }
   const result = await client.query(
     `INSERT INTO athletes
      (user_id, team_id, manager_user_id, name, cpf_ciphertext, cpf_hash, birthdate,
@@ -69,32 +74,31 @@ async function createAthlete(client, { userId, managerId, team, input }) {
     [athlete.id, positions],
   )
   await notify(client, 'admin', 'athlete_pending_manager', 'Novo atleta aguardando análise', `${athlete.name} aguarda a aprovação do gestor.`)
-  await audit(client, { id: managerId, name: 'gestor' }, 'athlete.register', 'athlete', athlete.id, { team_id: team.id })
+  await notify(client, managerId, 'athlete_pending_manager', 'Novo atleta aguardando análise', `${athlete.name} aguarda a aprovação da equipe.`)
+  await audit(client, actor, 'athlete.register', 'athlete', athlete.id, { team_id: team.id })
   return athlete
 }
 
-athletesRouter.post('/biometry-upload', authenticate, authorize('gestor', 'atleta'), asyncRoute(async (req, res) => {
+athletesRouter.post('/biometry-upload', authenticate, authorize('gestor'), asyncRoute(async (req, res) => {
+  const input = parse(z.object({ content_type: z.enum(['image/jpeg', 'image/png', 'image/webp']) }).strict(), req.body)
+  const upload = await createBiometryUpload(req.user.id, input.content_type)
+  if (!upload) throw new AppError(400, 'INVALID_CONTENT_TYPE', 'Formato de imagem não suportado')
+  res.status(201).json(upload)
+}))
+
+athletesRouter.post('/biometry-upload-public', authRateLimit, asyncRoute(async (req, res) => {
   const input = parse(z.object({
+    team_id: uuidSchema,
     content_type: z.enum(['image/jpeg', 'image/png', 'image/webp']),
-    team_id: uuidSchema.optional(),
   }).strict(), req.body)
-  let managerId
-  if (req.user.role === 'gestor') {
-    const team = await userTeam(req.user.id)
-    if (!team || team.status !== 'approved' || (input.team_id && team.id !== input.team_id)) {
-      throw new AppError(403, 'TEAM_NOT_AVAILABLE', 'Selecione sua equipe aprovada antes de enviar a foto')
-    }
-    managerId = req.user.id
-  } else {
-    if (!input.team_id) throw new AppError(400, 'TEAM_REQUIRED', 'Selecione uma equipe aprovada')
-    const team = await query(
-      "SELECT manager_user_id FROM teams WHERE id = $1 AND status = 'approved' AND deleted_at IS NULL",
-      [input.team_id],
-    )
-    if (!team.rowCount) throw new AppError(400, 'TEAM_NOT_AVAILABLE', 'Selecione uma equipe aprovada')
-    managerId = team.rows[0].manager_user_id
-  }
-  const upload = await createBiometryUpload(managerId, input.content_type)
+  const selected = await query(
+    `SELECT manager_user_id FROM teams
+     WHERE id = $1 AND status = 'approved' AND deleted_at IS NULL`,
+    [input.team_id],
+  )
+  const team = selected.rows[0]
+  if (!team) throw new AppError(400, 'TEAM_NOT_AVAILABLE', 'Selecione uma equipe aprovada')
+  const upload = await createBiometryUpload(team.manager_user_id, input.content_type)
   if (!upload) throw new AppError(400, 'INVALID_CONTENT_TYPE', 'Formato de imagem não suportado')
   res.status(201).json(upload)
 }))
@@ -104,6 +108,7 @@ athletesRouter.post('/', authenticate, authorize('gestor'), asyncRoute(async (re
     name: z.string().trim().min(2).max(120),
     cpf: z.string().min(1).max(20),
     birthdate: z.string().date().optional(),
+    age: z.number().int().min(0).max(120).optional(),
     email: z.string().trim().email().max(254).optional(),
     position: z.enum(['central', 'ponteiro', 'saida', 'levantador', 'libero']).optional(),
     positions: positionSchema.optional(),
@@ -115,21 +120,24 @@ athletesRouter.post('/', authenticate, authorize('gestor'), asyncRoute(async (re
   if (!team) throw new AppError(400, 'TEAM_REQUIRED', 'Cadastre sua equipe primeiro')
   if (team.status !== 'approved') throw new AppError(403, 'TEAM_NOT_APPROVED', 'A equipe precisa ser aprovada antes do cadastro de atletas')
   const athlete = await transaction((client) => createAthlete(client, {
-    userId: null, managerId: req.user.id, team, input,
+    userId: null, managerId: req.user.id, team, input, actor: req.user,
   }))
   res.status(201).json({ athlete: { ...athlete, cpf: maskCpf(String(req.body.cpf).replace(/\D/g, '')), position: athlete.positions[0] } })
 }))
 
-athletesRouter.post('/self-register', authenticate, authorize('atleta'), asyncRoute(async (req, res) => {
+athletesRouter.post('/self-register', authRateLimit, asyncRoute(async (req, res) => {
   const input = parse(z.object({
     team_id: uuidSchema,
     name: z.string().trim().min(2).max(120),
+    email: emailSchema,
+    password: z.string().min(12).max(128),
     cpf: z.string().min(1).max(20),
     birthdate: z.string().date().optional(),
-    email: z.string().trim().email().max(254).optional(),
+    age: z.number().int().min(0).max(120).optional(),
     positions: positionSchema,
-    biometry_key: z.string().max(300).optional(),
+    biometry_key: z.string().min(1).max(300),
     consent: z.literal(true),
+    consent_version: z.string().trim().max(40).optional(),
   }).strict(), req.body)
   const selected = await query(
     `SELECT t.*, u.name AS manager_name, u.email AS manager_email
@@ -139,10 +147,40 @@ athletesRouter.post('/self-register', authenticate, authorize('atleta'), asyncRo
   )
   const team = selected.rows[0]
   if (!team) throw new AppError(400, 'TEAM_NOT_AVAILABLE', 'Selecione uma equipe aprovada')
-  const athlete = await transaction((client) => createAthlete(client, {
-    userId: req.user.id, managerId: team.manager_user_id, team, input,
-  }))
-  res.status(201).json({ athlete: toPublicAthlete(athlete) })
+  const keyPrefix = `biometry/${team.manager_user_id}/`
+  if (!input.biometry_key.startsWith(keyPrefix)) {
+    throw new AppError(400, 'INVALID_BIOMETRY_KEY', 'A chave da foto não pertence à equipe selecionada')
+  }
+  const cpf = requireValidCpf(input.cpf)
+  const passwordHash = await hashPassword(input.password)
+  const result = await transaction(async (client) => {
+    const createdUser = await client.query(
+      `INSERT INTO users
+       (role, name, email, password_hash, cpf_ciphertext, cpf_hash,
+        consent_at, consent_version, consent_confirmed)
+       VALUES ('atleta', $1, $2, $3, $4, $5, now(), $6, true)
+       RETURNING id, role, name, email`,
+      [
+        cleanText(input.name, 120),
+        input.email,
+        passwordHash,
+        encryptSensitive(cpf),
+        cpfDigest(cpf),
+        input.consent_version || config.CONSENT_VERSION,
+      ],
+    )
+    const user = createdUser.rows[0]
+    const athlete = await createAthlete(client, {
+      userId: user.id,
+      managerId: team.manager_user_id,
+      team,
+      input,
+      actor: user,
+    })
+    return { user, athlete }
+  })
+  await createSession(result.user, res)
+  res.status(201).json({ user: result.user, athlete: toPublicAthlete(result.athlete) })
 }))
 
 athletesRouter.get('/mine', authenticate, authorize('gestor'), asyncRoute(async (req, res) => {
@@ -183,6 +221,24 @@ athletesRouter.get('/cpf/:cpf', authenticate, authorize('admin', 'gestor'), asyn
 }))
 
 gestorAthletesRouter.use(authenticate, authorize('gestor'))
+gestorAthletesRouter.get('/', asyncRoute(async (req, res) => {
+  const status = req.query.status ? String(req.query.status) : 'awaiting_manager'
+  if (!['awaiting_manager', 'awaiting_admin', 'approved', 'rejected'].includes(status)) {
+    throw new AppError(400, 'INVALID_STATUS', 'Status inválido')
+  }
+  const team = await userTeam(req.user.id)
+  if (!team) return res.json({ athletes: [] })
+  const result = await query(
+    `SELECT a.id, a.name, a.birthdate, a.age_at_registration, a.positions,
+       a.status, a.justification, a.biometry_status, a.created_at
+     FROM athletes a
+     WHERE a.team_id = $1 AND a.status = $2 AND a.deleted_at IS NULL
+     ORDER BY a.created_at DESC`,
+    [team.id, status],
+  )
+  res.json({ athletes: result.rows })
+}))
+
 gestorAthletesRouter.post('/:athleteId/:action', asyncRoute(async (req, res) => {
   if (!['approve', 'reject'].includes(req.params.action)) throw notFound('Rota não encontrada')
   const justification = cleanText(req.body?.justification ?? '', 500)

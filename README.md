@@ -11,7 +11,7 @@ docker compose up --build
 ```
 
 O primeiro início instala as dependências, aplica o schema PostgreSQL, cria o
-administrador definido no ambiente e inicializa o bucket MinIO. Endereços locais:
+administrador definido no ambiente e inicializa o bucket RustFS. Endereços locais:
 
 | Serviço | Endereço |
 | --- | --- |
@@ -38,6 +38,26 @@ tipos JPEG, PNG e WebP. A integração Control ID inicia em modo de simulação.
 O RustFS local habilita a opção de bypass de verificação de discos porque os
 volumes Docker compartilham o mesmo dispositivo virtual; não reutilize essa
 opção em produção.
+
+## Interfaces web
+
+O Next.js encaminha `/api/*` para a API Express. A autenticação usa o cookie
+HTTP-only `lvj_session`; as chamadas do browser enviam credenciais same-origin,
+sem persistir JWT em `localStorage` nem enviar Bearer token. O middleware do
+Next valida assinatura e perfil para as páginas protegidas; `JWT_SECRET` no
+serviço frontend deve corresponder ao segredo da API.
+
+- Gestor: `/gestor`, `/gestor/aprovar-atletas`, `/gestor/jogos`
+- Cadastro público de atleta: `/cadastro-atleta`
+- Administrador: `/admin/aprovacoes`, `/admin/agenda`
+- Jogos e frequência: `/jogos` (ou `/atleta/jogos` para o perfil atleta)
+
+O cadastro do atleta permite criar uma conta com e-mail e senha, mas só lista
+equipes aprovadas pelo administrador após a inscrição do gestor. Ao concluir, o
+atleta aguarda aprovação do gestor e, depois, do administrador. O formulário
+valida CPF no navegador, registra consentimento explícito e envia a foto
+diretamente ao RustFS com POST pré-assinado. Para acessar câmera em
+desenvolvimento, use `localhost` ou HTTPS e permita a permissão do navegador.
 
 Parar os serviços sem apagar os dados:
 
