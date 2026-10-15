@@ -47,6 +47,11 @@ export default function CadastroAtletaPage() {
         if (!active) return
         setAccountRole(session.user.role)
         setApprovedTeams(approved.teams || [])
+        setForm((current) => ({
+          ...current,
+          name: current.name || session.user.name || '',
+          email: current.email || session.user.email || '',
+        }))
         if (session.user.role === 'gestor') {
           const mine = await api('/teams/mine')
           if (!active) return

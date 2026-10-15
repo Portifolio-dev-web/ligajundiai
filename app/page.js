@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -71,6 +72,7 @@ const IMG_ARENA = 'https://images.unsplash.com/photo-1771909713106-86b9a412964a'
 // Root App
 // ============================================================================
 function App() {
+  const router = useRouter()
   const [token, setToken] = useState(null)
   const [user, setUser] = useState(null)
   const [myTeam, setMyTeam] = useState(null)
@@ -102,11 +104,12 @@ function App() {
     if (authReason === 'forbidden') toast.error('Seu perfil não tem permissão para acessar essa área.')
   }, [])
 
-  const onAuthed = (authenticatedUser) => {
+  const onAuthed = (authenticatedUser, redirectTo) => {
     setToken('cookie-session')
     setUser(authenticatedUser)
     setLoginOpen(false)
     loadMe()
+    if (redirectTo) router.push(redirectTo)
     toast.success(`Bem-vindo(a), ${authenticatedUser.name}!`)
   }
 
@@ -519,30 +522,31 @@ function MatchResultCard({ m }) {
 // LOGIN DIALOG
 // ============================================================================
 function LoginDialog({ open, onOpenChange, onAuthed }) {
-  const [tab, setTab] = useState('otp')
-
-  // OTP
-  const [email, setEmail] = useState('')
-  const [code, setCode] = useState('')
+  const [role, setRole] = useState('gestor')
+  const [mode, setMode] = useState('access')
+  const [loginMethod, setLoginMethod] = useState('password')
+  const [login, setLogin] = useState({ email: '', password: '', totp: '', code: '' })
   const [otpSent, setOtpSent] = useState(false)
-
-  // Password
-  const [pwEmail, setPwEmail] = useState('admin@lvj.com')
-  const [pw, setPw] = useState('')
-  const [pwTotp, setPwTotp] = useState('')
   const [requiresTotp, setRequiresTotp] = useState(false)
-
-  // Register
-  const [reg, setReg] = useState({ name: '', email: '', phone: '', cpf: '', password: '', consent: false })
+  const [reg, setReg] = useState({ name: '', email: '', phone: '', cpf: '', password: '' })
   const [termsAccepted, setTermsAccepted] = useState(false)
   const [sensitiveConsent, setSensitiveConsent] = useState(false)
 
   const [loading, setLoading] = useState(false)
+  const optionalCpfValid = !reg.cpf.trim() || isValidCpf(reg.cpf)
+
+  const selectRole = (selectedRole) => {
+    setRole(selectedRole)
+    setMode('access')
+    setLoginMethod('password')
+    setOtpSent(false)
+    setRequiresTotp(false)
+  }
 
   const requestOtp = async () => {
     setLoading(true)
     try {
-      const d = await api('/auth/otp/request', { method: 'POST', body: { email } })
+      const d = await api('/auth/otp/request', { method: 'POST', body: { email: login.email } })
       setOtpSent(true)
       toast.success(d.message || 'Se a conta existir, um código será enviado por e-mail.')
     } catch (e) {
@@ -554,8 +558,8 @@ function LoginDialog({ open, onOpenChange, onAuthed }) {
   const verifyOtp = async () => {
     setLoading(true)
     try {
-      const d = await api('/auth/otp/verify', { method: 'POST', body: { email, code } })
-      onAuthed(d.user)
+      const d = await api('/auth/otp/verify', { method: 'POST', body: { email: login.email, code: login.code } })
+      await acceptRoleSession(d.user)
     } catch (e) {
       toast.error(e.message)
     } finally {
@@ -565,10 +569,13 @@ function LoginDialog({ open, onOpenChange, onAuthed }) {
   const loginPw = async () => {
     setLoading(true)
     try {
-      const d = await api('/auth/login-password', { method: 'POST', body: { email: pwEmail, password: pw, ...(pwTotp ? { totp: pwTotp } : {}) } })
-      onAuthed(d.user)
+      const d = await api('/auth/login-password', {
+        method: 'POST',
+        body: { email: login.email, password: login.password, ...(login.totp ? { totp: login.totp } : {}) },
+      })
+      await acceptRoleSession(d.user)
     } catch (e) {
-      if (e.code === 'TOTP_REQUIRED') setRequiresTotp(true)
+      if (role === 'admin' && e.code === 'TOTP_REQUIRED') setRequiresTotp(true)
       toast.error(e.message)
     } finally {
       setLoading(false)
@@ -577,11 +584,23 @@ function LoginDialog({ open, onOpenChange, onAuthed }) {
   const doRegister = async () => {
     setLoading(true)
     try {
-      const d = await api('/auth/register', {
+      const endpoint = role === 'atleta' ? '/auth/register-athlete' : '/auth/register'
+      const registration = {
+        name: reg.name.trim(),
+        email: reg.email.trim(),
+        phone: reg.phone.trim(),
+        password: reg.password,
+        consent: termsAccepted && sensitiveConsent,
+      }
+      if (role === 'gestor' && reg.cpf.trim()) registration.cpf = reg.cpf.trim()
+      const d = await api(endpoint, {
         method: 'POST',
-        body: { ...reg, consent: termsAccepted && sensitiveConsent },
+        body: registration,
       })
-      onAuthed(d.user)
+      onAuthed(d.user, role === 'atleta' ? '/cadastro-atleta' : undefined)
+      toast.success(role === 'atleta'
+        ? 'Conta criada. Agora complete seus dados esportivos e selecione uma equipe aprovada.'
+        : 'Conta de gestor criada. Cadastre sua equipe para solicitar aprovação.')
     } catch (e) {
       toast.error(e.message)
     } finally {
@@ -589,104 +608,189 @@ function LoginDialog({ open, onOpenChange, onAuthed }) {
     }
   }
 
+  async function acceptRoleSession(authenticatedUser) {
+    if (authenticatedUser.role !== role) {
+      await api('/auth/logout', { method: 'POST' })
+      throw new Error(`Esta conta é de ${authenticatedUser.role === 'admin' ? 'Administrador' : authenticatedUser.role === 'gestor' ? 'Gestor de Equipe' : 'Atleta'}. Selecione a aba correspondente.`)
+    }
+    const athleteProfile = role === 'atleta' ? await api('/athletes/me') : null
+    const redirectTo = athleteProfile && athleteProfile.athletes.length === 0 ? '/cadastro-atleta' : undefined
+    onAuthed(authenticatedUser, redirectTo)
+  }
+
+  function switchMode(nextMode) {
+    setMode(nextMode)
+    setOtpSent(false)
+    setRequiresTotp(false)
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Volleyball className="h-5 w-5" style={{ color: PURPLE }} /> Acesso LVJ
           </DialogTitle>
-          <DialogDescription>Entre com senha e autenticação em dois fatores para administradores.</DialogDescription>
+          <DialogDescription>Escolha seu perfil para acessar ou criar uma conta.</DialogDescription>
         </DialogHeader>
 
-        <Tabs value={tab} onValueChange={setTab}>
+        <Tabs value={role} onValueChange={selectRole}>
           <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="otp">Código</TabsTrigger>
-            <TabsTrigger value="senha">Senha</TabsTrigger>
-            <TabsTrigger value="cadastro">Cadastrar</TabsTrigger>
+            <TabsTrigger value="admin">Painel Administrativo</TabsTrigger>
+            <TabsTrigger value="gestor">Gestor de Equipe</TabsTrigger>
+            <TabsTrigger value="atleta">Atletas</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="otp" className="space-y-3 pt-2">
-            <div>
-              <Label>E-mail</Label>
-              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="voce@email.com" />
-            </div>
-            {!otpSent ? (
-              <Button className="w-full text-white border-0" style={{ background: PURPLE }} onClick={requestOtp} disabled={loading || !email}>
-                <Mail className="h-4 w-4 mr-2" /> Enviar código por e-mail
-              </Button>
-            ) : (
-              <>
-                <p className="text-xs text-slate-500">Consulte sua caixa de e-mail para obter o código.</p>
-                <div>
-                  <Label>Código de 6 dígitos</Label>
-                  <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="000000" maxLength={6} />
-                </div>
-                <Button className="w-full text-white border-0" style={{ background: ORANGE }} onClick={verifyOtp} disabled={loading}>
-                  Entrar
+          <TabsContent value="admin" className="space-y-4 pt-2">
+            <p className="text-sm text-muted-foreground">
+              Acesso exclusivo da conta administrativa provisionada no ambiente do servidor (.env). O cadastro público de administradores não é permitido.
+            </p>
+            <RoleAccessForm role="admin" login={login} setLogin={setLogin} loading={loading}
+              requiresTotp={requiresTotp} onSubmit={loginPw} />
+          </TabsContent>
+
+          {['gestor', 'atleta'].map((selectedRole) => (
+            <TabsContent key={selectedRole} value={selectedRole} className="space-y-4 pt-2">
+              <div className="grid grid-cols-2 gap-2">
+                <Button type="button" variant={mode === 'access' ? 'default' : 'outline'} onClick={() => switchMode('access')}>
+                  Acesso para {selectedRole === 'gestor' ? 'gestor' : 'atleta'}
                 </Button>
-              </>
-            )}
-          </TabsContent>
-
-          <TabsContent value="senha" className="space-y-3 pt-2">
-            <div>
-              <Label>E-mail</Label>
-              <Input type="email" value={pwEmail} onChange={(e) => setPwEmail(e.target.value)} />
-            </div>
-            <div>
-              <Label>Senha</Label>
-              <Input type="password" value={pw} onChange={(e) => setPw(e.target.value)} />
-            </div>
-            {(requiresTotp || pwTotp) && (
-              <div>
-                <Label>Código 2FA do administrador</Label>
-                <Input inputMode="numeric" maxLength={6} value={pwTotp} onChange={(e) => setPwTotp(e.target.value.replace(/\D/g, ''))} placeholder="000000" />
+                <Button type="button" variant={mode === 'register' ? 'default' : 'outline'} onClick={() => switchMode('register')}>
+                  Cadastro para {selectedRole === 'gestor' ? 'gestores' : 'atletas'}
+                </Button>
               </div>
-            )}
-            <Button className="w-full text-white border-0" style={{ background: PURPLE }} onClick={loginPw} disabled={loading}>
-              Entrar
-            </Button>
-          </TabsContent>
-
-          <TabsContent value="cadastro" className="space-y-3 pt-2">
-            <div>
-              <Label>Nome</Label>
-              <Input value={reg.name} onChange={(e) => setReg({ ...reg, name: e.target.value })} />
-            </div>
-            <div>
-              <Label>E-mail (login)</Label>
-              <Input type="email" value={reg.email} onChange={(e) => setReg({ ...reg, email: e.target.value })} />
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <Label>Celular</Label>
-                <Input value={reg.phone} onChange={(e) => setReg({ ...reg, phone: e.target.value })} placeholder="(11) 90000-0000" />
-              </div>
-              <div>
-                <Label>CPF</Label>
-                <Input value={reg.cpf} onChange={(e) => setReg({ ...reg, cpf: e.target.value })} />
-              </div>
-            </div>
-            <div>
-              <Label>Senha (mínimo de 12 caracteres)</Label>
-              <Input type="password" value={reg.password} onChange={(e) => setReg({ ...reg, password: e.target.value })} />
-            </div>
-            <label className="flex items-start gap-2 text-sm text-slate-600">
-              <input type="checkbox" checked={termsAccepted} onChange={(e) => setTermsAccepted(e.target.checked)} required />
-              <span>Aceito os <Link href="/termos-de-uso" className="text-violet-700 underline">Termos de Uso</Link>.</span>
-            </label>
-            <label className="flex items-start gap-2 text-sm text-slate-600">
-              <input type="checkbox" checked={sensitiveConsent} onChange={(e) => setSensitiveConsent(e.target.checked)} required />
-              <span>Consinto com o tratamento dos meus dados pessoais e sensíveis para gestão da liga, conforme a <Link href="/privacidade" className="text-violet-700 underline">Política de Privacidade</Link>.</span>
-            </label>
-            <Button className="w-full text-white border-0" style={{ background: ORANGE }} onClick={doRegister} disabled={loading || !reg.name || !reg.email || reg.password.length < 12 || !termsAccepted || !sensitiveConsent}>
-              <UserPlus className="h-4 w-4 mr-2" /> Criar conta de Gestor
-            </Button>
-          </TabsContent>
+              {mode === 'access' ? (
+                <>
+                  <RoleAccessForm role={selectedRole} login={login} setLogin={setLogin} loading={loading}
+                    requiresTotp={false} onSubmit={loginPw} />
+                  <div className="border-t pt-3">
+                    {loginMethod === 'password' ? (
+                      <Button type="button" variant="link" className="h-auto p-0 text-sm"
+                        onClick={() => { setLoginMethod('otp'); setOtpSent(false) }}>
+                        Entrar com código enviado por e-mail
+                      </Button>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="space-y-2">
+                          <Label htmlFor={`${selectedRole}-otp-email`}>E-mail</Label>
+                          <Input id={`${selectedRole}-otp-email`} type="email" autoComplete="email"
+                            value={login.email} onChange={(event) => setLogin({ ...login, email: event.target.value })} />
+                        </div>
+                        {otpSent && (
+                          <div className="space-y-2">
+                            <Label htmlFor={`${selectedRole}-otp-code`}>Código de 6 dígitos</Label>
+                            <Input id={`${selectedRole}-otp-code`} inputMode="numeric" maxLength={6}
+                              value={login.code} onChange={(event) => setLogin({ ...login, code: event.target.value.replace(/\D/g, '') })} />
+                          </div>
+                        )}
+                        <Button type="button" className="w-full" onClick={otpSent ? verifyOtp : requestOtp}
+                          disabled={loading || !login.email || (otpSent && login.code.length !== 6)}>
+                          {otpSent ? 'Validar código e entrar' : 'Enviar código por e-mail'}
+                        </Button>
+                        <Button type="button" variant="link" className="h-auto p-0 text-sm"
+                          onClick={() => { setLoginMethod('password'); setOtpSent(false) }}>
+                          Entrar com senha
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="space-y-3">
+                  <div className="space-y-2">
+                    <Label htmlFor={`${selectedRole}-register-name`}>Nome completo</Label>
+                    <Input id={`${selectedRole}-register-name`} autoComplete="name" value={reg.name}
+                      onChange={(event) => setReg({ ...reg, name: event.target.value })} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor={`${selectedRole}-register-email`}>E-mail (login)</Label>
+                    <Input id={`${selectedRole}-register-email`} type="email" autoComplete="email" value={reg.email}
+                      onChange={(event) => setReg({ ...reg, email: event.target.value })} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor={`${selectedRole}-register-phone`}>Celular (opcional)</Label>
+                    <Input id={`${selectedRole}-register-phone`} autoComplete="tel" value={reg.phone}
+                      onChange={(event) => setReg({ ...reg, phone: event.target.value })} />
+                  </div>
+                  {selectedRole === 'gestor' && (
+                    <div className="space-y-2">
+                      <Label htmlFor="gestor-register-cpf">CPF (opcional)</Label>
+                      <Input id="gestor-register-cpf" inputMode="numeric" value={reg.cpf}
+                          onChange={(event) => setReg({ ...reg, cpf: formatCpf(event.target.value) })}
+                          aria-invalid={!optionalCpfValid} />
+                        {!optionalCpfValid && <p className="text-sm text-destructive">CPF inválido.</p>}
+                    </div>
+                  )}
+                  <div className="space-y-2">
+                    <Label htmlFor={`${selectedRole}-register-password`}>Senha (mínimo de 12 caracteres)</Label>
+                    <Input id={`${selectedRole}-register-password`} type="password" autoComplete="new-password"
+                      value={reg.password} onChange={(event) => setReg({ ...reg, password: event.target.value })} />
+                  </div>
+                  <ConsentFields termsAccepted={termsAccepted} setTermsAccepted={setTermsAccepted}
+                    sensitiveConsent={sensitiveConsent} setSensitiveConsent={setSensitiveConsent} />
+                  <Button type="button" className="w-full text-white border-0" style={{ background: ORANGE }}
+                    onClick={doRegister}
+                    disabled={loading || reg.name.trim().length < 2 || !reg.email || reg.password.length < 12 || !termsAccepted || !sensitiveConsent || (selectedRole === 'gestor' && !optionalCpfValid)}>
+                    <UserPlus className="h-4 w-4 mr-2" />
+                    Criar conta de {selectedRole === 'gestor' ? 'Gestor' : 'Atleta'}
+                  </Button>
+                  {selectedRole === 'atleta' && (
+                    <p className="text-xs text-muted-foreground">
+                      Após criar a conta, você completará seus dados esportivos, escolherá uma equipe aprovada e enviará o cadastro para aprovação do gestor.
+                    </p>
+                  )}
+                </div>
+              )}
+            </TabsContent>
+          ))}
         </Tabs>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function RoleAccessForm({ role, login, setLogin, loading, requiresTotp, onSubmit }) {
+  const name = role === 'admin' ? 'Administrador' : role === 'gestor' ? 'Gestor de equipe' : 'Atleta'
+  return (
+    <div className="space-y-3">
+      <div className="space-y-2">
+        <Label htmlFor={`${role}-login-email`}>E-mail</Label>
+        <Input id={`${role}-login-email`} type="email" autoComplete="username" value={login.email}
+          onChange={(event) => setLogin({ ...login, email: event.target.value })} />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor={`${role}-login-password`}>Senha</Label>
+        <Input id={`${role}-login-password`} type="password" autoComplete="current-password" value={login.password}
+          onChange={(event) => setLogin({ ...login, password: event.target.value })} />
+      </div>
+      {(role === 'admin' && (requiresTotp || login.totp)) && (
+        <div className="space-y-2">
+          <Label htmlFor="admin-login-totp">Código 2FA do administrador</Label>
+          <Input id="admin-login-totp" inputMode="numeric" maxLength={6} autoComplete="one-time-code"
+            value={login.totp} onChange={(event) => setLogin({ ...login, totp: event.target.value.replace(/\D/g, '') })}
+            placeholder="000000" />
+        </div>
+      )}
+      <Button type="button" className="w-full text-white border-0" style={{ background: PURPLE }}
+        onClick={onSubmit} disabled={loading || !login.email || !login.password || (role === 'admin' && requiresTotp && login.totp.length !== 6)}>
+        Entrar como {name}
+      </Button>
+    </div>
+  )
+}
+
+function ConsentFields({ termsAccepted, setTermsAccepted, sensitiveConsent, setSensitiveConsent }) {
+  return (
+    <>
+      <label className="flex items-start gap-2 text-sm text-slate-600">
+        <input type="checkbox" checked={termsAccepted} onChange={(event) => setTermsAccepted(event.target.checked)} required />
+        <span>Aceito os <Link href="/termos-de-uso" className="text-violet-700 underline">Termos de Uso</Link>.</span>
+      </label>
+      <label className="flex items-start gap-2 text-sm text-slate-600">
+        <input type="checkbox" checked={sensitiveConsent} onChange={(event) => setSensitiveConsent(event.target.checked)} required />
+        <span>Consinto com o tratamento dos meus dados pessoais e sensíveis, conforme a <Link href="/privacidade" className="text-violet-700 underline">Política de Privacidade</Link>.</span>
+      </label>
+    </>
   )
 }
 

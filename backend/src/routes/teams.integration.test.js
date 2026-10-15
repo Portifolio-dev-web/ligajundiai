@@ -85,6 +85,30 @@ describe('team creation constraints', () => {
     expect(duplicate.body.code).toBe('CONFLICT')
   })
 
+  test('registers athlete accounts with the athlete role and an authenticated session', async () => {
+    const response = await request(app)
+      .post('/api/auth/register-athlete')
+      .send({
+        name: 'Atleta de integração',
+        email: `atleta-${randomUUID()}@example.test`,
+        password: 'Senha-Forte-Integracao-2026',
+        consent: true,
+      })
+
+    expect(response.status).toBe(201)
+    expect(response.body.user.role).toBe('atleta')
+    expect(response.headers['set-cookie']).toBeDefined()
+    createdUsers.push(response.body.user.id)
+
+    const session = await request(app)
+      .get('/api/auth/me')
+      .set('Cookie', response.headers['set-cookie'])
+
+    expect(session.status).toBe(200)
+    expect(session.body.user.role).toBe('atleta')
+    expect(session.body.team).toBeNull()
+  })
+
   test('enforces gestor then admin approval and blocks admin membership as team manager', async () => {
     const manager = await createManager('fluxo')
     const teamResponse = await request(app)

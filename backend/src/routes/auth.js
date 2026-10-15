@@ -16,26 +16,29 @@ import { authRateLimit } from '../security/rate-limit.js'
 export const authRouter = Router()
 authRouter.use(authRateLimit)
 
-const registerSchema = z.object({
+const accountSchema = z.object({
   name: z.string().trim().min(2).max(120),
   email: emailSchema,
   password: z.string().min(12).max(128),
   phone: z.string().trim().max(30).optional().default(''),
-  cpf: z.string().optional().default(''),
   consent: z.literal(true),
   consent_version: z.string().trim().max(40).optional(),
 }).strict()
 
-authRouter.post('/register', asyncRoute(async (req, res) => {
-  const input = parse(registerSchema, req.body)
+const registerManagerSchema = accountSchema.extend({
+  cpf: z.string().optional().default(''),
+}).strict()
+
+async function createAccount(input, role, res) {
   const cpf = input.cpf ? requireValidCpf(input.cpf) : null
   const user = await transaction(async (client) => {
     const created = await client.query(
       `INSERT INTO users
        (role, name, email, password_hash, phone, cpf_ciphertext, cpf_hash, consent_at, consent_version, consent_confirmed)
-       VALUES ('gestor', $1, $2, $3, $4, $5, $6, now(), $7, true)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, now(), $8, true)
        RETURNING id, role, name, email, phone, created_at`,
       [
+        role,
         cleanText(input.name, 120),
         input.email,
         await hashPassword(input.password),
@@ -46,10 +49,22 @@ authRouter.post('/register', asyncRoute(async (req, res) => {
       ],
     )
     const createdUser = created.rows[0]
-    await audit(client, createdUser, 'user.register', 'user', createdUser.id, { role: 'gestor' })
+    await audit(client, createdUser, 'user.register', 'user', createdUser.id, { role })
     return createdUser
   })
   await createSession(user, res)
+  return user
+}
+
+authRouter.post('/register', asyncRoute(async (req, res) => {
+  const input = parse(registerManagerSchema, req.body)
+  const user = await createAccount(input, 'gestor', res)
+  res.status(201).json({ user })
+}))
+
+authRouter.post('/register-athlete', asyncRoute(async (req, res) => {
+  const input = parse(accountSchema, req.body)
+  const user = await createAccount(input, 'atleta', res)
   res.status(201).json({ user })
 }))
 
