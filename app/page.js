@@ -76,43 +76,36 @@ function App() {
   const [loginOpen, setLoginOpen] = useState(false)
   const [booting, setBooting] = useState(true)
 
-  const loadMe = useCallback(async (tk) => {
+  const loadMe = useCallback(async () => {
     try {
-      const { user, team } = await api('/auth/me', { token: tk })
+      const { user, team } = await api('/auth/me')
+      setToken('cookie-session')
       setUser(user)
       setMyTeam(team)
     } catch {
-      localStorage.removeItem('lvj_token')
       setToken(null)
       setUser(null)
+      setMyTeam(null)
     }
   }, [])
 
   useEffect(() => {
-    const tk = localStorage.getItem('lvj_token')
     api('/categories').then((d) => setCategories(d.categories || CATEGORY_FALLBACK)).catch(() => {})
-    if (tk) {
-      setToken(tk)
-      loadMe(tk).finally(() => setBooting(false))
-    } else {
-      setBooting(false)
-    }
+    loadMe().finally(() => setBooting(false))
   }, [loadMe])
 
-  const onAuthed = (tk, u) => {
-    localStorage.setItem('lvj_token', tk)
-    setToken(tk)
-    setUser(u)
+  const onAuthed = (authenticatedUser) => {
+    setToken('cookie-session')
+    setUser(authenticatedUser)
     setLoginOpen(false)
-    loadMe(tk)
-    toast.success(`Bem-vindo(a), ${u.name}!`)
+    loadMe()
+    toast.success(`Bem-vindo(a), ${authenticatedUser.name}!`)
   }
 
   const logout = async () => {
     try {
       await api('/auth/logout', { method: 'POST', token })
     } catch {}
-    localStorage.removeItem('lvj_token')
     setToken(null)
     setUser(null)
     setMyTeam(null)
@@ -484,14 +477,15 @@ function LoginDialog({ open, onOpenChange, onAuthed }) {
   const [email, setEmail] = useState('')
   const [code, setCode] = useState('')
   const [otpSent, setOtpSent] = useState(false)
-  const [devCode, setDevCode] = useState('')
 
   // Password
   const [pwEmail, setPwEmail] = useState('admin@lvj.com')
-  const [pw, setPw] = useState('admin123')
+  const [pw, setPw] = useState('')
+  const [pwTotp, setPwTotp] = useState('')
+  const [requiresTotp, setRequiresTotp] = useState(false)
 
   // Register
-  const [reg, setReg] = useState({ name: '', email: '', phone: '', cpf: '', password: '' })
+  const [reg, setReg] = useState({ name: '', email: '', phone: '', cpf: '', password: '', consent: false })
 
   const [loading, setLoading] = useState(false)
 
@@ -500,8 +494,7 @@ function LoginDialog({ open, onOpenChange, onAuthed }) {
     try {
       const d = await api('/auth/otp/request', { method: 'POST', body: { email } })
       setOtpSent(true)
-      setDevCode(d.dev_code || '')
-      toast.success('Código enviado (MOCKED). Use o código exibido abaixo.')
+      toast.success(d.message || 'Se a conta existir, um código será enviado por e-mail.')
     } catch (e) {
       toast.error(e.message)
     } finally {
@@ -512,7 +505,7 @@ function LoginDialog({ open, onOpenChange, onAuthed }) {
     setLoading(true)
     try {
       const d = await api('/auth/otp/verify', { method: 'POST', body: { email, code } })
-      onAuthed(d.token, d.user)
+      onAuthed(d.user)
     } catch (e) {
       toast.error(e.message)
     } finally {
@@ -522,9 +515,10 @@ function LoginDialog({ open, onOpenChange, onAuthed }) {
   const loginPw = async () => {
     setLoading(true)
     try {
-      const d = await api('/auth/login-password', { method: 'POST', body: { email: pwEmail, password: pw } })
-      onAuthed(d.token, d.user)
+      const d = await api('/auth/login-password', { method: 'POST', body: { email: pwEmail, password: pw, ...(pwTotp ? { totp: pwTotp } : {}) } })
+      onAuthed(d.user)
     } catch (e) {
+      if (e.code === 'TOTP_REQUIRED') setRequiresTotp(true)
       toast.error(e.message)
     } finally {
       setLoading(false)
@@ -534,7 +528,7 @@ function LoginDialog({ open, onOpenChange, onAuthed }) {
     setLoading(true)
     try {
       const d = await api('/auth/register', { method: 'POST', body: reg })
-      onAuthed(d.token, d.user)
+      onAuthed(d.user)
     } catch (e) {
       toast.error(e.message)
     } finally {
@@ -549,7 +543,7 @@ function LoginDialog({ open, onOpenChange, onAuthed }) {
           <DialogTitle className="flex items-center gap-2">
             <Volleyball className="h-5 w-5" style={{ color: PURPLE }} /> Acesso LVJ
           </DialogTitle>
-          <DialogDescription>Login 100% por e-mail. Notificações via e-mail (MOCKED).</DialogDescription>
+          <DialogDescription>Entre com senha e autenticação em dois fatores para administradores.</DialogDescription>
         </DialogHeader>
 
         <Tabs value={tab} onValueChange={setTab}>
@@ -570,11 +564,7 @@ function LoginDialog({ open, onOpenChange, onAuthed }) {
               </Button>
             ) : (
               <>
-                {devCode && (
-                  <div className="rounded-md bg-orange-50 border border-orange-200 p-2 text-sm text-orange-800">
-                    <strong>Código (MOCKED):</strong> {devCode}
-                  </div>
-                )}
+                <p className="text-xs text-slate-500">Consulte sua caixa de e-mail para obter o código.</p>
                 <div>
                   <Label>Código de 6 dígitos</Label>
                   <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="000000" maxLength={6} />
@@ -595,7 +585,12 @@ function LoginDialog({ open, onOpenChange, onAuthed }) {
               <Label>Senha</Label>
               <Input type="password" value={pw} onChange={(e) => setPw(e.target.value)} />
             </div>
-            <p className="text-xs text-slate-400">Admin de teste: admin@lvj.com / admin123</p>
+            {(requiresTotp || pwTotp) && (
+              <div>
+                <Label>Código 2FA do administrador</Label>
+                <Input inputMode="numeric" maxLength={6} value={pwTotp} onChange={(e) => setPwTotp(e.target.value.replace(/\D/g, ''))} placeholder="000000" />
+              </div>
+            )}
             <Button className="w-full text-white border-0" style={{ background: PURPLE }} onClick={loginPw} disabled={loading}>
               Entrar
             </Button>
@@ -621,10 +616,14 @@ function LoginDialog({ open, onOpenChange, onAuthed }) {
               </div>
             </div>
             <div>
-              <Label>Senha (opcional)</Label>
+              <Label>Senha (mínimo de 12 caracteres)</Label>
               <Input type="password" value={reg.password} onChange={(e) => setReg({ ...reg, password: e.target.value })} />
             </div>
-            <Button className="w-full text-white border-0" style={{ background: ORANGE }} onClick={doRegister} disabled={loading || !reg.name || !reg.email}>
+            <label className="flex items-start gap-2 text-sm text-slate-600">
+              <input type="checkbox" checked={reg.consent} onChange={(e) => setReg({ ...reg, consent: e.target.checked })} />
+              <span>Consinto com o tratamento dos meus dados para gestão da liga, conforme a política de privacidade.</span>
+            </label>
+            <Button className="w-full text-white border-0" style={{ background: ORANGE }} onClick={doRegister} disabled={loading || !reg.name || !reg.email || reg.password.length < 12 || !reg.consent}>
               <UserPlus className="h-4 w-4 mr-2" /> Criar conta de Gestor
             </Button>
           </TabsContent>
@@ -786,7 +785,7 @@ function AdminTeams({ token, reload }) {
   const act = async (id, action, justification) => {
     try {
       await api(`/admin/teams/${id}/${action}`, { method: 'POST', token, body: { justification } })
-      toast.success(action === 'approve' ? 'Equipe aprovada + e-mail (MOCKED)' : 'Equipe recusada + e-mail (MOCKED)')
+      toast.success(action === 'approve' ? 'Equipe aprovada; e-mail colocado na fila' : 'Equipe recusada; e-mail colocado na fila')
       setRejectId(null)
       setJustif('')
       load()
@@ -800,7 +799,7 @@ function AdminTeams({ token, reload }) {
     <Card className="mt-4">
       <CardHeader>
         <CardTitle>Aprovação de Equipes</CardTitle>
-        <CardDescription>Aprove ou recuse. Um e-mail automático (MOCKED) é enviado ao gestor.</CardDescription>
+        <CardDescription>Aprove ou recuse. O e-mail de confirmação é enviado ao gestor pelo serviço local de e-mail.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         {teams.map((t) => (
@@ -836,7 +835,7 @@ function AdminTeams({ token, reload }) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Recusar equipe</DialogTitle>
-            <DialogDescription>Informe a justificativa. Ela será enviada por e-mail (MOCKED) ao gestor.</DialogDescription>
+            <DialogDescription>Informe a justificativa que será enviada ao gestor por e-mail.</DialogDescription>
           </DialogHeader>
           <Textarea value={justif} onChange={(e) => setJustif(e.target.value)} placeholder="Ex: documentação incompleta..." />
           <Button variant="destructive" onClick={() => act(rejectId, 'reject', justif)} disabled={!justif.trim()}>
@@ -861,7 +860,7 @@ function AdminAthletes({ token, reload }) {
   const act = async (id, action, justification) => {
     try {
       await api(`/admin/athletes/${id}/${action}`, { method: 'POST', token, body: { justification } })
-      toast.success(action === 'approve' ? 'Atleta liberado + e-mail (MOCKED)' : 'Atleta recusado + e-mail (MOCKED)')
+      toast.success(action === 'approve' ? 'Atleta liberado; e-mail colocado na fila' : 'Atleta recusado; e-mail colocado na fila')
       setRejectId(null)
       setJustif('')
       load()
@@ -888,7 +887,7 @@ function AdminAthletes({ token, reload }) {
             </div>
             <div className="flex items-center gap-2">
               <StatusBadge status={a.status} />
-              {a.status === 'pending' && (
+              {a.status === 'awaiting_admin' && (
                 <>
                   <Button size="sm" className="text-white border-0" style={{ background: '#16a34a' }} onClick={() => act(a.id, 'approve')}>
                     <CheckCircle2 className="h-4 w-4 mr-1" /> Liberar
@@ -908,7 +907,7 @@ function AdminAthletes({ token, reload }) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Recusar atleta</DialogTitle>
-            <DialogDescription>A justificativa será enviada por e-mail (MOCKED) ao gestor.</DialogDescription>
+            <DialogDescription>A justificativa será enviada ao gestor por e-mail.</DialogDescription>
           </DialogHeader>
           <Textarea value={justif} onChange={(e) => setJustif(e.target.value)} placeholder="Motivo da recusa..." />
           <Button variant="destructive" onClick={() => act(rejectId, 'reject', justif)} disabled={!justif.trim()}>
@@ -923,8 +922,15 @@ function AdminAthletes({ token, reload }) {
 function StatusBadge({ status }) {
   const map = {
     pending: { label: 'Pendente', bg: '#f59e0b' },
+    awaiting_manager: { label: 'Aguardando gestor', bg: '#f59e0b' },
+    awaiting_admin: { label: 'Aguardando administrador', bg: '#f97316' },
     approved: { label: 'Aprovado', bg: '#16a34a' },
     rejected: { label: 'Recusado', bg: '#dc2626' },
+    proposed: { label: 'Aguardando aceite', bg: '#f59e0b' },
+    confirmed: { label: 'Confirmado', bg: '#16a34a' },
+    scheduled: { label: 'Agendado', bg: '#16a34a' },
+    cancelled: { label: 'Cancelado', bg: '#64748b' },
+    finished: { label: 'Finalizado', bg: '#64748b' },
   }
   const s = map[status] || map.pending
   return (
@@ -1145,8 +1151,8 @@ function AdminMatches({ token, categories }) {
                   <div className="text-xs text-slate-500">{new Date(m.scheduled_at).toLocaleString('pt-BR')} {m.venue ? `• ${m.venue}` : ''}</div>
                 </div>
                 <div className="flex items-center gap-2">
-                  {m.status === 'finished' ? <Badge className="border-0 text-white" style={{ background: '#16a34a' }}>Finalizado</Badge> : <Badge className="border-0 text-white" style={{ background: '#f59e0b' }}>Agendado</Badge>}
-                  <Button size="sm" variant="outline" onClick={() => { setResultMatch(m); setSets([{ home: '', away: '' }, { home: '', away: '' }, { home: '', away: '' }, { home: '', away: '' }, { home: '', away: '' }].map((s, i) => (m.sets && m.sets[i]) ? { home: String(m.sets[i].home), away: String(m.sets[i].away) } : s)) }}>
+                  <StatusBadge status={m.status} />
+                  <Button size="sm" variant="outline" disabled={!['confirmed', 'scheduled', 'finished'].includes(m.status)} onClick={() => { setResultMatch(m); setSets([{ home: '', away: '' }, { home: '', away: '' }, { home: '', away: '' }, { home: '', away: '' }, { home: '', away: '' }].map((s, i) => (m.sets && m.sets[i]) ? { home: String(m.sets[i].home), away: String(m.sets[i].away) } : s)) }}>
                     Placar
                   </Button>
                 </div>
@@ -1422,7 +1428,7 @@ function GestorPanel({ token, categories, user, myTeam, refreshMe }) {
             <TabsContent value="elenco"><GestorRoster token={token} team={team} /></TabsContent>
             <TabsContent value="frequencia"><GestorFrequency token={token} /></TabsContent>
             <TabsContent value="classificacao"><GestorStandings token={token} category={team.category} /></TabsContent>
-            <TabsContent value="agenda"><GestorAgenda category={team.category} /></TabsContent>
+            <TabsContent value="agenda"><GestorAgenda category={team.category} token={token} team={team} /></TabsContent>
           </Tabs>
         </>
       )}
@@ -1432,7 +1438,9 @@ function GestorPanel({ token, categories, user, myTeam, refreshMe }) {
 
 function GestorRoster({ token, team }) {
   const [athletes, setAthletes] = useState([])
-  const [form, setForm] = useState({ name: '', cpf: '', position: '', birthdate: '' })
+  const [form, setForm] = useState({ name: '', cpf: '', position: '', birthdate: '', email: '', photo: null, consent: false })
+  const [rejectId, setRejectId] = useState(null)
+  const [justification, setJustification] = useState('')
 
   const load = useCallback(() => {
     api('/athletes/mine', { token }).then((d) => setAthletes(d.athletes || [])).catch(() => {})
@@ -1441,9 +1449,47 @@ function GestorRoster({ token, team }) {
 
   const add = async () => {
     try {
-      await api('/athletes', { method: 'POST', token, body: form })
-      toast.success('Atleta enviado para liberação do Admin')
-      setForm({ name: '', cpf: '', position: '', birthdate: '' })
+      let biometry_key
+      if (form.photo) {
+        const upload = await api('/athletes/biometry-upload', {
+          method: 'POST',
+          token,
+          body: { content_type: form.photo.type },
+        })
+        const uploadForm = new FormData()
+        Object.entries(upload.uploadFields).forEach(([key, value]) => uploadForm.append(key, value))
+        uploadForm.append('file', form.photo)
+        const response = await fetch(upload.uploadUrl, { method: 'POST', body: uploadForm, credentials: 'omit' })
+        if (!response.ok) throw new Error('Não foi possível enviar a foto para o armazenamento.')
+        biometry_key = upload.key
+      }
+      await api('/athletes', {
+        method: 'POST',
+        token,
+        body: {
+          name: form.name,
+          cpf: form.cpf,
+          position: form.position,
+          birthdate: form.birthdate || undefined,
+          email: form.email || undefined,
+          consent: form.consent,
+          ...(biometry_key ? { biometry_key } : {}),
+        },
+      })
+      toast.success('Atleta cadastrado e aguardando aprovação do gestor.')
+      setForm({ name: '', cpf: '', position: '', birthdate: '', email: '', photo: null, consent: false })
+      load()
+    } catch (e) {
+      toast.error(e.message)
+    }
+  }
+
+  const review = async (id, action, reason = '') => {
+    try {
+      await api(`/gestor/athletes/${id}/${action}`, { method: 'POST', token, body: { justification: reason } })
+      toast.success(action === 'approve' ? 'Atleta encaminhado para aprovação final.' : 'Cadastro do atleta recusado.')
+      setRejectId(null)
+      setJustification('')
       load()
     } catch (e) {
       toast.error(e.message)
@@ -1454,12 +1500,12 @@ function GestorRoster({ token, team }) {
     <Card className="mt-4">
       <CardHeader>
         <CardTitle>Elenco</CardTitle>
-        <CardDescription>Cadastre atletas (entram como "Pendente" até a liberação do Admin). Sem limite de atletas.</CardDescription>
+        <CardDescription>Os cadastros passam primeiro pela aprovação do gestor e depois pela aprovação final do administrador.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {team.status === 'approved' ? (
-          <div className="grid gap-3 md:grid-cols-5 items-end rounded-lg border p-4 bg-slate-50">
-            <div className="md:col-span-2">
+          <div className="grid gap-3 md:grid-cols-3 items-end rounded-lg border p-4 bg-slate-50">
+            <div>
               <Label className="text-xs">Nome do atleta</Label>
               <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </div>
@@ -1469,9 +1515,28 @@ function GestorRoster({ token, team }) {
             </div>
             <div>
               <Label className="text-xs">Posição</Label>
-              <Input value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })} placeholder="Levantador..." />
+              <select className="h-10 w-full rounded-md border bg-white px-3 text-sm" value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })}>
+                <option value="">Selecione</option>
+                <option value="central">Central</option>
+                <option value="ponteiro">Ponteiro</option>
+                <option value="saida">Saída</option>
+                <option value="levantador">Levantador</option>
+                <option value="libero">Líbero</option>
+              </select>
             </div>
-            <Button className="text-white border-0" style={{ background: PURPLE }} onClick={add} disabled={!form.name || !form.cpf}>
+            <div>
+              <Label className="text-xs">E-mail do atleta (opcional)</Label>
+              <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+            </div>
+            <div>
+              <Label className="text-xs">Foto para biometria (máx. 5 MB)</Label>
+              <Input type="file" accept="image/jpeg,image/png,image/webp" capture="user" onChange={(e) => setForm({ ...form, photo: e.target.files?.[0] || null })} />
+            </div>
+            <label className="flex items-start gap-2 text-xs text-slate-600 md:col-span-2">
+              <input type="checkbox" checked={form.consent} onChange={(e) => setForm({ ...form, consent: e.target.checked })} />
+              <span>Confirmo que obtive o consentimento do atleta (ou responsável legal) para tratar seus dados e a foto biométrica.</span>
+            </label>
+            <Button className="text-white border-0" style={{ background: PURPLE }} onClick={add} disabled={!form.name || !form.cpf || !form.position || !form.consent || (form.photo && form.photo.size > 5 * 1024 * 1024)}>
               <UserPlus className="h-4 w-4 mr-1" /> Adicionar
             </Button>
           </div>
@@ -1489,12 +1554,32 @@ function GestorRoster({ token, team }) {
                 <div className="text-xs text-slate-500">CPF {a.cpf} {a.position ? `• ${a.position}` : ''}</div>
                 {a.status === 'rejected' && a.justification && <div className="text-xs text-red-500">Motivo: {a.justification}</div>}
               </div>
-              <StatusBadge status={a.status} />
+              <div className="flex items-center gap-2">
+                <StatusBadge status={a.status} />
+                {a.status === 'awaiting_manager' && (
+                  <>
+                    <Button size="sm" onClick={() => review(a.id, 'approve')}>Aprovar</Button>
+                    <Button size="sm" variant="destructive" onClick={() => setRejectId(a.id)}>Recusar</Button>
+                  </>
+                )}
+              </div>
             </div>
           ))}
           {athletes.length === 0 && <p className="text-sm text-slate-400">Nenhum atleta no elenco.</p>}
         </div>
       </CardContent>
+      <Dialog open={!!rejectId} onOpenChange={(open) => !open && setRejectId(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Recusar cadastro de atleta</DialogTitle>
+            <DialogDescription>Informe o motivo da recusa.</DialogDescription>
+          </DialogHeader>
+          <Textarea value={justification} onChange={(e) => setJustification(e.target.value)} />
+          <Button variant="destructive" onClick={() => review(rejectId, 'reject', justification)} disabled={!justification.trim()}>
+            Confirmar recusa
+          </Button>
+        </DialogContent>
+      </Dialog>
     </Card>
   )
 }
@@ -1544,12 +1629,22 @@ function GestorStandings({ token, category }) {
   )
 }
 
-function GestorAgenda({ category }) {
+function GestorAgenda({ category, token, team }) {
   const [matches, setMatches] = useState([])
   const [filter, setFilter] = useState('all')
-  useEffect(() => {
+  const load = useCallback(() => {
     api(`/matches?category=${encodeURIComponent(category)}`).then((d) => setMatches(d.matches || [])).catch(() => {})
   }, [category])
+  useEffect(load, [load])
+  const accept = async (matchId) => {
+    try {
+      await api(`/gestor/matches/${matchId}/accept`, { method: 'POST', token, body: {} })
+      toast.success('Aceite registrado.')
+      load()
+    } catch (e) {
+      toast.error(e.message)
+    }
+  }
   const filtered = matches.filter((m) => filter === 'all' || m.status === filter)
   return (
     <Card className="mt-4">
@@ -1560,6 +1655,8 @@ function GestorAgenda({ category }) {
             <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos</SelectItem>
+              <SelectItem value="proposed">Aguardando aceite</SelectItem>
+              <SelectItem value="confirmed">Confirmados</SelectItem>
               <SelectItem value="scheduled">Agendados</SelectItem>
               <SelectItem value="finished">Finalizados</SelectItem>
             </SelectContent>
@@ -1579,9 +1676,12 @@ function GestorAgenda({ category }) {
                 </div>
                 <div className="text-xs text-slate-500">{new Date(m.scheduled_at).toLocaleString('pt-BR')} {m.venue ? `• ${m.venue}` : ''}</div>
               </div>
-              <Badge className="border-0 text-white" style={{ background: m.status === 'finished' ? '#16a34a' : '#f59e0b' }}>
-                {m.status === 'finished' ? 'Finalizado' : 'Agendado'}
-              </Badge>
+              <div className="flex items-center gap-2">
+                <StatusBadge status={m.status} />
+                {m.status === 'proposed' && [m.home_team_id, m.away_team_id].includes(team?.id) && (
+                  <Button size="sm" onClick={() => accept(m.id)}>Aceitar data</Button>
+                )}
+              </div>
             </div>
           )
         })}

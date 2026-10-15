@@ -1,27 +1,172 @@
+name: ligajundiai
+
+x-api-environment: &api-environment
+  NODE_ENV: development
+  PORT: 4000
+  DATABASE_URL: postgresql://liga:liga_local_only@postgres:5432/ligajundiai
+  REDIS_URL: redis://redis:6379
+  JWT_SECRET: local-development-only-replace-before-deployment-2026
+  APP_ENCRYPTION_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+  COOKIE_SECURE: "false"
+  CORS_ORIGINS: http://localhost:3000
+  ADMIN_EMAIL: admin@lvj.com
+  ADMIN_PASSWORD: Admin123-local-change-me!
+  ADMIN_TOTP_SECRET: JBSWY3DPEHPK3PXP
+  CONSENT_VERSION: "2026-01"
+  SMTP_HOST: mailpit
+  SMTP_PORT: 1025
+  SMTP_FROM: nao-responda@lvj.local
+  S3_ENDPOINT: http://localhost:9000
+  S3_INTERNAL_ENDPOINT: http://object-storage:9000
+  S3_PUBLIC_ENDPOINT: http://localhost:9000
+  S3_REGION: us-east-1
+  S3_BUCKET: lvj-biometria
+  S3_ACCESS_KEY: lvj-local
+  S3_SECRET_KEY: lvj-local-secret-change-me
+  CONTROL_ID_MODE: simulation
+  WEBHOOK_SECRET: development-only-turnstile-webhook-secret-32-bytes
+
 services:
-  app:
+  frontend:
     build:
       context: .
+      dockerfile: Dockerfile
     ports:
       - "3000:3000"
     environment:
       NODE_ENV: development
       NODE_OPTIONS: --max-old-space-size=512
-      MONGO_URL: mongodb://mongodb:27017/ligajundiai
-      DB_NAME: ligajundiai
-      CORS_ORIGINS: http://localhost:3000
+      API_INTERNAL_URL: http://api:4000
     volumes:
       - .:/app
       - app_node_modules:/app/node_modules
       - app_next:/app/.next
     depends_on:
-      mongodb:
+      api:
         condition: service_healthy
 
-  mongodb:
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: production
+    environment: *api-environment
+    ports:
+      - "4000:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      object-storage:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ligajundiai
+      POSTGRES_USER: liga
+      POSTGRES_PASSWORD: liga_local_only
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U liga -d ligajundiai"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  object-storage-volume-init:
+    image: alpine:3.22
+    user: "0:0"
+    command: ["sh", "-c", "mkdir -p /data/rustfs0 /data/rustfs1 /data/rustfs2 /data/rustfs3 && chown 10001:10001 /data/rustfs0 /data/rustfs1 /data/rustfs2 /data/rustfs3"]
+    volumes:
+      - object_storage_0:/data/rustfs0
+      - object_storage_1:/data/rustfs1
+      - object_storage_2:/data/rustfs2
+      - object_storage_3:/data/rustfs3
+    restart: "no"
+
+  object-storage:
+    image: rustfs/rustfs:latest
+    environment:
+      RUSTFS_VOLUMES: /data/rustfs{0...3}
+      RUSTFS_ADDRESS: 0.0.0.0:9000
+      RUSTFS_CONSOLE_ADDRESS: 0.0.0.0:9001
+      RUSTFS_CONSOLE_ENABLE: "true"
+      RUSTFS_CONSOLE_CORS_ALLOWED_ORIGINS: "*"
+      RUSTFS_ACCESS_KEY: lvj-local
+      RUSTFS_SECRET_KEY: lvj-local-secret-change-me
+      RUSTFS_OBS_LOGGER_LEVEL: info
+      # Local-only: named Docker volumes share one backing device.
+      RUSTFS_UNSAFE_BYPASS_DISK_CHECK: "true"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - object_storage_0:/data/rustfs0
+      - object_storage_1:/data/rustfs1
+      - object_storage_2:/data/rustfs2
+      - object_storage_3:/data/rustfs3
+    depends_on:
+      object-storage-volume-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9000/health && curl -fsS http://localhost:9001/rustfs/console/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+    restart: unless-stopped
+
+  mailpit:
+    image: axllent/mailpit:v1.27
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+  postgres-test:
+    profiles: ["test"]
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ligajundiai_test
+      POSTGRES_USER: liga
+      POSTGRES_PASSWORD: liga_local_only
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U liga -d ligajundiai_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  legacy-mongodb:
+    profiles: ["legacy"]
     image: mongo:7.0
     ports:
-      - "27017:27017"
+      - "27018:27017"
     volumes:
       - mongo_data:/data/db
     healthcheck:
@@ -29,9 +174,49 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-      start_period: 10s
+
+  legacy-migrate:
+    profiles: ["legacy"]
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: development
+    command: ["npm", "run", "migrate:legacy"]
+    environment:
+      <<: *api-environment
+      LEGACY_MONGO_URL: mongodb://legacy-mongodb:27017
+      LEGACY_MONGO_DATABASE: ligajundiai
+    depends_on:
+      postgres:
+        condition: service_healthy
+      legacy-mongodb:
+        condition: service_healthy
+
+  backend-test:
+    profiles: ["test"]
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: development
+    command: ["npm", "test"]
+    environment:
+      <<: *api-environment
+      NODE_ENV: test
+      DATABASE_URL: postgresql://liga:liga_local_only@postgres-test:5432/ligajundiai_test
+      S3_ENDPOINT: http://localhost:9000
+      S3_INTERNAL_ENDPOINT: http://localhost:9000
+      S3_PUBLIC_ENDPOINT: http://localhost:9000
+    depends_on:
+      postgres-test:
+        condition: service_healthy
 
 volumes:
   app_node_modules:
   app_next:
+  postgres_data:
+  redis_data:
+  object_storage_0:
+  object_storage_1:
+  object_storage_2:
+  object_storage_3:
   mongo_data:
