@@ -264,7 +264,8 @@ export default function CadastroAtletaPage() {
               </div>
               <label className="flex items-start gap-3 rounded-md border p-4 text-sm">
                 <Checkbox checked={form.consent} onCheckedChange={(checked) => setForm({ ...form, consent: checked === true })} />
-                <span>Autorizo o tratamento dos dados pessoais e da imagem para gestão esportiva e controle de acesso aos jogos, conforme a <Link className="underline" href="/privacidade" target="_blank">Política de Privacidade</Link>. Sei que posso solicitar acesso ou exclusão dos meus dados.</span>
+                {/* LGPD (varredura, item L1): agora linka também os Termos de Uso, não só a Política de Privacidade */}
+                <span>Autorizo o tratamento dos dados pessoais e da imagem para gestão esportiva e controle de acesso aos jogos, conforme a <Link className="underline" href="/privacidade" target="_blank">Política de Privacidade</Link> e os <Link className="underline" href="/termos-de-uso" target="_blank">Termos de Uso</Link>. Sei que posso solicitar acesso ou exclusão dos meus dados.</span>
               </label>
             </div>}
 

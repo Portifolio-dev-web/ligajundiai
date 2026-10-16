@@ -15,11 +15,16 @@ export function escapeHtml(value) {
   })[character])
 }
 
-export async function enqueueEmail(client, { to, subject, html, eventId }) {
+// SEGURANÇA (varredura, item S1): "adminPreviewHtml" é o que o painel do admin mostra em
+// GET /admin/emails; "html" é o que de fato é enviado por SMTP e nunca é exposto pela API.
+// Por padrão os dois são iguais (mensagens sem segredo, como aprovação de equipe/atleta).
+// Chamadas que enviam um segredo de uso único (ex.: código de login por e-mail) devem passar
+// um adminPreviewHtml próprio, com o segredo oculto — ver auth.js, rota /otp/request.
+export async function enqueueEmail(client, { to, subject, html, adminPreviewHtml, eventId }) {
   const inserted = await client.query(
-    `INSERT INTO email_outbox (event_id, recipient, subject, html)
-     VALUES ($1, $2, $3, $4) ON CONFLICT (event_id) DO NOTHING RETURNING id`,
-    [eventId, to, subject, html],
+    `INSERT INTO email_outbox (event_id, recipient, subject, html, admin_preview_html)
+     VALUES ($1, $2, $3, $4, $5) ON CONFLICT (event_id) DO NOTHING RETURNING id`,
+    [eventId, to, subject, html, adminPreviewHtml ?? html],
   )
   if (inserted.rowCount) {
     await client.query(

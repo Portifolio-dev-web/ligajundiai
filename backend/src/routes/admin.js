@@ -101,8 +101,11 @@ adminRouter.get('/stats', asyncRoute(async (_req, res) => {
 }))
 
 adminRouter.get('/emails', asyncRoute(async (_req, res) => {
+  // SEGURANÇA (varredura, item S1): devolve "admin_preview_html", não "html". A coluna "html"
+  // carrega o conteúdo real enviado por SMTP (ex.: o código de login descartável do destinatário)
+  // e não deve voltar para quem só está auditando a fila de e-mails.
   const result = await query(
-    `SELECT id, recipient AS "to", subject, html,
+    `SELECT id, recipient AS "to", subject, admin_preview_html AS html,
        CASE WHEN sent_at IS NULL THEN 'QUEUED' ELSE 'SENT' END AS status,
        created_at, sent_at
      FROM email_outbox ORDER BY created_at DESC LIMIT 50`,

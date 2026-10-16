@@ -108,6 +108,9 @@ authRouter.post('/otp/request', asyncRoute(async (req, res) => {
         to: user.email,
         subject: 'Seu código de acesso - Liga de Voleibol Jundiaí',
         html: `<p>Seu código de acesso é <strong>${escapeHtml(code)}</strong>.</p><p>Ele expira em 10 minutos.</p>`,
+        // SEGURANÇA (varredura, item S1): o painel do admin (GET /admin/emails) não pode mostrar
+        // um código capaz de autenticar outra pessoa. Só quem recebe o e-mail de verdade vê o código.
+        adminPreviewHtml: '<p>Código de acesso enviado. Por segurança, o código não é exibido neste painel.</p>',
         eventId,
       })
     })

@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useState, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -641,9 +642,11 @@ function LoginDialog({ open, onOpenChange, onAuthed }) {
               <Label htmlFor="manager-register-password">Senha (mínimo de 12 caracteres)</Label>
               <Input id="manager-register-password" type="password" autoComplete="new-password" minLength={12} value={reg.password} onChange={(e) => setReg({ ...reg, password: e.target.value })} />
             </div>
+            {/* LGPD (varredura, item L1): o texto citava "a política de privacidade" sem link para ela;
+                agora linka a política e os termos, que já têm conteúdo real (antes eram páginas vazias). */}
             <label className="flex items-start gap-2 text-sm text-slate-600">
               <input id="manager-register-consent" type="checkbox" checked={reg.consent} onChange={(e) => setReg({ ...reg, consent: e.target.checked })} />
-              <span>Consinto com o tratamento dos meus dados para gestão da liga, conforme a política de privacidade.</span>
+              <span>Consinto com o tratamento dos meus dados para gestão da liga, conforme a <Link className="underline" href="/privacidade" target="_blank">Política de Privacidade</Link> e os <Link className="underline" href="/termos-de-uso" target="_blank">Termos de Uso</Link>.</span>
             </label>
             <Button className="w-full text-white border-0" style={{ background: ORANGE }} onClick={doRegister} disabled={loading || !reg.name || !reg.email || reg.password.length < 12 || !reg.consent}>
               <UserPlus className="h-4 w-4 mr-2" /> Criar conta de Gestor
@@ -1590,9 +1593,11 @@ function GestorRoster({ token, team }) {
               <Label className="text-xs">Foto para biometria (máx. 5 MB)</Label>
               <Input type="file" accept="image/jpeg,image/png,image/webp" capture="user" onChange={(e) => setForm({ ...form, photo: e.target.files?.[0] || null })} />
             </div>
+            {/* LGPD (varredura, item L1): este consentimento não linkava nenhum documento;
+                agora aponta para a política e os termos para o gestor poder mostrá-los ao atleta/responsável. */}
             <label className="flex items-start gap-2 text-xs text-slate-600 md:col-span-2">
               <input type="checkbox" checked={form.consent} onChange={(e) => setForm({ ...form, consent: e.target.checked })} />
-              <span>Confirmo que obtive o consentimento do atleta (ou responsável legal) para tratar seus dados e a foto biométrica.</span>
+              <span>Confirmo que obtive o consentimento do atleta (ou responsável legal) para tratar seus dados e a foto biométrica, conforme a <Link className="underline" href="/privacidade" target="_blank">Política de Privacidade</Link> e os <Link className="underline" href="/termos-de-uso" target="_blank">Termos de Uso</Link>.</span>
             </label>
             <Button className="text-white border-0" style={{ background: PURPLE }} onClick={add} disabled={!form.name || !form.cpf || !form.position || !form.consent || (form.photo && form.photo.size > 5 * 1024 * 1024)}>
               <UserPlus className="h-4 w-4 mr-1" /> Adicionar
@@ -1783,7 +1788,13 @@ function Footer() {
             <p className="text-sm text-slate-400">Jundiaí - SP</p>
           </div>
         </div>
-        <div className="mt-8 border-t border-slate-700 pt-4 text-xs text-slate-500 text-center">
+        {/* LGPD (varredura, item L1): antes não havia nenhum link fixo para a política/termos fora do
+            fluxo de cadastro; agora ficam acessíveis em qualquer página, mesmo sem estar logado. */}
+        <div className="mt-8 border-t border-slate-700 pt-4 text-center text-xs text-slate-500">
+          <div className="mb-2 flex items-center justify-center gap-4">
+            <Link className="underline hover:text-slate-300" href="/privacidade">Política de Privacidade</Link>
+            <Link className="underline hover:text-slate-300" href="/termos-de-uso">Termos de Uso</Link>
+          </div>
           © {new Date().getFullYear()} Liga de Voleibol Jundiaí. Todos os direitos reservados.
         </div>
       </div>

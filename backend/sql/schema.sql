@@ -272,11 +272,16 @@ CREATE TABLE IF NOT EXISTS email_outbox (
   recipient text NOT NULL,
   subject text NOT NULL,
   html text NOT NULL,
+  -- SEGURANÇA (varredura, item S1): cópia do e-mail sem segredos de uso único (código de OTP),
+  -- é o que GET /api/admin/emails devolve. "html" (com o segredo) só é lido para o envio real por SMTP.
+  admin_preview_html text NOT NULL DEFAULT '',
   sent_at timestamptz,
   attempts integer NOT NULL DEFAULT 0,
   last_error text,
   created_at timestamptz NOT NULL DEFAULT now()
 );
+ALTER TABLE email_outbox ADD COLUMN IF NOT EXISTS admin_preview_html text NOT NULL DEFAULT '';
+UPDATE email_outbox SET admin_preview_html = html WHERE admin_preview_html = '';
 
 CREATE TABLE IF NOT EXISTS outbox_events (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

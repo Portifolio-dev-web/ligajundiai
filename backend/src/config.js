@@ -46,4 +46,11 @@ if (config.NODE_ENV === 'production' && config.CONTROL_ID_MODE === 'live') {
   }
 }
 
+// SEGURANÇA (varredura, item S2): antes, COOKIE_SECURE default "false" valia também em produção
+// se alguém esquecesse de defini-lo no deploy, e o cookie de sessão saía sem o atributo Secure.
+// Agora falha o boot (fail-closed), igual já acontecia com CONTROL_ID_MODE acima.
+if (config.NODE_ENV === 'production' && !config.COOKIE_SECURE) {
+  throw new Error('COOKIE_SECURE must be "true" in production; the session cookie cannot be sent without the Secure attribute')
+}
+
 export const allowedOrigins = config.CORS_ORIGINS.split(',').map((origin) => origin.trim()).filter(Boolean)
