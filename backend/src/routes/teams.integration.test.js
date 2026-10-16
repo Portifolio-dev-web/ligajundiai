@@ -41,6 +41,15 @@ async function createAdminSession() {
   return `lvj_session=${token}`
 }
 
+async function configurePeriod(cookie, category, type, startsAt = new Date(Date.now() - 60_000), endsAt = new Date(Date.now() + 86_400_000)) {
+  const response = await request(app)
+    .put(`/api/admin/registration-periods/${encodeURIComponent(category)}/${type}`)
+    .set('Cookie', cookie)
+    .send({ starts_at: startsAt.toISOString(), ends_at: endsAt.toISOString() })
+  expect(response.status).toBe(200)
+  return response.body.period
+}
+
 async function createManager(suffix) {
   const response = await request(app)
     .post('/api/auth/register')
@@ -58,9 +67,11 @@ async function createManager(suffix) {
 describe('team creation constraints', () => {
   beforeAll(async () => {
     await pool.query(await readFile(migrationPath, 'utf8'))
+    await pool.query('DELETE FROM registration_periods')
   })
 
   afterAll(async () => {
+    await pool.query('DELETE FROM registration_periods')
     if (createdAdminJtis.length) await pool.query('DELETE FROM sessions WHERE jti = ANY($1::uuid[])', [createdAdminJtis])
     if (createdAthletes.length) await pool.query('DELETE FROM athletes WHERE id = ANY($1::uuid[])', [createdAthletes])
     if (createdTeams.length) await pool.query('DELETE FROM teams WHERE id = ANY($1::uuid[])', [createdTeams])
@@ -69,9 +80,49 @@ describe('team creation constraints', () => {
     await pool.end()
   })
 
+  test('keeps team registration closed until its category has an active period', async () => {
+    const manager = await createManager('periodo-equipe')
+    const adminCookie = await createAdminSession()
+    const category = 'Sub-19 Masculino'
+    const noPeriods = await request(app).get('/api/registration-periods')
+    expect(noPeriods.status).toBe(200)
+    expect(noPeriods.body.periods.find((period) => period.category === category && period.registration_type === 'team').status).toBe('not_configured')
+
+    const closedAttempt = await request(app)
+      .post('/api/teams')
+      .set('Cookie', manager.headers['set-cookie'])
+      .send({ name: `${teamName} Fechada`, category })
+    expect(closedAttempt.status).toBe(403)
+    expect(closedAttempt.body.error).toBe('Inscrições encerradas, te aguardamos na próxima temporada.')
+
+    await configurePeriod(adminCookie, category, 'team', new Date(Date.now() + 86_400_000), new Date(Date.now() + 172_800_000))
+    const scheduledPeriods = await request(app).get('/api/registration-periods')
+    expect(scheduledPeriods.body.periods.find((period) => period.category === category && period.registration_type === 'team').status).toBe('scheduled')
+
+    await configurePeriod(adminCookie, category, 'team', new Date(Date.now() - 172_800_000), new Date(Date.now() - 86_400_000))
+    const endedPeriods = await request(app).get('/api/registration-periods')
+    expect(endedPeriods.body.periods.find((period) => period.category === category && period.registration_type === 'team').status).toBe('closed')
+    const endedAttempt = await request(app)
+      .post('/api/teams')
+      .set('Cookie', manager.headers['set-cookie'])
+      .send({ name: `${teamName} Encerrada`, category })
+    expect(endedAttempt.status).toBe(403)
+    expect(endedAttempt.body.error).toBe('Inscrições encerradas, te aguardamos na próxima temporada.')
+
+    await configurePeriod(adminCookie, category, 'team')
+    const allowed = await request(app)
+      .post('/api/teams')
+      .set('Cookie', manager.headers['set-cookie'])
+      .send({ name: `${teamName} Aberta`, category })
+    expect(allowed.status).toBe(201)
+    createdTeams.push(allowed.body.team.id)
+  })
+
   test('rejects a second team with the same name and category with HTTP 409', async () => {
     const firstManager = await createManager('um')
     const secondManager = await createManager('dois')
+    const adminCookie = await createAdminSession()
+    await configurePeriod(adminCookie, 'Adulto Masculino', 'team')
     const first = await request(app)
       .post('/api/teams')
       .set('Cookie', firstManager.headers['set-cookie'])
@@ -88,8 +139,17 @@ describe('team creation constraints', () => {
     expect(duplicate.body.code).toBe('CONFLICT')
   })
 
+  test('returns an empty session state for an anonymous visitor', async () => {
+    const response = await request(app).get('/api/auth/me')
+    expect(response.status).toBe(200)
+    expect(response.body).toEqual({ user: null, team: null })
+  })
+
   test('enforces gestor then admin approval and blocks admin membership as team manager', async () => {
     const manager = await createManager('fluxo')
+    const adminCookie = await createAdminSession()
+    await configurePeriod(adminCookie, 'Adulto Masculino', 'team')
+    await configurePeriod(adminCookie, 'Adulto Masculino', 'athlete')
     const teamResponse = await request(app)
       .post('/api/teams')
       .set('Cookie', manager.headers['set-cookie'])
@@ -98,7 +158,6 @@ describe('team creation constraints', () => {
     const teamId = teamResponse.body.team.id
     createdTeams.push(teamId)
 
-    const adminCookie = await createAdminSession()
     const teamApproval = await request(app)
       .post(`/api/admin/teams/${teamId}/approve`)
       .set('Cookie', adminCookie)
@@ -153,6 +212,8 @@ describe('team creation constraints', () => {
 
   test('allows public athlete registration only for approved teams', async () => {
     const manager = await createManager('cadastro-publico')
+    const adminCookie = await createAdminSession()
+    await configurePeriod(adminCookie, 'Adulto Feminino', 'team')
     const teamResponse = await request(app)
       .post('/api/teams')
       .set('Cookie', manager.headers['set-cookie'])
@@ -169,7 +230,6 @@ describe('team creation constraints', () => {
       .send({ team_id: team.id, content_type: 'image/jpeg' })
     expect(pendingPresign.status).toBe(400)
 
-    const adminCookie = await createAdminSession()
     const approval = await request(app)
       .post(`/api/admin/teams/${team.id}/approve`)
       .set('Cookie', adminCookie)
@@ -177,7 +237,17 @@ describe('team creation constraints', () => {
     expect(approval.status).toBe(200)
 
     const approvedTeams = await request(app).get('/api/approved-teams')
-    expect(approvedTeams.body.teams.map((item) => item.id)).toContain(team.id)
+    expect(approvedTeams.body.teams.map((item) => item.id)).not.toContain(team.id)
+
+    const closedPresign = await request(app)
+      .post('/api/athletes/biometry-upload-public')
+      .send({ team_id: team.id, content_type: 'image/jpeg' })
+    expect(closedPresign.status).toBe(403)
+    expect(closedPresign.body.error).toBe('Obrigado pelo interesse em participar, Cadastro encerrado.')
+
+    await configurePeriod(adminCookie, 'Adulto Feminino', 'athlete')
+    const reopenedTeams = await request(app).get('/api/approved-teams')
+    expect(reopenedTeams.body.teams.map((item) => item.id)).toContain(team.id)
 
     const presign = await request(app)
       .post('/api/athletes/biometry-upload-public')

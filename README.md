@@ -50,6 +50,7 @@ serviço frontend deve corresponder ao segredo da API.
 - Gestor: `/gestor`, `/gestor/aprovar-atletas`, `/gestor/jogos`
 - Cadastro público de atleta: `/cadastro-atleta`
 - Administrador: `/admin/aprovacoes`, `/admin/agenda`
+- Configuração dos períodos por categoria: `/admin/inscricoes`
 - Jogos e frequência: `/jogos` (ou `/atleta/jogos` para o perfil atleta)
 
 O cadastro do atleta permite criar uma conta com e-mail e senha, mas só lista
@@ -58,6 +59,11 @@ atleta aguarda aprovação do gestor e, depois, do administrador. O formulário
 valida CPF no navegador, registra consentimento explícito e envia a foto
 diretamente ao RustFS com POST pré-assinado. Para acessar câmera em
 desenvolvimento, use `localhost` ou HTTPS e permita a permissão do navegador.
+
+O administrador configura períodos independentes para inscrição de equipes e
+cadastro de atletas em cada categoria na tela `/admin/inscricoes`. Sem período
+configurado ou fora das datas inicial e final, as inscrições ficam fechadas. A
+API valida as datas e bloqueia envios mesmo que o formulário seja contornado.
 
 Parar os serviços sem apagar os dados:
 

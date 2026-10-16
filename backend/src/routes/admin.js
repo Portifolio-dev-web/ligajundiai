@@ -5,10 +5,62 @@ import { AppError, notFound } from '../errors.js'
 import { authenticate, authorize } from '../security/auth.js'
 import { decryptSensitive, maskCpf } from '../security/crypto.js'
 import { cleanText, parse, uuidSchema } from '../security/validation.js'
+import { categories, getRegistrationPeriods, registrationStatus } from '../services/registration.js'
 import { asyncRoute, audit } from '../utils.js'
 
 export const adminRouter = Router()
 adminRouter.use(authenticate, authorize('admin'))
+
+adminRouter.get('/registration-periods', asyncRoute(async (_req, res) => {
+  res.json({ periods: await getRegistrationPeriods() })
+}))
+
+adminRouter.put('/registration-periods/:category/:type', asyncRoute(async (req, res) => {
+  const input = parse(z.object({
+    category: z.enum(categories),
+    type: z.enum(['team', 'athlete']),
+  }).strict(), req.params)
+  const window = parse(z.object({
+    starts_at: z.string().datetime({ offset: true }),
+    ends_at: z.string().datetime({ offset: true }),
+  }).strict(), req.body)
+  const startsAt = new Date(window.starts_at)
+  const endsAt = new Date(window.ends_at)
+  if (endsAt <= startsAt) throw new AppError(400, 'INVALID_REGISTRATION_PERIOD', 'A data final deve ser posterior à data inicial')
+
+  const period = await transaction(async (client) => {
+    const result = await client.query(
+      `INSERT INTO registration_periods
+       (category, registration_type, starts_at, ends_at, created_by)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (category, registration_type)
+       DO UPDATE SET starts_at = EXCLUDED.starts_at, ends_at = EXCLUDED.ends_at, updated_at = now()
+       RETURNING category, registration_type, starts_at, ends_at`,
+      [input.category, input.type, startsAt, endsAt, req.user.id],
+    )
+    await audit(client, req.user, 'registration_period.configure', 'registration_period', `${input.category}:${input.type}`, {
+      starts_at: startsAt.toISOString(),
+      ends_at: endsAt.toISOString(),
+    })
+    return result.rows[0]
+  })
+  res.json({ period: { ...period, status: registrationStatus(period) } })
+}))
+
+adminRouter.delete('/registration-periods/:category/:type', asyncRoute(async (req, res) => {
+  const input = parse(z.object({
+    category: z.enum(categories),
+    type: z.enum(['team', 'athlete']),
+  }).strict(), req.params)
+  await transaction(async (client) => {
+    await client.query(
+      'DELETE FROM registration_periods WHERE category = $1 AND registration_type = $2',
+      [input.category, input.type],
+    )
+    await audit(client, req.user, 'registration_period.clear', 'registration_period', `${input.category}:${input.type}`)
+  })
+  res.json({ ok: true })
+}))
 
 adminRouter.get('/notifications', asyncRoute(async (_req, res) => {
   const [teams, athletes, notifications] = await Promise.all([

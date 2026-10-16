@@ -2,22 +2,27 @@ import { Router } from 'express'
 import { query } from '../db/pool.js'
 import { asyncRoute, userTeam } from '../utils.js'
 import { authenticate, authorize } from '../security/auth.js'
+import { categories, getRegistrationPeriods } from '../services/registration.js'
 
 export const publicRouter = Router()
-
-export const categories = [
-  'Adulto Masculino', 'Adulto Feminino', 'Master Masculino',
-  'Master Feminino', 'Sub-19 Masculino', 'Sub-19 Feminino',
-]
 
 publicRouter.get('/', (_req, res) => res.json({ message: 'LVJ API online', app: 'Liga de Voleibol Jundiaí' }))
 publicRouter.get('/categories', (_req, res) => res.json({ categories }))
 publicRouter.get('/approved-teams', asyncRoute(async (_req, res) => {
   const result = await query(
     `SELECT id, name, category FROM teams
-     WHERE status = 'approved' AND deleted_at IS NULL ORDER BY category, name`,
+     WHERE status = 'approved' AND deleted_at IS NULL
+       AND EXISTS (
+         SELECT 1 FROM registration_periods p
+         WHERE p.category = teams.category AND p.registration_type = 'athlete'
+           AND p.starts_at <= now() AND p.ends_at > now()
+       )
+     ORDER BY category, name`,
   )
   res.json({ teams: result.rows })
+}))
+publicRouter.get('/registration-periods', asyncRoute(async (_req, res) => {
+  res.json({ periods: await getRegistrationPeriods() })
 }))
 publicRouter.get('/sponsors', asyncRoute(async (_req, res) => {
   const result = await query('SELECT id, name, logo_url, website, tier, active FROM sponsors WHERE active = true AND deleted_at IS NULL ORDER BY name')

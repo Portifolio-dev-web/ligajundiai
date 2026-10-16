@@ -14,6 +14,7 @@ import { CATEGORY_FALLBACK } from '@/lib/lvjApi'
 
 export default function GestorDashboardPage() {
   const [team, setTeam] = useState(null)
+  const [registrationPeriods, setRegistrationPeriods] = useState([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [name, setName] = useState('')
@@ -22,8 +23,12 @@ export default function GestorDashboardPage() {
 
   const load = useCallback(async () => {
     try {
-      const result = await api('/teams/mine')
+      const [result, registrationResult] = await Promise.all([
+        api('/teams/mine'),
+        api('/registration-periods'),
+      ])
       setTeam(result.team)
+      setRegistrationPeriods(registrationResult.periods || [])
     } catch (requestError) {
       setError(requestError.message)
     } finally {
@@ -35,6 +40,10 @@ export default function GestorDashboardPage() {
 
   const createTeam = async (event) => {
     event.preventDefault()
+    if (teamPeriod?.status !== 'open') {
+      setError(teamPeriod?.message || 'Inscrições encerradas, te aguardamos na próxima temporada.')
+      return
+    }
     setSaving(true)
     setError('')
     try {
@@ -46,6 +55,11 @@ export default function GestorDashboardPage() {
       setSaving(false)
     }
   }
+
+  const teamPeriod = registrationPeriods.find((period) => (
+    period.category === category && period.registration_type === 'team'
+  ))
+  const canRegisterTeam = teamPeriod?.status === 'open'
 
   return (
     <main className="mx-auto min-h-screen max-w-5xl space-y-6 px-4 py-10">
@@ -68,13 +82,19 @@ export default function GestorDashboardPage() {
             </CardContent>
           </Card>
           : <Card>
-            <CardHeader><CardTitle>Cadastro da equipe</CardTitle><CardDescription>Cadastre o nome e a categoria para enviar a solicitação de aprovação.</CardDescription></CardHeader>
+            <CardHeader><CardTitle>Cadastro da equipe</CardTitle><CardDescription>Cadastre o nome e a categoria durante o período de inscrição definido para a temporada.</CardDescription></CardHeader>
             <CardContent>
               <form onSubmit={createTeam} className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2"><Label htmlFor="team-name">Nome da equipe</Label><Input id="team-name" required minLength={2} maxLength={100} value={name} onChange={(event) => setName(event.target.value)} /></div>
                 <div className="space-y-2"><Label>Categoria</Label><Select value={category} onValueChange={setCategory} required><SelectTrigger><SelectValue placeholder="Selecione a categoria" /></SelectTrigger><SelectContent>{CATEGORY_FALLBACK.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select></div>
-                <div className="sm:col-span-2"><Alert><ShieldCheck className="h-4 w-4" /><AlertTitle>Pendente de aprovação pelo Admin</AlertTitle><AlertDescription>A equipe será analisada antes de ficar disponível para cadastro de atletas.</AlertDescription></Alert></div>
-                <Button className="sm:col-span-2" type="submit" disabled={saving || !category}>{saving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null} Enviar equipe</Button>
+                <div className="sm:col-span-2">
+                  {!category
+                    ? <Alert><AlertTitle>Selecione uma categoria</AlertTitle><AlertDescription>O período de inscrição é configurado separadamente para cada categoria.</AlertDescription></Alert>
+                    : canRegisterTeam
+                    ? <Alert><ShieldCheck className="h-4 w-4" /><AlertTitle>Inscrições abertas</AlertTitle><AlertDescription>Período: {new Date(teamPeriod.starts_at).toLocaleString('pt-BR')} até {new Date(teamPeriod.ends_at).toLocaleString('pt-BR')}. Após o envio, a equipe ficará pendente de aprovação pelo administrador.</AlertDescription></Alert>
+                    : <Alert variant="destructive"><AlertTitle>{teamPeriod?.status === 'scheduled' ? 'Inscrições ainda não iniciaram' : 'Inscrições encerradas'}</AlertTitle><AlertDescription>{teamPeriod?.message || 'Inscrições encerradas, te aguardamos na próxima temporada.'}</AlertDescription></Alert>}
+                </div>
+                <Button className="sm:col-span-2" type="submit" disabled={saving || !category || !canRegisterTeam}>{saving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null} Enviar equipe</Button>
               </form>
             </CardContent>
           </Card>}

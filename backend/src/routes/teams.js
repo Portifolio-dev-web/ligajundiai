@@ -5,15 +5,11 @@ import { AppError, notFound } from '../errors.js'
 import { authenticate, authorize } from '../security/auth.js'
 import { cleanText, parse } from '../security/validation.js'
 import { enqueueEmail, escapeHtml } from '../services/email.js'
+import { assertRegistrationOpen, categories } from '../services/registration.js'
 import { asyncRoute, audit, notify } from '../utils.js'
 
 export const teamsRouter = Router()
 export const adminTeamsRouter = Router()
-const categories = [
-  'Adulto Masculino', 'Adulto Feminino', 'Master Masculino',
-  'Master Feminino', 'Sub-19 Masculino', 'Sub-19 Feminino',
-]
-
 teamsRouter.use(authenticate, authorize('gestor'))
 
 teamsRouter.post('/', asyncRoute(async (req, res) => {
@@ -22,6 +18,7 @@ teamsRouter.post('/', asyncRoute(async (req, res) => {
     category: z.enum(categories),
   }).strict(), req.body)
   const team = await transaction(async (client) => {
+    await assertRegistrationOpen(input.category, 'team', client)
     const userTeam = await client.query(
       'SELECT id FROM teams WHERE manager_user_id = $1 AND deleted_at IS NULL',
       [req.user.id],

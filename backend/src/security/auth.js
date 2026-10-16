@@ -59,6 +59,14 @@ export async function authenticate(req, _res, next) {
   }
 }
 
+export function authenticateIfPresent(req, res, next) {
+  if (!req.cookies?.[sessionCookieName]) {
+    req.user = null
+    return next()
+  }
+  return authenticate(req, res, next)
+}
+
 export function authorize(...roles) {
   return (req, _res, next) => {
     if (!req.user) return next(unauthorized())

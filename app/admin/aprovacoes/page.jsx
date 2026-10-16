@@ -77,7 +77,10 @@ export default function AdminAprovacoesPage() {
     <main className="mx-auto min-h-screen max-w-6xl space-y-6 px-4 py-10">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Button asChild variant="ghost"><Link href="/"><ArrowLeft className="h-4 w-4" /> Página inicial</Link></Button>
-        <Button asChild variant="outline"><Link href="/admin/agenda">Criar datas disponíveis</Link></Button>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline"><Link href="/admin/inscricoes">Períodos de inscrição</Link></Button>
+          <Button asChild variant="outline"><Link href="/admin/agenda">Criar datas disponíveis</Link></Button>
+        </div>
       </div>
       <Card>
         <CardHeader><CardTitle>Aprovações pendentes</CardTitle><CardDescription>Analise as equipes cadastradas e os atletas já aprovados pelos gestores.</CardDescription></CardHeader>

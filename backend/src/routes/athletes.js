@@ -8,6 +8,7 @@ import { cpfDigest, encryptSensitive, maskCpf } from '../security/crypto.js'
 import { cleanText, emailSchema, parse, requireValidCpf, validatePositions, uuidSchema } from '../security/validation.js'
 import { enqueueEmail, escapeHtml } from '../services/email.js'
 import { createBiometryUpload } from '../services/storage.js'
+import { assertRegistrationOpen } from '../services/registration.js'
 import { asyncRoute, audit, notify, toPublicAthlete, userTeam } from '../utils.js'
 import { authRateLimit } from '../security/rate-limit.js'
 
@@ -22,6 +23,7 @@ function positionsFrom(input) {
 }
 
 async function createAthlete(client, { userId, managerId, team, input, actor }) {
+  await assertRegistrationOpen(team.category, 'athlete', client)
   if (!input.consent) throw new AppError(400, 'CONSENT_REQUIRED', 'É necessário registrar o consentimento explícito')
   const cpf = requireValidCpf(input.cpf)
   const positions = positionsFrom(input)
@@ -81,6 +83,11 @@ async function createAthlete(client, { userId, managerId, team, input, actor }) 
 
 athletesRouter.post('/biometry-upload', authenticate, authorize('gestor'), asyncRoute(async (req, res) => {
   const input = parse(z.object({ content_type: z.enum(['image/jpeg', 'image/png', 'image/webp']) }).strict(), req.body)
+  const team = await userTeam(req.user.id)
+  if (!team || team.status !== 'approved') {
+    throw new AppError(403, 'TEAM_NOT_APPROVED', 'A equipe precisa ser aprovada antes do cadastro de atletas')
+  }
+  await assertRegistrationOpen(team.category, 'athlete')
   const upload = await createBiometryUpload(req.user.id, input.content_type)
   if (!upload) throw new AppError(400, 'INVALID_CONTENT_TYPE', 'Formato de imagem não suportado')
   res.status(201).json(upload)
@@ -92,12 +99,13 @@ athletesRouter.post('/biometry-upload-public', authRateLimit, asyncRoute(async (
     content_type: z.enum(['image/jpeg', 'image/png', 'image/webp']),
   }).strict(), req.body)
   const selected = await query(
-    `SELECT manager_user_id FROM teams
+    `SELECT manager_user_id, category FROM teams
      WHERE id = $1 AND status = 'approved' AND deleted_at IS NULL`,
     [input.team_id],
   )
   const team = selected.rows[0]
   if (!team) throw new AppError(400, 'TEAM_NOT_AVAILABLE', 'Selecione uma equipe aprovada')
+  await assertRegistrationOpen(team.category, 'athlete')
   const upload = await createBiometryUpload(team.manager_user_id, input.content_type)
   if (!upload) throw new AppError(400, 'INVALID_CONTENT_TYPE', 'Formato de imagem não suportado')
   res.status(201).json(upload)
@@ -147,6 +155,7 @@ athletesRouter.post('/self-register', authRateLimit, asyncRoute(async (req, res)
   )
   const team = selected.rows[0]
   if (!team) throw new AppError(400, 'TEAM_NOT_AVAILABLE', 'Selecione uma equipe aprovada')
+  await assertRegistrationOpen(team.category, 'athlete')
   const keyPrefix = `biometry/${team.manager_user_id}/`
   if (!input.biometry_key.startsWith(keyPrefix)) {
     throw new AppError(400, 'INVALID_BIOMETRY_KEY', 'A chave da foto não pertence à equipe selecionada')
@@ -170,6 +179,7 @@ athletesRouter.post('/self-register', authRateLimit, asyncRoute(async (req, res)
       ],
     )
     const user = createdUser.rows[0]
+    await assertRegistrationOpen(team.category, 'athlete', client)
     const athlete = await createAthlete(client, {
       userId: user.id,
       managerId: team.manager_user_id,

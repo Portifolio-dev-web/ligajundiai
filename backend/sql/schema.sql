@@ -74,6 +74,19 @@ CREATE UNIQUE INDEX IF NOT EXISTS teams_manager_active_uq
   ON teams (manager_user_id) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS teams_status_created_idx ON teams (status, created_at DESC) WHERE deleted_at IS NULL;
 
+CREATE TABLE IF NOT EXISTS registration_periods (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  category text NOT NULL,
+  registration_type text NOT NULL CHECK (registration_type IN ('team', 'athlete')),
+  starts_at timestamptz NOT NULL,
+  ends_at timestamptz NOT NULL,
+  created_by uuid NOT NULL REFERENCES users(id),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT registration_periods_valid_window CHECK (ends_at > starts_at),
+  CONSTRAINT registration_periods_category_type_uq UNIQUE (category, registration_type)
+);
+
 CREATE OR REPLACE FUNCTION enforce_team_manager_role() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   IF NOT EXISTS (

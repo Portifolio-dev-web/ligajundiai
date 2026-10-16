@@ -75,11 +75,12 @@ function App() {
   const [categories, setCategories] = useState(CATEGORY_FALLBACK)
   const [loginOpen, setLoginOpen] = useState(false)
   const [booting, setBooting] = useState(true)
+  const currentYear = new Date().getFullYear()
 
   const loadMe = useCallback(async () => {
     try {
       const { user, team } = await api('/auth/me')
-      setToken('cookie-session')
+      setToken(user ? 'cookie-session' : null)
       setUser(user)
       setMyTeam(team)
     } catch {
@@ -134,7 +135,7 @@ function App() {
       ) : user?.role === 'gestor' ? (
         <GestorPanel token={token} categories={categories} user={user} myTeam={myTeam} refreshMe={() => loadMe(token)} />
       ) : (
-        <PublicSite categories={categories} onLoginClick={() => setLoginOpen(true)} />
+        <PublicSite categories={categories} currentYear={currentYear} onLoginClick={() => setLoginOpen(true)} />
       )}
       <Footer />
       <LoginDialog open={loginOpen} onOpenChange={setLoginOpen} onAuthed={onAuthed} />
@@ -173,7 +174,10 @@ function TopNav({ user, token, onLoginClick, onLogout }) {
               </Badge>
               <span className="hidden sm:block text-sm text-slate-200">{user.name}</span>
               {user.role === 'admin' ? (
-                <a href="/admin/aprovacoes" className="hidden text-sm text-white underline sm:inline">Aprovações</a>
+                <>
+                  <a href="/admin/aprovacoes" className="hidden text-sm text-white underline sm:inline">Aprovações</a>
+                  <a href="/admin/inscricoes" className="text-xs text-white underline">Períodos</a>
+                </>
               ) : (
                 <>
                   <a href="/gestor" className="hidden text-sm text-white underline sm:inline">Minha equipe</a>
@@ -205,7 +209,7 @@ function TopNav({ user, token, onLoginClick, onLogout }) {
 // ============================================================================
 // PUBLIC SITE
 // ============================================================================
-function PublicSite({ categories, onLoginClick }) {
+function PublicSite({ categories, currentYear, onLoginClick }) {
   const [category, setCategory] = useState(categories[0])
   const [standings, setStandings] = useState([])
   const [matches, setMatches] = useState([])
@@ -236,7 +240,7 @@ function PublicSite({ categories, onLoginClick }) {
         />
         <div className="container relative py-20 md:py-28 text-white">
           <Badge className="mb-4 border-0 text-white" style={{ background: ORANGE }}>
-            Temporada 2025
+            Temporada {currentYear}
           </Badge>
           <h1 className="max-w-2xl text-4xl md:text-6xl font-extrabold leading-tight">
             A casa do vôlei em <span style={{ color: ORANGE }}>Jundiaí</span>
@@ -248,7 +252,7 @@ function PublicSite({ categories, onLoginClick }) {
             <Button size="lg" onClick={onLoginClick} className="text-white border-0" style={{ background: ORANGE }}>
               Inscrever minha equipe
             </Button>
-            <Button size="lg" variant="outline" asChild>
+            <Button size="lg" onClick={onLoginClick} className="text-white border-0" style={{ background: ORANGE }}>
               <a href="/cadastro-atleta">Cadastrar atleta</a>
             </Button>
             <Button
@@ -556,20 +560,25 @@ function LoginDialog({ open, onOpenChange, onAuthed }) {
           <DialogTitle className="flex items-center gap-2">
             <Volleyball className="h-5 w-5" style={{ color: PURPLE }} /> Acesso LVJ
           </DialogTitle>
-          <DialogDescription>Entre com senha e autenticação em dois fatores para administradores.</DialogDescription>
+          <DialogDescription>
+            Gestores podem entrar ou criar uma conta para inscrever a equipe. Atletas devem usar o cadastro público, disponível após a aprovação da equipe.
+          </DialogDescription>
+          <a href="/cadastro-atleta" className="text-sm font-medium text-primary underline underline-offset-4">
+            Sou atleta: cadastrar minha conta
+          </a>
         </DialogHeader>
 
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="otp">Código</TabsTrigger>
             <TabsTrigger value="senha">Senha</TabsTrigger>
-            <TabsTrigger value="cadastro">Cadastrar</TabsTrigger>
+            <TabsTrigger value="cadastro">Cadastrar gestor</TabsTrigger>
           </TabsList>
 
           <TabsContent value="otp" className="space-y-3 pt-2">
             <div>
-              <Label>E-mail</Label>
-              <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="voce@email.com" />
+              <Label htmlFor="login-otp-email">E-mail</Label>
+              <Input id="login-otp-email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="voce@email.com" />
             </div>
             {!otpSent ? (
               <Button className="w-full text-white border-0" style={{ background: PURPLE }} onClick={requestOtp} disabled={loading || !email}>
@@ -579,8 +588,8 @@ function LoginDialog({ open, onOpenChange, onAuthed }) {
               <>
                 <p className="text-xs text-slate-500">Consulte sua caixa de e-mail para obter o código.</p>
                 <div>
-                  <Label>Código de 6 dígitos</Label>
-                  <Input value={code} onChange={(e) => setCode(e.target.value)} placeholder="000000" maxLength={6} />
+                  <Label htmlFor="login-otp-code">Código de 6 dígitos</Label>
+                  <Input id="login-otp-code" inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value)} placeholder="000000" maxLength={6} />
                 </div>
                 <Button className="w-full text-white border-0" style={{ background: ORANGE }} onClick={verifyOtp} disabled={loading}>
                   Entrar
@@ -591,17 +600,17 @@ function LoginDialog({ open, onOpenChange, onAuthed }) {
 
           <TabsContent value="senha" className="space-y-3 pt-2">
             <div>
-              <Label>E-mail</Label>
-              <Input type="email" value={pwEmail} onChange={(e) => setPwEmail(e.target.value)} />
+              <Label htmlFor="login-password-email">E-mail</Label>
+              <Input id="login-password-email" type="email" autoComplete="email" value={pwEmail} onChange={(e) => setPwEmail(e.target.value)} />
             </div>
             <div>
-              <Label>Senha</Label>
-              <Input type="password" value={pw} onChange={(e) => setPw(e.target.value)} />
+              <Label htmlFor="login-password">Senha</Label>
+              <Input id="login-password" type="password" autoComplete="current-password" value={pw} onChange={(e) => setPw(e.target.value)} />
             </div>
             {(requiresTotp || pwTotp) && (
               <div>
-                <Label>Código 2FA do administrador</Label>
-                <Input inputMode="numeric" maxLength={6} value={pwTotp} onChange={(e) => setPwTotp(e.target.value.replace(/\D/g, ''))} placeholder="000000" />
+                <Label htmlFor="login-password-totp">Código 2FA do administrador</Label>
+                <Input id="login-password-totp" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={pwTotp} onChange={(e) => setPwTotp(e.target.value.replace(/\D/g, ''))} placeholder="000000" />
               </div>
             )}
             <Button className="w-full text-white border-0" style={{ background: PURPLE }} onClick={loginPw} disabled={loading}>
@@ -611,29 +620,29 @@ function LoginDialog({ open, onOpenChange, onAuthed }) {
 
           <TabsContent value="cadastro" className="space-y-3 pt-2">
             <div>
-              <Label>Nome</Label>
-              <Input value={reg.name} onChange={(e) => setReg({ ...reg, name: e.target.value })} />
+              <Label htmlFor="manager-register-name">Nome</Label>
+              <Input id="manager-register-name" autoComplete="name" value={reg.name} onChange={(e) => setReg({ ...reg, name: e.target.value })} />
             </div>
             <div>
-              <Label>E-mail (login)</Label>
-              <Input type="email" value={reg.email} onChange={(e) => setReg({ ...reg, email: e.target.value })} />
+              <Label htmlFor="manager-register-email">E-mail (login)</Label>
+              <Input id="manager-register-email" type="email" autoComplete="email" value={reg.email} onChange={(e) => setReg({ ...reg, email: e.target.value })} />
             </div>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <div>
-                <Label>Celular</Label>
-                <Input value={reg.phone} onChange={(e) => setReg({ ...reg, phone: e.target.value })} placeholder="(11) 90000-0000" />
+                <Label htmlFor="manager-register-phone">Celular</Label>
+                <Input id="manager-register-phone" type="tel" autoComplete="tel" value={reg.phone} onChange={(e) => setReg({ ...reg, phone: e.target.value })} placeholder="(11) 90000-0000" />
               </div>
               <div>
-                <Label>CPF</Label>
-                <Input value={reg.cpf} onChange={(e) => setReg({ ...reg, cpf: e.target.value })} />
+                <Label htmlFor="manager-register-cpf">CPF</Label>
+                <Input id="manager-register-cpf" inputMode="numeric" autoComplete="off" value={reg.cpf} onChange={(e) => setReg({ ...reg, cpf: e.target.value })} />
               </div>
             </div>
             <div>
-              <Label>Senha (mínimo de 12 caracteres)</Label>
-              <Input type="password" value={reg.password} onChange={(e) => setReg({ ...reg, password: e.target.value })} />
+              <Label htmlFor="manager-register-password">Senha (mínimo de 12 caracteres)</Label>
+              <Input id="manager-register-password" type="password" autoComplete="new-password" minLength={12} value={reg.password} onChange={(e) => setReg({ ...reg, password: e.target.value })} />
             </div>
             <label className="flex items-start gap-2 text-sm text-slate-600">
-              <input type="checkbox" checked={reg.consent} onChange={(e) => setReg({ ...reg, consent: e.target.checked })} />
+              <input id="manager-register-consent" type="checkbox" checked={reg.consent} onChange={(e) => setReg({ ...reg, consent: e.target.checked })} />
               <span>Consinto com o tratamento dos meus dados para gestão da liga, conforme a política de privacidade.</span>
             </label>
             <Button className="w-full text-white border-0" style={{ background: ORANGE }} onClick={doRegister} disabled={loading || !reg.name || !reg.email || reg.password.length < 12 || !reg.consent}>
@@ -1372,10 +1381,25 @@ function AdminEmails({ token }) {
 function GestorPanel({ token, categories, user, myTeam, refreshMe }) {
   const [team, setTeam] = useState(myTeam)
   const [teamForm, setTeamForm] = useState({ name: '', category: categories[0] })
+  const [registrationPeriods, setRegistrationPeriods] = useState([])
 
   useEffect(() => setTeam(myTeam), [myTeam])
+  useEffect(() => {
+    api('/registration-periods')
+      .then((result) => setRegistrationPeriods(result.periods || []))
+      .catch(() => {})
+  }, [])
+
+  const teamPeriod = registrationPeriods.find((period) => (
+    period.category === teamForm.category && period.registration_type === 'team'
+  ))
+  const teamRegistrationOpen = teamPeriod?.status === 'open'
 
   const createTeam = async () => {
+    if (!teamRegistrationOpen) {
+      toast.error(teamPeriod?.message || 'Inscrições encerradas, te aguardamos na próxima temporada.')
+      return
+    }
     try {
       const d = await api('/teams', { method: 'POST', token, body: teamForm })
       setTeam(d.team)
@@ -1397,7 +1421,7 @@ function GestorPanel({ token, categories, user, myTeam, refreshMe }) {
         <Card className="max-w-lg">
           <CardHeader>
             <CardTitle>Inscrever equipe</CardTitle>
-            <CardDescription>Cadastre sua equipe. Após aprovação do Admin, você poderá cadastrar atletas.</CardDescription>
+            <CardDescription>As inscrições de equipes acontecem no período definido pelo administrador para cada categoria.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <div>
@@ -1411,7 +1435,14 @@ function GestorPanel({ token, categories, user, myTeam, refreshMe }) {
                 <SelectContent>{categories.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            <Button className="text-white border-0" style={{ background: ORANGE }} onClick={createTeam} disabled={!teamForm.name}>
+            {teamRegistrationOpen
+              ? <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800 sm:col-span-2">
+                Inscrições abertas até {new Date(teamPeriod.ends_at).toLocaleString('pt-BR')}.
+              </div>
+              : <div role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 sm:col-span-2">
+                {teamPeriod?.message || 'Inscrições encerradas, te aguardamos na próxima temporada.'}
+              </div>}
+            <Button className="text-white border-0" style={{ background: ORANGE }} onClick={createTeam} disabled={!teamForm.name || !teamRegistrationOpen}>
               Solicitar inscrição
             </Button>
           </CardContent>
@@ -1451,6 +1482,8 @@ function GestorPanel({ token, categories, user, myTeam, refreshMe }) {
 
 function GestorRoster({ token, team }) {
   const [athletes, setAthletes] = useState([])
+  const [athletePeriod, setAthletePeriod] = useState(null)
+  const [loadingAthletePeriod, setLoadingAthletePeriod] = useState(true)
   const [form, setForm] = useState({ name: '', cpf: '', position: '', birthdate: '', email: '', photo: null, consent: false })
   const [rejectId, setRejectId] = useState(null)
   const [justification, setJustification] = useState('')
@@ -1459,6 +1492,16 @@ function GestorRoster({ token, team }) {
     api('/athletes/mine', { token }).then((d) => setAthletes(d.athletes || [])).catch(() => {})
   }, [token])
   useEffect(load, [load])
+  useEffect(() => {
+    api('/registration-periods')
+      .then((result) => {
+        setAthletePeriod(result.periods?.find((period) => (
+          period.category === team.category && period.registration_type === 'athlete'
+        )) ?? null)
+      })
+      .catch(() => {})
+      .finally(() => setLoadingAthletePeriod(false))
+  }, [team.category])
 
   const add = async () => {
     try {
@@ -1516,7 +1559,9 @@ function GestorRoster({ token, team }) {
         <CardDescription>Os cadastros passam primeiro pela aprovação do gestor e depois pela aprovação final do administrador.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {team.status === 'approved' ? (
+        {team.status === 'approved' && loadingAthletePeriod ? (
+          <div role="status" className="rounded-lg border p-3 text-sm text-slate-600">Verificando o período de cadastro de atletas…</div>
+        ) : team.status === 'approved' && athletePeriod?.status === 'open' ? (
           <div className="grid gap-3 md:grid-cols-3 items-end rounded-lg border p-4 bg-slate-50">
             <div>
               <Label className="text-xs">Nome do atleta</Label>
@@ -1553,9 +1598,13 @@ function GestorRoster({ token, team }) {
               <UserPlus className="h-4 w-4 mr-1" /> Adicionar
             </Button>
           </div>
-        ) : (
+        ) : team.status !== 'approved' ? (
           <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800">
             Sua equipe precisa ser aprovada pelo Admin antes de cadastrar atletas.
+          </div>
+        ) : (
+          <div role="status" className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-900">
+            {athletePeriod?.message || 'Obrigado pelo interesse em participar, Cadastro encerrado.'}
           </div>
         )}
 
@@ -1719,7 +1768,7 @@ function Footer() {
               </div>
               <span className="font-extrabold">Liga de Voleibol Jundiaí</span>
             </div>
-            <p className="text-sm text-slate-400">O ponto de encontro do vôlei jundiaiense. Temporada 2025.</p>
+            <p className="text-sm text-slate-400">O ponto de encontro do vôlei jundiaiense. Temporada {new Date().getFullYear()}.</p>
           </div>
           <div>
             <h4 className="text-white font-semibold mb-3">Patrocínio</h4>
@@ -1735,7 +1784,7 @@ function Footer() {
           </div>
         </div>
         <div className="mt-8 border-t border-slate-700 pt-4 text-xs text-slate-500 text-center">
-          © 2025 Liga de Voleibol Jundiaí. Todos os direitos reservados.
+          © {new Date().getFullYear()} Liga de Voleibol Jundiaí. Todos os direitos reservados.
         </div>
       </div>
     </footer>

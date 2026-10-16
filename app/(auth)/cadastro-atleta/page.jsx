@@ -19,6 +19,7 @@ const steps = ['Conta e atleta', 'Equipe e biometria', 'Consentimento']
 export default function CadastroAtletaPage() {
   const [step, setStep] = useState(0)
   const [teams, setTeams] = useState([])
+  const [registrationPeriods, setRegistrationPeriods] = useState([])
   const [selectedTeamId, setSelectedTeamId] = useState('')
   const [loadingTeams, setLoadingTeams] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -29,8 +30,14 @@ export default function CadastroAtletaPage() {
 
   useEffect(() => {
     const controller = new AbortController()
-    api('/approved-teams', { signal: controller.signal })
-      .then((result) => setTeams(result.teams))
+    Promise.all([
+      api('/approved-teams', { signal: controller.signal }),
+      api('/registration-periods', { signal: controller.signal }),
+    ])
+      .then(([teamResult, periodResult]) => {
+        setTeams(teamResult.teams)
+        setRegistrationPeriods(periodResult.periods || [])
+      })
       .catch((requestError) => {
         if (requestError.name !== 'AbortError') setError(requestError.message)
       })
@@ -40,6 +47,12 @@ export default function CadastroAtletaPage() {
 
   const validCpf = useMemo(() => isValidCpf(form.cpf), [form.cpf])
   const approvedTeam = teams.find((item) => item.id === selectedTeamId) ?? null
+  const openAthletePeriods = registrationPeriods.filter((period) => (
+    period.registration_type === 'athlete' && period.status === 'open'
+  ))
+  const upcomingAthletePeriods = registrationPeriods.filter((period) => (
+    period.registration_type === 'athlete' && period.status === 'scheduled'
+  ))
 
   const togglePosition = (position, checked) => {
     setForm((current) => ({
@@ -120,22 +133,70 @@ export default function CadastroAtletaPage() {
     <main className="mx-auto min-h-screen max-w-3xl px-4 py-10">
       <div className="mb-6 flex items-center justify-between gap-3">
         <Button variant="ghost" asChild><Link href="/"><ArrowLeft className="h-4 w-4" /> Página inicial</Link></Button>
-        <span className="text-sm text-muted-foreground">Etapa {step + 1} de {steps.length}</span>
+        {!loadingTeams && teams.length > 0 && <span className="text-sm text-muted-foreground">Etapa {step + 1} de {steps.length}</span>}
       </div>
       <Card>
         <CardHeader>
           <CardTitle>Cadastro de atleta</CardTitle>
-          <CardDescription>Preencha os dados em etapas. CPF e imagem são tratados com segurança.</CardDescription>
-          <div className="flex flex-wrap gap-2 pt-2" aria-label="Etapas do formulário">
+          <CardDescription>
+            {loadingTeams
+              ? 'Verificando as equipes aprovadas para o cadastro.'
+              : error && teams.length === 0
+                ? 'Não foi possível carregar as equipes neste momento.'
+                : teams.length === 0
+                ? openAthletePeriods.length
+                  ? 'O cadastro só começa quando uma equipe da categoria estiver aprovada.'
+                  : upcomingAthletePeriods.length
+                    ? 'As inscrições de atletas ainda não começaram.'
+                    : 'O período de cadastro de atletas está encerrado.'
+                  : 'Preencha os dados em etapas. CPF e imagem são tratados com segurança.'}
+          </CardDescription>
+          {teams.length > 0 && <div className="flex flex-wrap gap-2 pt-2" aria-label="Etapas do formulário">
             {steps.map((title, index) => (
               <span key={title} className={`rounded-full px-3 py-1 text-xs ${index === step ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
                 {index + 1}. {title}
               </span>
             ))}
-          </div>
+          </div>}
         </CardHeader>
         <CardContent>
-          <form onSubmit={submit} className="space-y-6">
+          {loadingTeams
+            ? <div role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="h-4 w-4 animate-spin" /> Carregando equipes aprovadas…</div>
+            : teams.length === 0
+              ? error
+                ? <div className="space-y-4">
+                  <Alert variant="destructive"><AlertTitle>Não foi possível verificar as equipes</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>
+                  <Button type="button" variant="outline" onClick={() => window.location.reload()}>Tentar novamente</Button>
+                </div>
+                : <div className="space-y-4">
+                  <Alert>
+                      {openAthletePeriods.length
+                        ? <>
+                          <AlertTitle>Nenhuma equipe disponível</AlertTitle>
+                          <AlertDescription>Há inscrições de atletas abertas, mas nenhuma equipe aprovada está disponível para essas categorias. Peça ao gestor para inscrever a equipe e aguarde a aprovação do administrador.</AlertDescription>
+                        </>
+                        : upcomingAthletePeriods.length
+                          ? <>
+                            <AlertTitle>Inscrições ainda não iniciaram</AlertTitle>
+                            <AlertDescription>
+                              {upcomingAthletePeriods.map((period) => (
+                                <span key={period.category} className="block">
+                                  {period.category}: início em {new Date(period.starts_at).toLocaleString('pt-BR')}.
+                                </span>
+                              ))}
+                            </AlertDescription>
+                          </>
+                          : <>
+                            <AlertTitle>Cadastro encerrado</AlertTitle>
+                            <AlertDescription>Obrigado pelo interesse em participar, Cadastro encerrado.</AlertDescription>
+                          </>}
+                    </Alert>
+                    <div className="flex flex-wrap gap-2">
+                      {openAthletePeriods.length > 0 && <Button variant="outline" asChild><Link href="/">Ver opções de acesso</Link></Button>}
+                      <Button type="button" variant="outline" onClick={() => window.location.reload()}>Verificar novamente</Button>
+                    </div>
+                  </div>
+              : <form onSubmit={submit} className="space-y-6">
             {error && <Alert variant="destructive"><AlertTitle>Não foi possível continuar</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}
 
             {step === 0 && <div className="space-y-4">
@@ -178,20 +239,16 @@ export default function CadastroAtletaPage() {
             </div>}
 
             {step === 1 && <div className="space-y-5">
-              {loadingTeams
-                ? <div className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="h-4 w-4 animate-spin" /> Carregando equipes aprovadas…</div>
-                : teams.length
-                  ? <div className="space-y-2">
-                    <Label htmlFor="athlete-team">Equipe aprovada</Label>
-                    <Select value={selectedTeamId} onValueChange={(teamId) => { setSelectedTeamId(teamId); setBiometryKey('') }}>
-                      <SelectTrigger id="athlete-team"><SelectValue placeholder="Selecione sua equipe" /></SelectTrigger>
-                      <SelectContent>
-                        {teams.map((item) => <SelectItem key={item.id} value={item.id}>{item.name} — {item.category}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground">Somente equipes aprovadas pelo administrador aparecem para cadastro.</p>
-                  </div>
-                  : <Alert variant="destructive"><AlertTitle>Nenhuma equipe disponível</AlertTitle><AlertDescription>O cadastro de atletas será liberado quando um gestor inscrever uma equipe e ela for aprovada pelo administrador.</AlertDescription></Alert>}
+              <div className="space-y-2">
+                <Label htmlFor="athlete-team">Equipe aprovada</Label>
+                <Select value={selectedTeamId} onValueChange={(teamId) => { setSelectedTeamId(teamId); setBiometryKey('') }}>
+                  <SelectTrigger id="athlete-team"><SelectValue placeholder="Selecione sua equipe" /></SelectTrigger>
+                  <SelectContent>
+                    {teams.map((item) => <SelectItem key={item.id} value={item.id}>{item.name} — {item.category}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">Somente equipes aprovadas pelo administrador aparecem para cadastro.</p>
+              </div>
               <CameraCapture key={selectedTeamId} teamId={approvedTeam?.id} onUploaded={setBiometryKey} disabled={!approvedTeam} publicRegistration />
             </div>}
 
@@ -224,7 +281,7 @@ export default function CadastroAtletaPage() {
                   {submitting ? 'Enviando cadastro…' : 'Concluir cadastro'}
                 </Button>}
             </div>
-          </form>
+          </form>}
         </CardContent>
       </Card>
     </main>

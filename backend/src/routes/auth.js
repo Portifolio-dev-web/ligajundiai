@@ -6,7 +6,7 @@ import { z } from 'zod'
 import { config } from '../config.js'
 import { query, transaction } from '../db/pool.js'
 import { AppError, unauthorized } from '../errors.js'
-import { createSession, authenticate, hashPassword, requireTotp, revokeSession, verifyUserPassword } from '../security/auth.js'
+import { createSession, authenticate, authenticateIfPresent, hashPassword, requireTotp, revokeSession, verifyUserPassword } from '../security/auth.js'
 import { cpfDigest, encryptSensitive, decryptSensitive, safeEqual } from '../security/crypto.js'
 import { emailSchema, parse, requireValidCpf, cleanText } from '../security/validation.js'
 import { enqueueEmail, escapeHtml } from '../services/email.js'
@@ -146,7 +146,8 @@ authRouter.post('/otp/verify', asyncRoute(async (req, res) => {
   res.json({ user: { id: row.id, role: row.role, name: row.name, email: row.email } })
 }))
 
-authRouter.get('/me', authenticate, asyncRoute(async (req, res) => {
+authRouter.get('/me', authenticateIfPresent, asyncRoute(async (req, res) => {
+  if (!req.user) return res.json({ user: null, team: null })
   let team = null
   if (req.user.role === 'gestor') {
     const result = await query(
