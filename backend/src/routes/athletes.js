@@ -216,8 +216,12 @@ athletesRouter.get('/me', authenticate, authorize('atleta'), asyncRoute(async (r
   res.json({ athletes: result.rows })
 }))
 
-athletesRouter.get('/cpf/:cpf', authenticate, authorize('admin', 'gestor'), asyncRoute(async (req, res) => {
-  const cpf = requireValidCpf(req.params.cpf)
+// SEGURANÇA (varredura, item S3): antes era GET /cpf/:cpf — o CPF ia na própria URL e por isso
+// ficava em log de proxy/servidor e no histórico do navegador, mesmo autenticado. Virou POST com o
+// CPF no corpo da requisição, igual ao resto da API já fazia para outros dados sensíveis.
+athletesRouter.post('/cpf-lookup', authenticate, authorize('admin', 'gestor'), asyncRoute(async (req, res) => {
+  const input = parse(z.object({ cpf: z.string().min(1).max(20) }).strict(), req.body)
+  const cpf = requireValidCpf(input.cpf)
   const result = await query(
     `SELECT a.id, a.team_id, a.name, a.status, a.created_at,
        t.name AS team_name, t.category

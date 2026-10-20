@@ -22,12 +22,15 @@ const nextConfig = {
     pagesBufferLength: 2,
   },
   async headers() {
+    // SEGURANÇA (varredura, item S4): o Content-Security-Policy real (com nonce por requisição,
+    // script-src, connect-src etc.) agora é gerado no middleware.js, que roda por requisição —
+    // aqui só fica o X-Frame-Options como reforço estático para navegadores sem suporte a CSP
+    // (e para as rotas que o matcher do middleware deliberadamente não cobre, como /api).
     return [
       {
         source: "/(.*)",
         headers: [
           { key: "X-Frame-Options", value: "DENY" },
-          { key: "Content-Security-Policy", value: "frame-ancestors 'none';" },
         ],
       },
     ];

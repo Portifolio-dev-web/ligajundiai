@@ -38,6 +38,10 @@ services:
       NODE_OPTIONS: --max-old-space-size=512
       API_INTERNAL_URL: http://api:4000
       JWT_SECRET: local-development-only-replace-before-deployment-2026
+      # SEGURANÇA (varredura, item S4): precisa ser a mesma origem de S3_PUBLIC_ENDPOINT do
+      # serviço "api" abaixo — é para onde o navegador envia a foto biométrica direto, e o CSP
+      # (middleware.js) só libera essa origem específica em connect-src.
+      STORAGE_PUBLIC_ORIGIN: http://localhost:9000
     volumes:
       - .:/app
       - app_node_modules:/app/node_modules
