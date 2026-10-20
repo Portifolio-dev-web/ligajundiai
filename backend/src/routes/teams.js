@@ -93,7 +93,10 @@ adminTeamsRouter.post('/:teamId/:action', asyncRoute(async (req, res) => {
       html: `<p>Olá ${escapeHtml(current.manager_name)},</p><p>${escapeHtml(message)}</p>`,
       eventId: `team:${current.id}:${req.params.action}`,
     })
-    await audit(client, req.user, `team.${req.params.action}`, 'team', current.id, { justification })
+    // LGPD (varredura, item L3): a trilha de auditoria não guarda o texto do motivo — ele já está
+    // em teams.justification, visível só para quem já pode ver aquela equipe. audit_logs é lido em
+    // bloco por qualquer admin (GET /admin/logs), então só registra SE um motivo foi dado, não qual.
+    await audit(client, req.user, `team.${req.params.action}`, 'team', current.id, { has_justification: Boolean(justification) })
     return { ...result.rows[0], manager_name: current.manager_name, manager_email: current.manager_email }
   })
   res.json({ team, email_sent_mock: false })

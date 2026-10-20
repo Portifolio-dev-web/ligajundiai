@@ -56,6 +56,7 @@ import {
   Plus,
 } from 'lucide-react'
 import { api, CATEGORY_FALLBACK } from '@/lib/lvjApi'
+import { getAge, isValidCpf } from '@/lib/athlete'
 
 const PURPLE = '#6D28D9'
 const ORANGE = '#F97316'
@@ -131,13 +132,17 @@ function App() {
         onLoginClick={() => setLoginOpen(true)}
         onLogout={logout}
       />
-      {user?.role === 'admin' ? (
-        <AdminPanel token={token} categories={categories} />
-      ) : user?.role === 'gestor' ? (
-        <GestorPanel token={token} categories={categories} user={user} myTeam={myTeam} refreshMe={() => loadMe(token)} />
-      ) : (
-        <PublicSite categories={categories} currentYear={currentYear} onLoginClick={() => setLoginOpen(true)} />
-      )}
+      {/* ACESSIBILIDADE (varredura, item A1): id="main-content" é o alvo do link "Pular para o
+          conteúdo" em app/layout.js — fica depois do TopNav, então o link realmente pula a navegação. */}
+      <main id="main-content">
+        {user?.role === 'admin' ? (
+          <AdminPanel token={token} categories={categories} />
+        ) : user?.role === 'gestor' ? (
+          <GestorPanel token={token} categories={categories} user={user} myTeam={myTeam} refreshMe={() => loadMe(token)} />
+        ) : (
+          <PublicSite categories={categories} currentYear={currentYear} onLoginClick={() => setLoginOpen(true)} />
+        )}
+      </main>
       <Footer />
       <LoginDialog open={loginOpen} onOpenChange={setLoginOpen} onAuthed={onAuthed} />
     </div>
@@ -1487,9 +1492,21 @@ function GestorRoster({ token, team }) {
   const [athletes, setAthletes] = useState([])
   const [athletePeriod, setAthletePeriod] = useState(null)
   const [loadingAthletePeriod, setLoadingAthletePeriod] = useState(true)
-  const [form, setForm] = useState({ name: '', cpf: '', position: '', birthdate: '', email: '', photo: null, consent: false })
+  // LGPD (varredura, item L2): guardianName/guardianCpf/guardianRelationship só são obrigatórios
+  // quando a data de nascimento informada indicar menor de 18 anos (ver isMinor abaixo). Sem data
+  // de nascimento aqui, não dá para saber a idade — mesma limitação já existente no backend.
+  const [form, setForm] = useState({
+    name: '', cpf: '', position: '', birthdate: '', email: '', photo: null, consent: false,
+    guardianName: '', guardianCpf: '', guardianRelationship: '',
+  })
   const [rejectId, setRejectId] = useState(null)
   const [justification, setJustification] = useState('')
+
+  // Mesmo corte de idade do backend (createAthlete, MINOR_AGE_LIMIT em backend/src/routes/athletes.js),
+  // calculado a partir da data de nascimento, para decidir se mostra os campos do responsável legal.
+  const athleteAge = getAge(form.birthdate)
+  const isMinor = athleteAge !== null && athleteAge < 18
+  const validGuardianCpf = isValidCpf(form.guardianCpf)
 
   const load = useCallback(() => {
     api('/athletes/mine', { token }).then((d) => setAthletes(d.athletes || [])).catch(() => {})
@@ -1533,10 +1550,20 @@ function GestorRoster({ token, team }) {
           email: form.email || undefined,
           consent: form.consent,
           ...(biometry_key ? { biometry_key } : {}),
+          // LGPD (varredura, item L2): só enviados quando isMinor; o backend rejeita o cadastro de
+          // um menor sem esses três campos (GUARDIAN_REQUIRED).
+          ...(isMinor ? {
+            guardian_name: form.guardianName.trim(),
+            guardian_cpf: form.guardianCpf,
+            guardian_relationship: form.guardianRelationship.trim(),
+          } : {}),
         },
       })
       toast.success('Atleta cadastrado e aguardando aprovação do gestor.')
-      setForm({ name: '', cpf: '', position: '', birthdate: '', email: '', photo: null, consent: false })
+      setForm({
+        name: '', cpf: '', position: '', birthdate: '', email: '', photo: null, consent: false,
+        guardianName: '', guardianCpf: '', guardianRelationship: '',
+      })
       load()
     } catch (e) {
       toast.error(e.message)
@@ -1586,6 +1613,12 @@ function GestorRoster({ token, team }) {
               </select>
             </div>
             <div>
+              {/* LGPD (varredura, item L2): precisa ser obrigatória — sem ela não dá para saber se
+                  o atleta é menor de idade, e o aviso do responsável legal abaixo nunca apareceria. */}
+              <Label className="text-xs">Data de nascimento</Label>
+              <Input type="date" value={form.birthdate} onChange={(e) => setForm({ ...form, birthdate: e.target.value })} required />
+            </div>
+            <div>
               <Label className="text-xs">E-mail do atleta (opcional)</Label>
               <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
             </div>
@@ -1593,13 +1626,39 @@ function GestorRoster({ token, team }) {
               <Label className="text-xs">Foto para biometria (máx. 5 MB)</Label>
               <Input type="file" accept="image/jpeg,image/png,image/webp" capture="user" onChange={(e) => setForm({ ...form, photo: e.target.files?.[0] || null })} />
             </div>
+            {/* LGPD (varredura, item L2): aparece só quando a data de nascimento indica menor de
+                18 anos — art. 14 da LGPD exige o consentimento do responsável legal, identificado. */}
+            {isMinor && <div className="md:col-span-2 space-y-3 rounded-md border border-amber-200 bg-amber-50 p-3">
+              <p className="text-xs text-amber-900">Atleta menor de idade: informe o responsável legal.</p>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div>
+                  <Label className="text-xs">Nome do responsável</Label>
+                  <Input value={form.guardianName} onChange={(e) => setForm({ ...form, guardianName: e.target.value })} />
+                </div>
+                <div>
+                  <Label className="text-xs">CPF do responsável</Label>
+                  <Input value={form.guardianCpf} onChange={(e) => setForm({ ...form, guardianCpf: e.target.value })} />
+                </div>
+                <div>
+                  <Label className="text-xs">Parentesco</Label>
+                  <Input placeholder="mãe, pai, tutor(a)…" value={form.guardianRelationship} onChange={(e) => setForm({ ...form, guardianRelationship: e.target.value })} />
+                </div>
+              </div>
+            </div>}
             {/* LGPD (varredura, item L1): este consentimento não linkava nenhum documento;
                 agora aponta para a política e os termos para o gestor poder mostrá-los ao atleta/responsável. */}
             <label className="flex items-start gap-2 text-xs text-slate-600 md:col-span-2">
               <input type="checkbox" checked={form.consent} onChange={(e) => setForm({ ...form, consent: e.target.checked })} />
               <span>Confirmo que obtive o consentimento do atleta (ou responsável legal) para tratar seus dados e a foto biométrica, conforme a <Link className="underline" href="/privacidade" target="_blank">Política de Privacidade</Link> e os <Link className="underline" href="/termos-de-uso" target="_blank">Termos de Uso</Link>.</span>
             </label>
-            <Button className="text-white border-0" style={{ background: PURPLE }} onClick={add} disabled={!form.name || !form.cpf || !form.position || !form.consent || (form.photo && form.photo.size > 5 * 1024 * 1024)}>
+            <Button
+              className="text-white border-0"
+              style={{ background: PURPLE }}
+              onClick={add}
+              disabled={!form.name || !form.cpf || !form.position || !form.birthdate || !form.consent ||
+                (form.photo && form.photo.size > 5 * 1024 * 1024) ||
+                (isMinor && (!form.guardianName.trim() || !validGuardianCpf || !form.guardianRelationship.trim()))}
+            >
               <UserPlus className="h-4 w-4 mr-1" /> Adicionar
             </Button>
           </div>

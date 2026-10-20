@@ -33,8 +33,14 @@ export async function userTeam(userId) {
 
 export function toPublicAthlete(row) {
   if (!row) return row
-  const { cpf_ciphertext, cpf_hash, ...safe } = row
-  return { ...safe, ...(cpf_ciphertext ? { cpf: maskCpf(decryptSensitive(cpf_ciphertext)) } : {}) }
+  // LGPD (varredura, item L2): o CPF do responsável legal (menores de idade) segue a mesma regra do
+  // CPF do próprio atleta — nunca sai em texto puro da API, só mascarado.
+  const { cpf_ciphertext, cpf_hash, guardian_cpf_ciphertext, ...safe } = row
+  return {
+    ...safe,
+    ...(cpf_ciphertext ? { cpf: maskCpf(decryptSensitive(cpf_ciphertext)) } : {}),
+    ...(guardian_cpf_ciphertext ? { guardian_cpf: maskCpf(decryptSensitive(guardian_cpf_ciphertext)) } : {}),
+  }
 }
 
 export function newEventKey(type, id) {

@@ -19,8 +19,12 @@ privacyRouter.get('/export', asyncRoute(async (req, res) => {
     [req.user.id],
   )
   const teams = await query('SELECT id, name, category, status, created_at FROM teams WHERE manager_user_id = $1 AND deleted_at IS NULL', [req.user.id])
+  // LGPD (varredura, item L2): a exportação inclui também os dados do responsável legal, quando
+  // houver (atleta menor de idade) — são dados pessoais ligados a este cadastro, então entram no
+  // mesmo pedido de acesso do titular, igual recomenda a referência de LGPD do time de segurança.
   const athletes = await query(
-    `SELECT id, team_id, name, birthdate, positions, status, biometry_status, created_at
+    `SELECT id, team_id, name, birthdate, positions, status, biometry_status, created_at,
+       guardian_name, guardian_relationship
      FROM athletes WHERE (user_id = $1 OR manager_user_id = $1) AND deleted_at IS NULL`,
     [req.user.id],
   )
@@ -42,10 +46,16 @@ privacyRouter.delete('/me', asyncRoute(async (req, res) => {
       [req.user.id],
     )
     const now = new Date()
+    // LGPD (varredura, item L2): a referência de LGPD do time de segurança descreve um achado real
+    // em outro sistema — a anonimização apagava o titular e deixava nome/CPF do responsável para
+    // trás. Por isso guardian_name/guardian_cpf_ciphertext/guardian_relationship entram aqui junto
+    // com os outros campos identificáveis do atleta.
     await client.query(
       `UPDATE athletes SET name = 'Atleta anonimizado', cpf_ciphertext = NULL, cpf_hash = NULL,
          birthdate = NULL, age_at_registration = NULL, positions = '{}', biometry_url = NULL,
-         biometry_object_key = NULL, control_id_reference = NULL, deleted_at = $2, updated_at = $2
+         biometry_object_key = NULL, control_id_reference = NULL,
+         guardian_name = NULL, guardian_cpf_ciphertext = NULL, guardian_relationship = NULL,
+         deleted_at = $2, updated_at = $2
        WHERE (user_id = $1 OR manager_user_id = $1) AND deleted_at IS NULL`,
       [req.user.id, now],
     )

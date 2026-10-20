@@ -25,7 +25,9 @@ function Section({ title, children }) {
 
 export default function PrivacidadePage() {
   return (
-    <main className="mx-auto min-h-screen max-w-3xl px-4 py-10">
+    // ACESSIBILIDADE (varredura, item A1): id="main-content" é o alvo do link "Pular para o
+    // conteúdo" em app/layout.js.
+    <main id="main-content" className="mx-auto min-h-screen max-w-3xl px-4 py-10">
       <div className="mb-6">
         <Button variant="ghost" asChild><Link href="/"><ArrowLeft className="h-4 w-4" /> Página inicial</Link></Button>
       </div>
@@ -49,6 +51,7 @@ export default function PrivacidadePage() {
               <li>Dados de conta: nome, e-mail, telefone (gestor) e senha — a senha nunca é guardada em texto puro, só um hash criptográfico dela.</li>
               <li>CPF de gestores e atletas: guardado de forma criptografada no banco de dados, usado apenas para identificar cada pessoa sem duplicidade entre equipes.</li>
               <li>Dados do atleta: data de nascimento, posição em quadra, status do cadastro e uma foto para controle de acesso biométrico às partidas. A foto biométrica é <strong>dado pessoal sensível</strong> (art. 5º, II, e art. 11 da LGPD).</li>
+              <li>Atleta menor de idade: nome, CPF (criptografado, igual ao do atleta) e parentesco do responsável legal (ver seção 9).</li>
               <li>Frequência: presença registrada em cada jogo, usada para calcular a elegibilidade por percentual mínimo de presença definido no regulamento da liga.</li>
               <li>Segredo de autenticação em dois fatores — somente para contas de administração da liga.</li>
               <li>Um cookie de sessão técnico (ver seção 10).</li>
@@ -117,10 +120,9 @@ export default function PrivacidadePage() {
           <Section title="9. Crianças e adolescentes">
             <p>
               Categorias como Sub-19 podem incluir atletas menores de 18 anos. O cadastro de um atleta
-              menor de idade deve ser feito com a participação e o consentimento do responsável legal
-              (art. 14 da LGPD). Hoje pedimos que quem faz o cadastro confirme que obteve esse
-              consentimento; a liga está evoluindo o formulário para também registrar a identificação do
-              responsável diretamente no sistema.
+              menor de idade exige a identificação do responsável legal (nome, CPF e parentesco),
+              além da confirmação do consentimento (art. 14 da LGPD). O CPF do responsável é
+              criptografado da mesma forma que o do atleta (seção 6) e só é exibido mascarado.
             </p>
           </Section>
 

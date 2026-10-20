@@ -25,7 +25,12 @@ export default function CadastroAtletaPage() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [created, setCreated] = useState(false)
-  const [form, setForm] = useState({ name: '', email: '', password: '', cpf: '', age: '', positions: [], consent: false })
+  // LGPD (varredura, item L2): guardianName/guardianCpf/guardianRelationship só são obrigatórios
+  // quando a idade informada for menor de 18 anos (ver isMinor abaixo).
+  const [form, setForm] = useState({
+    name: '', email: '', password: '', cpf: '', age: '', positions: [], consent: false,
+    guardianName: '', guardianCpf: '', guardianRelationship: '',
+  })
   const [biometryKey, setBiometryKey] = useState('')
 
   useEffect(() => {
@@ -46,6 +51,10 @@ export default function CadastroAtletaPage() {
   }, [])
 
   const validCpf = useMemo(() => isValidCpf(form.cpf), [form.cpf])
+  // LGPD (varredura, item L2): 18 é o corte de maioridade civil usado também no backend
+  // (createAthlete, backend/src/routes/athletes.js) — as duas pontas precisam concordar.
+  const isMinor = form.age !== '' && Number.isInteger(Number(form.age)) && Number(form.age) < 18
+  const validGuardianCpf = useMemo(() => isValidCpf(form.guardianCpf), [form.guardianCpf])
   const approvedTeam = teams.find((item) => item.id === selectedTeamId) ?? null
   const openAthletePeriods = registrationPeriods.filter((period) => (
     period.registration_type === 'athlete' && period.status === 'open'
@@ -71,6 +80,13 @@ export default function CadastroAtletaPage() {
       if (!validCpf) return 'Informe um CPF válido.'
       if (form.age === '' || !Number.isInteger(Number(form.age)) || Number(form.age) < 0 || Number(form.age) > 120) return 'Informe uma idade válida.'
       if (form.positions.length === 0) return 'Selecione pelo menos uma posição.'
+      // LGPD (varredura, item L2): menor de idade precisa do responsável legal identificado — não
+      // basta marcar uma caixinha, igual o backend (createAthlete) também passou a exigir.
+      if (isMinor) {
+        if (form.guardianName.trim().length < 2) return 'Informe o nome completo do responsável legal.'
+        if (!validGuardianCpf) return 'Informe um CPF válido para o responsável legal.'
+        if (form.guardianRelationship.trim().length < 2) return 'Informe o grau de parentesco do responsável legal.'
+      }
     }
     if (step === 1) {
       if (!approvedTeam) return 'Selecione uma equipe aprovada.'
@@ -105,6 +121,13 @@ export default function CadastroAtletaPage() {
           positions: form.positions,
           biometry_key: biometryKey,
           consent: true,
+          // LGPD (varredura, item L2): só enviados quando isMinor; o backend rejeita o cadastro de
+          // um menor sem esses três campos (GUARDIAN_REQUIRED).
+          ...(isMinor ? {
+            guardian_name: form.guardianName.trim(),
+            guardian_cpf: digitsOnly(form.guardianCpf),
+            guardian_relationship: form.guardianRelationship.trim(),
+          } : {}),
         },
       })
       setCreated(true)
@@ -117,7 +140,8 @@ export default function CadastroAtletaPage() {
 
   if (created) {
     return (
-      <main className="mx-auto flex min-h-screen max-w-2xl items-center px-4 py-12">
+      // ACESSIBILIDADE (varredura, item A1): alvo do link "Pular para o conteúdo" (app/layout.js)
+      <main id="main-content" className="mx-auto flex min-h-screen max-w-2xl items-center px-4 py-12">
         <Card className="w-full">
           <CardHeader>
             <CardTitle>Cadastro enviado</CardTitle>
@@ -130,7 +154,7 @@ export default function CadastroAtletaPage() {
   }
 
   return (
-    <main className="mx-auto min-h-screen max-w-3xl px-4 py-10">
+    <main id="main-content" className="mx-auto min-h-screen max-w-3xl px-4 py-10">
       <div className="mb-6 flex items-center justify-between gap-3">
         <Button variant="ghost" asChild><Link href="/"><ArrowLeft className="h-4 w-4" /> Página inicial</Link></Button>
         {!loadingTeams && teams.length > 0 && <span className="text-sm text-muted-foreground">Etapa {step + 1} de {steps.length}</span>}
@@ -225,6 +249,27 @@ export default function CadastroAtletaPage() {
                   <Input id="athlete-age" type="number" min="0" max="120" step="1" value={form.age} onChange={(event) => setForm({ ...form, age: event.target.value })} required />
                 </div>
               </div>
+
+              {/* LGPD (varredura, item L2): aparece só quando a idade informada é menor de 18 —
+                  art. 14 da LGPD exige o consentimento do responsável legal, identificado. */}
+              {isMinor && <div className="space-y-4 rounded-md border border-amber-200 bg-amber-50 p-4">
+                <p className="text-sm text-amber-900">Como o atleta é menor de idade, precisamos dos dados do responsável legal.</p>
+                <div className="space-y-2">
+                  <Label htmlFor="guardian-name">Nome completo do responsável</Label>
+                  <Input id="guardian-name" autoComplete="off" maxLength={120} value={form.guardianName} onChange={(event) => setForm({ ...form, guardianName: event.target.value })} required />
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="guardian-cpf">CPF do responsável</Label>
+                    <Input id="guardian-cpf" inputMode="numeric" autoComplete="off" placeholder="000.000.000-00" maxLength={14} value={form.guardianCpf} aria-invalid={form.guardianCpf.length > 0 && !validGuardianCpf} onChange={(event) => setForm({ ...form, guardianCpf: formatCpf(event.target.value) })} required />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="guardian-relationship">Parentesco</Label>
+                    <Input id="guardian-relationship" placeholder="mãe, pai, tutor(a)…" maxLength={60} value={form.guardianRelationship} onChange={(event) => setForm({ ...form, guardianRelationship: event.target.value })} required />
+                  </div>
+                </div>
+              </div>}
+
               <fieldset className="space-y-2">
                 <legend className="text-sm font-medium">Posições (selecione uma ou mais)</legend>
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -261,6 +306,7 @@ export default function CadastroAtletaPage() {
                 <p><strong>Posições:</strong> {form.positions.map((position) => ATHLETE_POSITIONS.find((item) => item.value === position)?.label).join(', ')}</p>
                 <p><strong>Equipe:</strong> {approvedTeam?.name} — {approvedTeam?.category}</p>
                 <p><strong>Foto biométrica:</strong> {biometryKey ? 'Enviada com segurança' : 'Não enviada'}</p>
+                {isMinor && <p><strong>Responsável legal:</strong> {form.guardianName} ({form.guardianRelationship})</p>}
               </div>
               <label className="flex items-start gap-3 rounded-md border p-4 text-sm">
                 <Checkbox checked={form.consent} onCheckedChange={(checked) => setForm({ ...form, consent: checked === true })} />

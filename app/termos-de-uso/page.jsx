@@ -23,7 +23,9 @@ function Section({ title, children }) {
 
 export default function TermosDeUsoPage() {
   return (
-    <main className="mx-auto min-h-screen max-w-3xl px-4 py-10">
+    // ACESSIBILIDADE (varredura, item A1): id="main-content" é o alvo do link "Pular para o
+    // conteúdo" em app/layout.js.
+    <main id="main-content" className="mx-auto min-h-screen max-w-3xl px-4 py-10">
       <div className="mb-6">
         <Button variant="ghost" asChild><Link href="/"><ArrowLeft className="h-4 w-4" /> Página inicial</Link></Button>
       </div>

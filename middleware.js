@@ -83,6 +83,42 @@ async function verifySession(token) {
   }
 }
 
+// SEGURANÇA (varredura, item C1): verifySession só confere assinatura e validade do token — não
+// dá para consultar a tabela "sessions" daqui (roda no Edge, sem acesso ao Postgres). Isso significa
+// que, depois de um logout ou de uma revogação feita pelo admin, o cookie antigo (ainda válido como
+// JWT) continuava passando por esta guarda de rota até expirar (até 8h), embora toda chamada de API
+// real já falhasse certo no backend (authenticate checa "revoked_at"). Ou seja, nenhum dado real
+// chegava a vazar — só a casca da tela ficava visível por mais tempo que o necessário.
+//
+// Esta função fecha essa janela perguntando ao próprio backend (GET /auth/me, que já faz essa
+// checagem) se a sessão ainda está ativa. Importante: só tratamos como "deslogado" quando o backend
+// responde que não (fail-closed nesse caso). Se a chamada falhar ou der timeout (backend fora do ar,
+// rede lenta), seguimos com o que o JWT local já confirmou (fail-open) — um problema de
+// infraestrutura não deve travar o acesso de quem está realmente logado.
+async function isSessionStillActive(cookieHeader) {
+  const apiOrigin = process.env.API_INTERNAL_URL || 'http://localhost:4000'
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 2000)
+  try {
+    const response = await fetch(`${apiOrigin}/api/auth/me`, {
+      headers: { cookie: cookieHeader },
+      signal: controller.signal,
+    })
+    // GET /auth/me usa authenticateIfPresent: sem cookie, responde 200 {user: null}; com cookie
+    // válido, 200 {user: {...}}; com cookie revogado/expirado, authenticate() lança erro -> 401.
+    // Só o 401 é um "não" explícito do backend (fail-closed). Qualquer outro status (502, 503...)
+    // é problema de infraestrutura, não revogação — cai no fail-open abaixo.
+    if (response.status === 401) return false
+    if (!response.ok) return true
+    const data = await response.json()
+    return Boolean(data?.user)
+  } catch {
+    return true
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
 // SEGURANÇA (varredura, item S4): applyCsp centraliza os cabeçalhos para não esquecer nenhum
 // deles em algum dos retornos (redirecionamento ou passagem normal) da função abaixo.
 function applyCsp(response, nonce) {
@@ -118,6 +154,14 @@ export async function middleware(request) {
     const allowedRoles = Array.isArray(requiredRole) ? requiredRole : [requiredRole]
     if (!allowedRoles.includes(payload.role)) {
       const destination = new URL(payload.role === 'admin' ? '/admin/aprovacoes' : `/${payload.role}`, request.url)
+      return applyCsp(NextResponse.redirect(destination), nonce)
+    }
+
+    // SEGURANÇA (varredura, item C1): só nas rotas protegidas por papel, depois que o JWT local já
+    // passou — aqui vale pagar uma chamada extra ao backend para fechar a janela de sessão revogada.
+    if (!(await isSessionStillActive(request.headers.get('cookie') || ''))) {
+      const destination = new URL('/', request.url)
+      destination.searchParams.set('next', request.nextUrl.pathname)
       return applyCsp(NextResponse.redirect(destination), nonce)
     }
   }

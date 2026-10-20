@@ -123,6 +123,12 @@ CREATE TABLE IF NOT EXISTS athletes (
   biometry_object_key text,
   biometry_status biometry_status NOT NULL DEFAULT 'pending',
   control_id_reference text,
+  -- LGPD (varredura, item L2): existem categorias Sub-19, ou seja, atletas menores de 18 anos são
+  -- esperados. Para menores (art. 14 da LGPD), o cadastro passa a exigir a identificação de quem deu
+  -- o consentimento em nome do atleta — nome, CPF (criptografado, igual ao do atleta) e o parentesco.
+  guardian_name text,
+  guardian_cpf_ciphertext text,
+  guardian_relationship text,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   deleted_at timestamptz,
@@ -130,6 +136,9 @@ CREATE TABLE IF NOT EXISTS athletes (
     positions <@ ARRAY['central', 'ponteiro', 'saida', 'levantador', 'libero']::text[]
   )
 );
+ALTER TABLE athletes ADD COLUMN IF NOT EXISTS guardian_name text;
+ALTER TABLE athletes ADD COLUMN IF NOT EXISTS guardian_cpf_ciphertext text;
+ALTER TABLE athletes ADD COLUMN IF NOT EXISTS guardian_relationship text;
 CREATE UNIQUE INDEX IF NOT EXISTS athletes_cpf_team_active_uq
   ON athletes (cpf_hash, team_id) WHERE deleted_at IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS athletes_control_reference_active_uq
