@@ -494,15 +494,12 @@ function MatchResultCard({ m }) {
 // LOGIN DIALOG
 // ============================================================================
 function LoginDialog({ open, onOpenChange, onAuthed }) {
-  const [tab, setTab] = useState('otp')
-
-  // OTP
-  const [email, setEmail] = useState('')
-  const [code, setCode] = useState('')
-  const [otpSent, setOtpSent] = useState(false)
+  const [tab, setTab] = useState('senha')
 
   // Password
-  const [pwEmail, setPwEmail] = useState('admin@lvj.com')
+  // A aba "Entrar" agora é o padrão e é compartilhada por gestor e admin — não faz mais
+  // sentido pré-preencher com o e-mail do admin, já que todo gestor cai nela primeiro.
+  const [pwEmail, setPwEmail] = useState('')
   const [pw, setPw] = useState('')
   const [pwTotp, setPwTotp] = useState('')
   const [requiresTotp, setRequiresTotp] = useState(false)
@@ -512,29 +509,6 @@ function LoginDialog({ open, onOpenChange, onAuthed }) {
 
   const [loading, setLoading] = useState(false)
 
-  const requestOtp = async () => {
-    setLoading(true)
-    try {
-      const d = await api('/auth/otp/request', { method: 'POST', body: { email } })
-      setOtpSent(true)
-      toast.success(d.message || 'Se a conta existir, um código será enviado por e-mail.')
-    } catch (e) {
-      toast.error(e.message)
-    } finally {
-      setLoading(false)
-    }
-  }
-  const verifyOtp = async () => {
-    setLoading(true)
-    try {
-      const d = await api('/auth/otp/verify', { method: 'POST', body: { email, code } })
-      onAuthed(d.user)
-    } catch (e) {
-      toast.error(e.message)
-    } finally {
-      setLoading(false)
-    }
-  }
   const loginPw = async () => {
     setLoading(true)
     try {
@@ -575,34 +549,10 @@ function LoginDialog({ open, onOpenChange, onAuthed }) {
         </DialogHeader>
 
         <Tabs value={tab} onValueChange={setTab}>
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="otp">Código</TabsTrigger>
-            <TabsTrigger value="senha">Senha</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="senha">Entrar</TabsTrigger>
             <TabsTrigger value="cadastro">Cadastrar gestor</TabsTrigger>
           </TabsList>
-
-          <TabsContent value="otp" className="space-y-3 pt-2">
-            <div>
-              <Label htmlFor="login-otp-email">E-mail</Label>
-              <Input id="login-otp-email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="voce@email.com" />
-            </div>
-            {!otpSent ? (
-              <Button className="w-full text-white border-0" style={{ background: PURPLE }} onClick={requestOtp} disabled={loading || !email}>
-                <Mail className="h-4 w-4 mr-2" /> Enviar código por e-mail
-              </Button>
-            ) : (
-              <>
-                <p className="text-xs text-slate-500">Consulte sua caixa de e-mail para obter o código.</p>
-                <div>
-                  <Label htmlFor="login-otp-code">Código de 6 dígitos</Label>
-                  <Input id="login-otp-code" inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value)} placeholder="000000" maxLength={6} />
-                </div>
-                <Button className="w-full text-white border-0" style={{ background: ORANGE }} onClick={verifyOtp} disabled={loading}>
-                  Entrar
-                </Button>
-              </>
-            )}
-          </TabsContent>
 
           <TabsContent value="senha" className="space-y-3 pt-2">
             <div>

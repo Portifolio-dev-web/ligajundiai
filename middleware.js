@@ -23,11 +23,20 @@ const roleForPath = (pathname) => {
 // backend (backend/.env.example) — é para lá que o navegador envia a foto biométrica direto
 // (CameraCapture.jsx), sem passar pela API. Se as duas divergirem em produção, o envio da foto
 // passa a ser bloqueado pelo CSP.
+//
+// CORREÇÃO (achado ao testar localmente): em "next dev" o webpack roda os módulos com eval() (é o
+// devtool padrão de desenvolvimento, para o hot-reload ser rápido) — sem 'unsafe-eval' no
+// script-src, o app trava com a tela de carregamento para sempre, porque o próprio runtime do
+// Next.js é bloqueado pelo CSP antes de conseguir rodar. "next build" (produção) não usa eval(),
+// então só relaxamos o CSP quando NODE_ENV não é "production" — em produção o script-src continua
+// só com nonce + strict-dynamic, sem unsafe-eval. O HMR do webpack também abre um WebSocket na
+// própria origem (ws://…/_next/webpack-hmr); 'self' em connect-src já cobre esse esquema.
 function buildCsp(nonce) {
   const storageOrigin = process.env.STORAGE_PUBLIC_ORIGIN || 'http://localhost:9000'
+  const isDev = process.env.NODE_ENV !== 'production'
   return [
     "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDev ? " 'unsafe-eval'" : ''}`,
     // style-src com 'unsafe-inline': os componentes usam a prop "style" do React em vários pontos
     // (app/page.js). Estilo inline não executa código, diferente de script inline — risco aceitável.
     "style-src 'self' 'unsafe-inline'",
