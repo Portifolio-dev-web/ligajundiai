@@ -57,6 +57,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Toaster } from '@/components/ui/sonner'
 import { toast } from 'sonner'
+import { toastSuccess, toastError } from '@/lib/toast'
 import {
   Bell,
   Volleyball,
@@ -87,10 +88,12 @@ const BLUE = '#2458A6'
 const RED = '#E4242A'
 const NAVY = '#1E1B4B'
 
-const HERO = 'https://images.unsplash.com/photo-1547347298-4074fc3086f0'
-const IMG_COURT = 'https://images.unsplash.com/photo-1666901356149-93f2eb3ba5a2'
-const IMG_ACTION1 = 'https://images.unsplash.com/photo-1567880325673-ccc01edca61c'
-const IMG_ARENA = 'https://images.unsplash.com/photo-1771909713106-86b9a412964a'
+// SEGURANÇA (varredura, item S11): antes essas imagens vinham direto de images.unsplash.com — cada
+// visita à home entregava o IP de quem acessa à Unsplash (hotlink). Agora são arquivos locais em
+// public/images, as mesmas fotos, baixadas uma vez. IMG_ACTION1 nunca era usada — removida.
+const HERO = '/images/hero.jpg'
+const IMG_COURT = '/images/court.jpg'
+const IMG_ARENA = '/images/arena.jpg'
 
 // ============================================================================
 // Root App
@@ -144,7 +147,7 @@ function App() {
     setUser(authenticatedUser)
     setLoginOpen(false)
     loadMe()
-    toast.success(`Bem-vindo(a), ${authenticatedUser.name}!`)
+    toastSuccess(`Bem-vindo(a), ${authenticatedUser.name}!`)
   }
 
   const logout = async () => {
@@ -669,7 +672,7 @@ function LoginDialog({ open, onOpenChange, onAuthed }) {
       onAuthed(d.user)
     } catch (e) {
       if (e.code === 'TOTP_REQUIRED') setRequiresTotp(true)
-      toast.error(e.message)
+      toastError(e.message)
     } finally {
       setLoading(false)
     }
@@ -680,7 +683,7 @@ function LoginDialog({ open, onOpenChange, onAuthed }) {
       const d = await api('/auth/register', { method: 'POST', body: reg })
       onAuthed(d.user)
     } catch (e) {
-      toast.error(e.message)
+      toastError(e.message)
     } finally {
       setLoading(false)
     }
@@ -855,11 +858,19 @@ function NotificationBell({ notif, token, reload }) {
   }
   return (
     <Popover>
+      {/* ACESSIBILIDADE (varredura, item A8): sem total, o botão não tinha texto nenhum (leitor de
+          tela anunciava só "botão"); com total, só o número solto, sem dizer do que é. O
+          aria-label carrega o contexto; o número visual fica aria-hidden para não duplicar. */}
       <PopoverTrigger asChild>
-        <Button variant="outline" className="relative">
+        <Button
+          variant="outline"
+          className="relative"
+          aria-label={total > 0 ? `Notificações: ${total} pendente${total > 1 ? 's' : ''}` : 'Notificações'}
+        >
           <Bell className="h-5 w-5" />
           {total > 0 && (
             <span
+              aria-hidden="true"
               className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold text-white"
               style={{ background: RED }}
             >
@@ -922,13 +933,13 @@ function AdminTeams({ token, reload }) {
   const act = async (id, action, justification) => {
     try {
       await api(`/admin/teams/${id}/${action}`, { method: 'POST', token, body: { justification } })
-      toast.success(action === 'approve' ? 'Equipe aprovada; e-mail colocado na fila' : 'Equipe recusada; e-mail colocado na fila')
+      toastSuccess(action === 'approve' ? 'Equipe aprovada; e-mail colocado na fila' : 'Equipe recusada; e-mail colocado na fila')
       setRejectId(null)
       setJustif('')
       load()
       reload()
     } catch (e) {
-      toast.error(e.message)
+      toastError(e.message)
     }
   }
 
@@ -997,13 +1008,13 @@ function AdminAthletes({ token, reload }) {
   const act = async (id, action, justification) => {
     try {
       await api(`/admin/athletes/${id}/${action}`, { method: 'POST', token, body: { justification } })
-      toast.success(action === 'approve' ? 'Atleta liberado; e-mail colocado na fila' : 'Atleta recusado; e-mail colocado na fila')
+      toastSuccess(action === 'approve' ? 'Atleta liberado; e-mail colocado na fila' : 'Atleta recusado; e-mail colocado na fila')
       setRejectId(null)
       setJustif('')
       load()
       reload()
     } catch (e) {
-      toast.error(e.message)
+      toastError(e.message)
     }
   }
 
@@ -1110,9 +1121,9 @@ function RulesEngine({ token }) {
     try {
       const d = await api('/rules', { method: 'PUT', token, body: rules })
       setRules(d.rules)
-      toast.success('Regulamento salvo! A classificação será recalculada.')
+      toastSuccess('Regulamento salvo! A classificação será recalculada.')
     } catch (e) {
-      toast.error(e.message)
+      toastError(e.message)
     } finally {
       setSaving(false)
     }
@@ -1204,16 +1215,16 @@ function AdminMatches({ token, categories }) {
 
   const create = async () => {
     if (!form.home_team_id || !form.away_team_id || form.home_team_id === form.away_team_id) {
-      toast.error('Selecione duas equipes diferentes')
+      toastError('Selecione duas equipes diferentes')
       return
     }
     try {
       await api('/admin/matches', { method: 'POST', token, body: form })
-      toast.success('Jogo agendado')
+      toastSuccess('Jogo agendado')
       setForm({ home_team_id: '', away_team_id: '', scheduled_at: '', venue: '', round: '' })
       load()
     } catch (e) {
-      toast.error(e.message)
+      toastError(e.message)
     }
   }
 
@@ -1221,11 +1232,11 @@ function AdminMatches({ token, categories }) {
     const clean = sets.filter((s) => s.home !== '' && s.away !== '')
     try {
       await api(`/admin/matches/${resultMatch.id}/result`, { method: 'PUT', token, body: { sets: clean.map((s) => ({ home: Number(s.home), away: Number(s.away) })) } })
-      toast.success('Resultado salvo! Classificação atualizada.')
+      toastSuccess('Resultado salvo! Classificação atualizada.')
       setResultMatch(null)
       load()
     } catch (e) {
-      toast.error(e.message)
+      toastError(e.message)
     }
   }
 
@@ -1353,19 +1364,19 @@ function AdminAttendance({ token, categories }) {
     const records = athletes.map((a) => ({ athlete_id: a.id, present: !!present[a.id] }))
     try {
       await api('/admin/attendance', { method: 'POST', token, body: { team_id: teamId, date, records } })
-      toast.success('Presença registrada')
+      toastSuccess('Presença registrada')
       loadTeam(teamId)
     } catch (e) {
-      toast.error(e.message)
+      toastError(e.message)
     }
   }
 
   const uploadSumula = async () => {
     try {
       await api('/admin/sumula', { method: 'POST', token, body: { team_id: teamId, category, date, filename: 'sumula_digitalizada.jpg' } })
-      toast.success('Súmula importada (MOCKED - sem OCR real)')
+      toastSuccess('Súmula importada (MOCKED - sem OCR real)')
     } catch (e) {
-      toast.error(e.message)
+      toastError(e.message)
     }
   }
 
@@ -1504,10 +1515,10 @@ function AdminCategories({ token, onCategoriesChanged }) {
       })
       setCategories((prev) => prev.map((c) => (c.id === category.id ? category : c)))
       setDrafts((prev) => ({ ...prev, [category.id]: { name: category.name, abbreviation: category.abbreviation, sort_order: String(category.sort_order) } }))
-      toast.success('Categoria atualizada')
+      toastSuccess('Categoria atualizada')
       onCategoriesChanged?.()
     } catch (e) {
-      toast.error(e.message)
+      toastError(e.message)
     } finally {
       setSavingId(null)
     }
@@ -1517,10 +1528,10 @@ function AdminCategories({ token, onCategoriesChanged }) {
     try {
       const { category } = await api(`/admin/categories/${cat.id}`, { method: 'PUT', token, body: { active: !cat.active } })
       setCategories((prev) => prev.map((c) => (c.id === category.id ? category : c)))
-      toast.success(category.active ? 'Categoria ativada' : 'Categoria desativada')
+      toastSuccess(category.active ? 'Categoria ativada' : 'Categoria desativada')
       onCategoriesChanged?.()
     } catch (e) {
-      toast.error(e.message)
+      toastError(e.message)
     }
   }
 
@@ -1528,10 +1539,10 @@ function AdminCategories({ token, onCategoriesChanged }) {
     try {
       await api(`/admin/categories/${cat.id}`, { method: 'DELETE', token })
       setCategories((prev) => prev.filter((c) => c.id !== cat.id))
-      toast.success('Categoria removida')
+      toastSuccess('Categoria removida')
       onCategoriesChanged?.()
     } catch (e) {
-      toast.error(e.message)
+      toastError(e.message)
     } finally {
       setRemoveTarget(null)
     }
@@ -1539,7 +1550,7 @@ function AdminCategories({ token, onCategoriesChanged }) {
 
   const createCategory = async () => {
     if (!newForm.name.trim() || !newForm.abbreviation.trim()) {
-      toast.error('Informe nome e sigla da categoria')
+      toastError('Informe nome e sigla da categoria')
       return
     }
     setCreating(true)
@@ -1556,10 +1567,10 @@ function AdminCategories({ token, onCategoriesChanged }) {
       setCategories((prev) => [...prev, category].sort((a, b) => a.sort_order - b.sort_order))
       setDrafts((prev) => ({ ...prev, [category.id]: { name: category.name, abbreviation: category.abbreviation, sort_order: String(category.sort_order) } }))
       setNewForm({ name: '', abbreviation: '', sort_order: '' })
-      toast.success('Categoria criada')
+      toastSuccess('Categoria criada')
       onCategoriesChanged?.()
     } catch (e) {
-      toast.error(e.message)
+      toastError(e.message)
     } finally {
       setCreating(false)
     }
@@ -1720,11 +1731,11 @@ function GestorPanel({ token, categories, user, myTeams, refreshMe }) {
 
   const createTeam = async () => {
     if (!teamRegistrationOpen) {
-      toast.error(teamPeriod?.message || 'Inscrições encerradas, te aguardamos na próxima temporada.')
+      toastError(teamPeriod?.message || 'Inscrições encerradas, te aguardamos na próxima temporada.')
       return
     }
     if (!teamForm.consent) {
-      toast.error('É necessário aceitar o Termo de Responsabilidade Financeira.')
+      toastError('É necessário aceitar o Termo de Responsabilidade Financeira.')
       return
     }
     try {
@@ -1732,10 +1743,10 @@ function GestorPanel({ token, categories, user, myTeams, refreshMe }) {
       setTeams((current) => [...current, d.team])
       setActiveTeamId(d.team.id)
       setTeamForm({ name: '', category: categories[0], consent: false })
-      toast.success('Equipe enviada para aprovação!')
+      toastSuccess('Equipe enviada para aprovação!')
       refreshMe()
     } catch (e) {
-      toast.error(e.message)
+      toastError(e.message)
     }
   }
 
@@ -1903,7 +1914,7 @@ function GestorRoster({ token, team }) {
           } : {}),
         },
       })
-      toast.success('Atleta cadastrado e aguardando aprovação do gestor.')
+      toastSuccess('Atleta cadastrado e aguardando aprovação do gestor.')
       setForm({
         name: '', rg: '', position: '', birthdate: '', email: '', photo: null, consent: false,
         biometricConsent: false,
@@ -1911,19 +1922,19 @@ function GestorRoster({ token, team }) {
       })
       load()
     } catch (e) {
-      toast.error(e.message)
+      toastError(e.message)
     }
   }
 
   const review = async (id, action, reason = '') => {
     try {
       await api(`/gestor/athletes/${id}/${action}`, { method: 'POST', token, body: { justification: reason } })
-      toast.success(action === 'approve' ? 'Atleta encaminhado para aprovação final.' : 'Cadastro do atleta recusado.')
+      toastSuccess(action === 'approve' ? 'Atleta encaminhado para aprovação final.' : 'Cadastro do atleta recusado.')
       setRejectId(null)
       setJustification('')
       load()
     } catch (e) {
-      toast.error(e.message)
+      toastError(e.message)
     }
   }
 
@@ -2123,10 +2134,10 @@ function GestorAgenda({ category, token, team }) {
   const accept = async (matchId) => {
     try {
       await api(`/gestor/matches/${matchId}/accept`, { method: 'POST', token, body: {} })
-      toast.success('Aceite registrado.')
+      toastSuccess('Aceite registrado.')
       load()
     } catch (e) {
-      toast.error(e.message)
+      toastError(e.message)
     }
   }
   const filtered = matches.filter((m) => filter === 'all' || m.status === filter)

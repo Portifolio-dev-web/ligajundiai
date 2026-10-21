@@ -1,10 +1,9 @@
 const nextConfig = {
   output: 'standalone',
+  // SEGURANÇA/LIMPEZA (varredura, item S12): remotePatterns liberava avatars.githubusercontent.com
+  // sem nenhuma referência no código (next/image nem é usado no projeto) — resquício de boilerplate.
   images: {
     unoptimized: true,
-    remotePatterns: [
-      { protocol: 'https', hostname: 'avatars.githubusercontent.com', pathname: '/**' },
-    ],
   },
   webpack(config, { dev }) {
     if (dev) {

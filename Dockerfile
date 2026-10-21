@@ -41,6 +41,9 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN groupadd --system --gid 10002 nextjs && useradd --system --uid 10002 --gid nextjs nextjs
 COPY --from=build --chown=nextjs:nextjs /app/.next/standalone ./
 COPY --from=build --chown=nextjs:nextjs /app/.next/static ./.next/static
+# SEGURANÇA (varredura, item S11): public/images agora existe (fotos da home autohospedadas, em
+# vez de hotlink) — precisa ir para a imagem final, senão as imagens da home voltam a 404.
+COPY --from=build --chown=nextjs:nextjs /app/public ./public
 USER nextjs
 EXPOSE 3000
 CMD ["node", "server.js"]

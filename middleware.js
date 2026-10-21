@@ -40,9 +40,11 @@ function buildCsp(nonce) {
     // style-src com 'unsafe-inline': os componentes usam a prop "style" do React em vários pontos
     // (app/page.js). Estilo inline não executa código, diferente de script inline — risco aceitável.
     "style-src 'self' 'unsafe-inline'",
-    // blob: é usado pelo preview da foto capturada pela câmera (CameraCapture.jsx, URL.createObjectURL);
-    // o domínio do Unsplash é usado pelas imagens de capa do site (app/page.js).
-    'img-src \'self\' blob: data: https://images.unsplash.com',
+    // blob: é usado pelo preview da foto capturada pela câmera (CameraCapture.jsx, URL.createObjectURL).
+    // SEGURANÇA (varredura, item S11): as imagens de capa do site (app/page.js) eram hotlinked de
+    // images.unsplash.com — cada visita entregava o IP de quem acessa à Unsplash. Agora são
+    // arquivos locais em public/images, então 'self' já cobre, sem precisar liberar domínio externo.
+    'img-src \'self\' blob: data:',
     "font-src 'self'",
     `connect-src 'self' ${storageOrigin}`,
     "object-src 'none'",
