@@ -68,12 +68,15 @@ export default function AprovarAtletasPage() {
             : <div className="overflow-x-auto">
               <Table>
                 <TableHeader><TableRow>
-                  <TableHead>Atleta</TableHead><TableHead>Idade</TableHead><TableHead>Posições</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Ações</TableHead>
+                  <TableHead>Atleta</TableHead><TableHead>Equipe</TableHead><TableHead>Idade</TableHead><TableHead>Posições</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Ações</TableHead>
                 </TableRow></TableHeader>
                 <TableBody>
                   {athletes.map((athlete) => (
                     <TableRow key={athlete.id}>
                       <TableCell className="font-medium">{athlete.name}</TableCell>
+                      {/* Risco 1 (varredura, análise LVJ 2027): a fila agora junta as equipes do
+                          gestor, então o nome da equipe evita confundir atletas de equipes diferentes. */}
+                      <TableCell>{athlete.team_name ?? '—'}</TableCell>
                       <TableCell>{athlete.age_at_registration ?? '—'}</TableCell>
                       <TableCell>{(athlete.positions || []).join(', ') || '—'}</TableCell>
                       <TableCell><Badge variant="secondary">Aguardando gestor</Badge></TableCell>
@@ -96,7 +99,7 @@ export default function AprovarAtletasPage() {
                       </TableCell>
                     </TableRow>
                   ))}
-                  {athletes.length === 0 && <TableRow><TableCell colSpan={5} className="py-8 text-center text-muted-foreground">Nenhum atleta aguardando análise.</TableCell></TableRow>}
+                  {athletes.length === 0 && <TableRow><TableCell colSpan={6} className="py-8 text-center text-muted-foreground">Nenhum atleta aguardando análise.</TableCell></TableRow>}
                 </TableBody>
               </Table>
             </div>}

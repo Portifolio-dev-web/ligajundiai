@@ -49,9 +49,9 @@ export default function PrivacidadePage() {
           <Section title="2. Quais dados tratamos">
             <ul className="list-disc space-y-1 pl-5">
               <li>Dados de conta: nome, e-mail, telefone (gestor) e senha — a senha nunca é guardada em texto puro, só um hash criptográfico dela.</li>
-              <li>CPF de gestores e atletas: guardado de forma criptografada no banco de dados, usado apenas para identificar cada pessoa sem duplicidade entre equipes.</li>
+              <li>RG de gestores e atletas: guardado de forma criptografada no banco de dados, usado apenas para identificar cada pessoa sem duplicidade entre equipes.</li>
               <li>Dados do atleta: data de nascimento, posição em quadra, status do cadastro e uma foto para controle de acesso biométrico às partidas. A foto biométrica é <strong>dado pessoal sensível</strong> (art. 5º, II, e art. 11 da LGPD).</li>
-              <li>Atleta menor de idade: nome, CPF (criptografado, igual ao do atleta) e parentesco do responsável legal (ver seção 9).</li>
+              <li>Atleta menor de idade: nome, RG (criptografado, igual ao do atleta) e parentesco do responsável legal (ver seção 9).</li>
               <li>Frequência: presença registrada em cada jogo, usada para calcular a elegibilidade por percentual mínimo de presença definido no regulamento da liga.</li>
               <li>Segredo de autenticação em dois fatores — somente para contas de administração da liga.</li>
               <li>Um cookie de sessão técnico (ver seção 10).</li>
@@ -61,7 +61,7 @@ export default function PrivacidadePage() {
           <Section title="3. Para que usamos cada dado e com qual base legal">
             <ul className="list-disc space-y-1 pl-5">
               <li>Criar e manter sua conta e sua inscrição na liga: execução de contrato (art. 7º, V).</li>
-              <li>Conferir identidade e evitar cadastro duplicado pelo CPF: execução de contrato e legítimo interesse da organização (art. 7º, V e IX).</li>
+              <li>Conferir identidade e evitar cadastro duplicado pelo RG: execução de contrato e legítimo interesse da organização (art. 7º, V e IX).</li>
               <li>Liberar o acesso dos atletas às partidas pela catraca biométrica: consentimento específico e destacado, por ser dado sensível (art. 11, I).</li>
               <li>Calcular classificação, súmulas e elegibilidade por frequência: execução do regulamento esportivo (execução de contrato).</li>
               <li>Enviar e-mails sobre aprovação/recusa de equipe ou atleta e o código de acesso sem senha: execução de contrato.</li>
@@ -89,7 +89,7 @@ export default function PrivacidadePage() {
           <Section title="6. Como protegemos seus dados">
             <ul className="list-disc space-y-1 pl-5">
               <li>Senhas com algoritmo resistente a quebra por força bruta (argon2id).</li>
-              <li>CPF cifrado no banco de dados (AES-256-GCM), nunca armazenado em texto puro.</li>
+              <li>RG cifrado no banco de dados (AES-256-GCM), nunca armazenado em texto puro.</li>
               <li>Autenticação em dois fatores obrigatória para contas de administração.</li>
               <li>Sessão de login revogável a qualquer momento (encerrar sessão invalida o acesso imediatamente).</li>
               <li>Limite de tentativas em login e nos códigos de acesso temporários.</li>
@@ -101,7 +101,7 @@ export default function PrivacidadePage() {
             <p>
               Enquanto sua conta estiver ativa, e durante o tempo necessário para preservar o histórico
               esportivo da temporada (classificação e súmulas). Se você pedir a exclusão da sua conta,
-              anonimizamos imediatamente os dados que identificam você (nome, CPF, foto, contatos),
+              anonimizamos imediatamente os dados que identificam você (nome, RG, foto, contatos),
               mantendo apenas o resultado esportivo já despersonalizado, necessário para a integridade da
               classificação da liga.
             </p>
@@ -120,8 +120,8 @@ export default function PrivacidadePage() {
           <Section title="9. Crianças e adolescentes">
             <p>
               Categorias como Sub-19 podem incluir atletas menores de 18 anos. O cadastro de um atleta
-              menor de idade exige a identificação do responsável legal (nome, CPF e parentesco),
-              além da confirmação do consentimento (art. 14 da LGPD). O CPF do responsável é
+              menor de idade exige a identificação do responsável legal (nome, RG e parentesco),
+              além da confirmação do consentimento (art. 14 da LGPD). O RG do responsável é
               criptografado da mesma forma que o do atleta (seção 6) e só é exibido mascarado.
             </p>
           </Section>

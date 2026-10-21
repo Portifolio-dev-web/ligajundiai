@@ -21,22 +21,19 @@ export function parse(schema, value) {
 export const emailSchema = z.string().trim().toLowerCase().email().max(254)
 export const uuidSchema = z.string().uuid()
 
-export function isValidCpf(input) {
-  const cpf = String(input ?? '').replace(/\D/g, '')
-  if (!/^\d{11}$/.test(cpf) || /^(\d)\1{10}$/.test(cpf)) return false
-  for (let digit = 9; digit < 11; digit += 1) {
-    let sum = 0
-    for (let i = 0; i < digit; i += 1) sum += Number(cpf[i]) * (digit + 1 - i)
-    const result = (sum * 10) % 11
-    if (Number(cpf[digit]) !== (result === 10 ? 0 : result)) return false
-  }
-  return true
+// Decisão (análise LVJ 2027, risco 1): identificação por RG, não mais por CPF. Diferente do
+// CPF, o RG não tem um algoritmo de dígito verificador nacional — cada estado emite no seu
+// próprio formato —, então só validamos uma faixa de tamanho plausível, com o dígito
+// verificador alfabético "X" (comum em SP/RJ/MG) aceito no último caractere.
+export function isValidRg(input) {
+  const rg = String(input ?? '').toUpperCase().replace(/[^0-9X]/g, '')
+  return /^\d{5,9}X?$/.test(rg)
 }
 
-export function requireValidCpf(input) {
-  const cpf = String(input ?? '').replace(/\D/g, '')
-  if (!isValidCpf(cpf)) throw new AppError(400, 'INVALID_CPF', 'CPF inválido')
-  return cpf
+export function requireValidRg(input) {
+  const rg = String(input ?? '').toUpperCase().replace(/[^0-9X]/g, '')
+  if (!isValidRg(rg)) throw new AppError(400, 'INVALID_RG', 'RG inválido')
+  return rg
 }
 
 export function validatePositions(positions) {

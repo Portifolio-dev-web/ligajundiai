@@ -19,11 +19,10 @@ teamsRouter.post('/', asyncRoute(async (req, res) => {
   }).strict(), req.body)
   const team = await transaction(async (client) => {
     await assertRegistrationOpen(input.category, 'team', client)
-    const userTeam = await client.query(
-      'SELECT id FROM teams WHERE manager_user_id = $1 AND deleted_at IS NULL',
-      [req.user.id],
-    )
-    if (userTeam.rowCount) throw new AppError(409, 'TEAM_ALREADY_EXISTS', 'Você já possui uma equipe cadastrada')
+    // Risco 1 (varredura, análise LVJ 2027): um gestor pode gerenciar mais de uma equipe, em
+    // categorias diferentes, com um único login — por isso não há mais bloqueio aqui por já
+    // existir uma equipe. teams_name_category_active_uq ainda impede duas equipes com o mesmo
+    // nome na mesma categoria.
     const result = await client.query(
       `INSERT INTO teams (name, category, manager_user_id)
        VALUES ($1, $2, $3)
@@ -42,10 +41,10 @@ teamsRouter.get('/mine', asyncRoute(async (req, res) => {
   const result = await query(
     `SELECT t.*, u.name AS manager_name, u.email AS manager_email
      FROM teams t JOIN users u ON u.id = t.manager_user_id
-     WHERE t.manager_user_id = $1 AND t.deleted_at IS NULL LIMIT 1`,
+     WHERE t.manager_user_id = $1 AND t.deleted_at IS NULL ORDER BY t.created_at`,
     [req.user.id],
   )
-  res.json({ team: result.rows[0] ?? null })
+  res.json({ teams: result.rows })
 }))
 
 adminTeamsRouter.use(authenticate, authorize('admin'))

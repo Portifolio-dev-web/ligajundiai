@@ -35,8 +35,8 @@ CREATE TABLE IF NOT EXISTS users (
   legacy_password_salt text,
   legacy_password_hash text,
   phone text,
-  cpf_ciphertext text,
-  cpf_hash text,
+  rg_ciphertext text,
+  rg_hash text,
   totp_secret_ciphertext text,
   consent_at timestamptz,
   consent_version text NOT NULL DEFAULT 'unrecorded',
@@ -46,7 +46,15 @@ CREATE TABLE IF NOT EXISTS users (
   deleted_at timestamptz
 );
 CREATE UNIQUE INDEX IF NOT EXISTS users_email_active_uq ON users (lower(email)) WHERE deleted_at IS NULL;
-CREATE UNIQUE INDEX IF NOT EXISTS users_cpf_active_uq ON users (cpf_hash) WHERE cpf_hash IS NOT NULL AND deleted_at IS NULL;
+-- Decisão (análise LVJ 2027, risco 1): a Liga optou por identificar todo mundo só pelo RG,
+-- como já faz no papel — o CPF saiu do sistema. Quem já tinha cadastro com CPF perde essa
+-- identificação (ela não existia em formato de RG) até recadastrar o RG.
+ALTER TABLE users DROP COLUMN IF EXISTS cpf_ciphertext;
+ALTER TABLE users DROP COLUMN IF EXISTS cpf_hash;
+DROP INDEX IF EXISTS users_cpf_active_uq;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS rg_ciphertext text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS rg_hash text;
+CREATE UNIQUE INDEX IF NOT EXISTS users_rg_active_uq ON users (rg_hash) WHERE rg_hash IS NOT NULL AND deleted_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS sessions (
   jti uuid PRIMARY KEY,
@@ -70,8 +78,12 @@ CREATE TABLE IF NOT EXISTS teams (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS teams_name_category_active_uq
   ON teams (lower(name), category) WHERE deleted_at IS NULL;
-CREATE UNIQUE INDEX IF NOT EXISTS teams_manager_active_uq
-  ON teams (manager_user_id) WHERE deleted_at IS NULL;
+-- Risco 1 (varredura, análise LVJ 2027): um gestor pode gerenciar mais de uma equipe, em
+-- categorias diferentes, com um único login (confirmado no questionário). Esta restrição de
+-- equipe única por gestor existia antes e foi removida; o índice abaixo só limpa quem já
+-- rodou a versão antiga do schema.
+DROP INDEX IF EXISTS teams_manager_active_uq;
+CREATE INDEX IF NOT EXISTS teams_manager_active_idx ON teams (manager_user_id) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS teams_status_created_idx ON teams (status, created_at DESC) WHERE deleted_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS registration_periods (
@@ -108,8 +120,8 @@ CREATE TABLE IF NOT EXISTS athletes (
   team_id uuid NOT NULL REFERENCES teams(id),
   manager_user_id uuid NOT NULL REFERENCES users(id),
   name text NOT NULL,
-  cpf_ciphertext text,
-  cpf_hash text,
+  rg_ciphertext text,
+  rg_hash text,
   contact_email text,
   birthdate date,
   age_at_registration smallint CHECK (age_at_registration BETWEEN 0 AND 120),
@@ -125,9 +137,9 @@ CREATE TABLE IF NOT EXISTS athletes (
   control_id_reference text,
   -- LGPD (varredura, item L2): existem categorias Sub-19, ou seja, atletas menores de 18 anos são
   -- esperados. Para menores (art. 14 da LGPD), o cadastro passa a exigir a identificação de quem deu
-  -- o consentimento em nome do atleta — nome, CPF (criptografado, igual ao do atleta) e o parentesco.
+  -- o consentimento em nome do atleta — nome, RG (criptografado, igual ao do atleta) e o parentesco.
   guardian_name text,
-  guardian_cpf_ciphertext text,
+  guardian_rg_ciphertext text,
   guardian_relationship text,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
@@ -137,10 +149,18 @@ CREATE TABLE IF NOT EXISTS athletes (
   )
 );
 ALTER TABLE athletes ADD COLUMN IF NOT EXISTS guardian_name text;
-ALTER TABLE athletes ADD COLUMN IF NOT EXISTS guardian_cpf_ciphertext text;
 ALTER TABLE athletes ADD COLUMN IF NOT EXISTS guardian_relationship text;
-CREATE UNIQUE INDEX IF NOT EXISTS athletes_cpf_team_active_uq
-  ON athletes (cpf_hash, team_id) WHERE deleted_at IS NULL;
+-- Decisão (análise LVJ 2027, risco 1): RG no lugar do CPF, para o atleta e para o responsável
+-- legal do menor — mesma troca feita em users (gestor/atleta com conta).
+ALTER TABLE athletes DROP COLUMN IF EXISTS cpf_ciphertext;
+ALTER TABLE athletes DROP COLUMN IF EXISTS cpf_hash;
+ALTER TABLE athletes DROP COLUMN IF EXISTS guardian_cpf_ciphertext;
+DROP INDEX IF EXISTS athletes_cpf_team_active_uq;
+ALTER TABLE athletes ADD COLUMN IF NOT EXISTS rg_ciphertext text;
+ALTER TABLE athletes ADD COLUMN IF NOT EXISTS rg_hash text;
+ALTER TABLE athletes ADD COLUMN IF NOT EXISTS guardian_rg_ciphertext text;
+CREATE UNIQUE INDEX IF NOT EXISTS athletes_rg_team_active_uq
+  ON athletes (rg_hash, team_id) WHERE deleted_at IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS athletes_control_reference_active_uq
   ON athletes (control_id_reference) WHERE control_id_reference IS NOT NULL AND deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS athletes_team_status_idx ON athletes (team_id, status, created_at DESC) WHERE deleted_at IS NULL;

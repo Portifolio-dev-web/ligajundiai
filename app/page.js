@@ -56,7 +56,7 @@ import {
   Plus,
 } from 'lucide-react'
 import { api, CATEGORY_FALLBACK } from '@/lib/lvjApi'
-import { getAge, isValidCpf } from '@/lib/athlete'
+import { formatRg, getAge, isValidRg } from '@/lib/athlete'
 
 const PURPLE = '#6D28D9'
 const ORANGE = '#F97316'
@@ -73,7 +73,7 @@ const IMG_ARENA = 'https://images.unsplash.com/photo-1771909713106-86b9a412964a'
 function App() {
   const [token, setToken] = useState(null)
   const [user, setUser] = useState(null)
-  const [myTeam, setMyTeam] = useState(null)
+  const [myTeams, setMyTeams] = useState([])
   const [categories, setCategories] = useState(CATEGORY_FALLBACK)
   const [loginOpen, setLoginOpen] = useState(false)
   const [booting, setBooting] = useState(true)
@@ -81,14 +81,16 @@ function App() {
 
   const loadMe = useCallback(async () => {
     try {
-      const { user, team } = await api('/auth/me')
+      // Risco 1 (varredura, análise LVJ 2027): um gestor pode ter mais de uma equipe, então a
+      // sessão devolve a lista inteira (teams), não mais "a equipe" no singular.
+      const { user, teams } = await api('/auth/me')
       setToken(user ? 'cookie-session' : null)
       setUser(user)
-      setMyTeam(team)
+      setMyTeams(teams || [])
     } catch {
       setToken(null)
       setUser(null)
-      setMyTeam(null)
+      setMyTeams([])
     }
   }, [])
 
@@ -111,7 +113,7 @@ function App() {
     } catch {}
     setToken(null)
     setUser(null)
-    setMyTeam(null)
+    setMyTeams([])
     toast('Sessão encerrada')
   }
 
@@ -138,7 +140,7 @@ function App() {
         {user?.role === 'admin' ? (
           <AdminPanel token={token} categories={categories} />
         ) : user?.role === 'gestor' ? (
-          <GestorPanel token={token} categories={categories} user={user} myTeam={myTeam} refreshMe={() => loadMe(token)} />
+          <GestorPanel token={token} categories={categories} user={user} myTeams={myTeams} refreshMe={() => loadMe(token)} />
         ) : (
           <PublicSite categories={categories} currentYear={currentYear} onLoginClick={() => setLoginOpen(true)} />
         )}
@@ -505,7 +507,7 @@ function LoginDialog({ open, onOpenChange, onAuthed }) {
   const [requiresTotp, setRequiresTotp] = useState(false)
 
   // Register
-  const [reg, setReg] = useState({ name: '', email: '', phone: '', cpf: '', password: '', consent: false })
+  const [reg, setReg] = useState({ name: '', email: '', phone: '', rg: '', password: '', consent: false })
 
   const [loading, setLoading] = useState(false)
 
@@ -589,8 +591,8 @@ function LoginDialog({ open, onOpenChange, onAuthed }) {
                 <Input id="manager-register-phone" type="tel" autoComplete="tel" value={reg.phone} onChange={(e) => setReg({ ...reg, phone: e.target.value })} placeholder="(11) 90000-0000" />
               </div>
               <div>
-                <Label htmlFor="manager-register-cpf">CPF</Label>
-                <Input id="manager-register-cpf" inputMode="numeric" autoComplete="off" value={reg.cpf} onChange={(e) => setReg({ ...reg, cpf: e.target.value })} />
+                <Label htmlFor="manager-register-rg">RG</Label>
+                <Input id="manager-register-rg" inputMode="text" autoComplete="off" value={reg.rg} onChange={(e) => setReg({ ...reg, rg: formatRg(e.target.value) })} />
               </div>
             </div>
             <div>
@@ -854,7 +856,7 @@ function AdminAthletes({ token, reload }) {
     <Card className="mt-4">
       <CardHeader>
         <CardTitle>Liberação de Atletas</CardTitle>
-        <CardDescription>Atletas cadastrados pelos gestores. Mesmo CPF pode existir em várias categorias.</CardDescription>
+        <CardDescription>Atletas cadastrados pelos gestores. Mesmo RG pode existir em várias categorias.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         {athletes.map((a) => (
@@ -862,7 +864,7 @@ function AdminAthletes({ token, reload }) {
             <div>
               <div className="font-semibold">{a.name}</div>
               <div className="text-xs text-slate-500">
-                CPF {a.cpf} • {a.team_name} • {a.category} {a.position ? `• ${a.position}` : ''}
+                RG {a.rg} • {a.team_name} • {a.category} {a.position ? `• ${a.position}` : ''}
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -1245,7 +1247,7 @@ function AdminAttendance({ token, categories }) {
             <div className="rounded-lg border divide-y">
               {athletes.map((a) => (
                 <label key={a.id} className="flex items-center justify-between p-3 cursor-pointer">
-                  <span className="text-sm">{a.name} <span className="text-xs text-slate-400">CPF {a.cpf}</span></span>
+                  <span className="text-sm">{a.name} <span className="text-xs text-slate-400">RG {a.rg}</span></span>
                   <input type="checkbox" className="h-5 w-5" checked={!!present[a.id]} onChange={(e) => setPresent({ ...present, [a.id]: e.target.checked })} />
                 </label>
               ))}
@@ -1336,18 +1338,26 @@ function AdminEmails({ token }) {
 // ============================================================================
 // GESTOR PANEL
 // ============================================================================
-function GestorPanel({ token, categories, user, myTeam, refreshMe }) {
-  const [team, setTeam] = useState(myTeam)
+function GestorPanel({ token, categories, user, myTeams, refreshMe }) {
+  // Risco 1 (varredura, análise LVJ 2027): um gestor pode ter mais de uma equipe, então o painel
+  // precisa de um seletor de equipe ativa; elenco, frequência, classificação e agenda continuam
+  // mostrando uma equipe por vez, só que agora a pessoa escolhe qual.
+  const [teams, setTeams] = useState(myTeams)
+  const [activeTeamId, setActiveTeamId] = useState(myTeams[0]?.id ?? '')
   const [teamForm, setTeamForm] = useState({ name: '', category: categories[0] })
   const [registrationPeriods, setRegistrationPeriods] = useState([])
 
-  useEffect(() => setTeam(myTeam), [myTeam])
+  useEffect(() => setTeams(myTeams), [myTeams])
+  useEffect(() => {
+    setActiveTeamId((current) => (myTeams.some((team) => team.id === current) ? current : (myTeams[0]?.id ?? '')))
+  }, [myTeams])
   useEffect(() => {
     api('/registration-periods')
       .then((result) => setRegistrationPeriods(result.periods || []))
       .catch(() => {})
   }, [])
 
+  const activeTeam = teams.find((team) => team.id === activeTeamId) ?? null
   const teamPeriod = registrationPeriods.find((period) => (
     period.category === teamForm.category && period.registration_type === 'team'
   ))
@@ -1360,7 +1370,9 @@ function GestorPanel({ token, categories, user, myTeam, refreshMe }) {
     }
     try {
       const d = await api('/teams', { method: 'POST', token, body: teamForm })
-      setTeam(d.team)
+      setTeams((current) => [...current, d.team])
+      setActiveTeamId(d.team.id)
+      setTeamForm({ name: '', category: categories[0] })
       toast.success('Equipe enviada para aprovação!')
       refreshMe()
     } catch (e) {
@@ -1373,67 +1385,75 @@ function GestorPanel({ token, categories, user, myTeam, refreshMe }) {
       <h1 className="text-2xl font-extrabold flex items-center gap-2 mb-1" style={{ color: DARKBLUE }}>
         <Users className="h-6 w-6" style={{ color: PURPLE }} /> Painel do Gestor
       </h1>
-      <p className="text-slate-500 text-sm mb-6">Olá {user.name}, gerencie sua equipe e elenco.</p>
+      <p className="text-slate-500 text-sm mb-6">Olá {user.name}, gerencie suas equipes e elencos.</p>
 
-      {!team ? (
-        <Card className="max-w-lg">
-          <CardHeader>
-            <CardTitle>Inscrever equipe</CardTitle>
-            <CardDescription>As inscrições de equipes acontecem no período definido pelo administrador para cada categoria.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div>
-              <Label>Nome da equipe</Label>
-              <Input value={teamForm.name} onChange={(e) => setTeamForm({ ...teamForm, name: e.target.value })} />
-            </div>
-            <div>
-              <Label>Categoria</Label>
-              <Select value={teamForm.category} onValueChange={(v) => setTeamForm({ ...teamForm, category: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>{categories.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            {teamRegistrationOpen
-              ? <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800 sm:col-span-2">
-                Inscrições abertas até {new Date(teamPeriod.ends_at).toLocaleString('pt-BR')}.
-              </div>
-              : <div role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 sm:col-span-2">
-                {teamPeriod?.message || 'Inscrições encerradas, te aguardamos na próxima temporada.'}
-              </div>}
-            <Button className="text-white border-0" style={{ background: ORANGE }} onClick={createTeam} disabled={!teamForm.name || !teamRegistrationOpen}>
-              Solicitar inscrição
-            </Button>
-          </CardContent>
-        </Card>
-      ) : (
-        <>
+      {teams.length > 0 && <>
+        {teams.length > 1 && <div className="mb-4 max-w-xs">
+          <Label className="text-xs">Equipe</Label>
+          <Select value={activeTeamId} onValueChange={setActiveTeamId}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>{teams.map((team) => <SelectItem key={team.id} value={team.id}>{team.name} — {team.category}</SelectItem>)}</SelectContent>
+          </Select>
+        </div>}
+
+        {activeTeam && <>
           <Card className="mb-6">
             <CardContent className="p-4 flex items-center justify-between">
               <div>
-                <div className="text-lg font-bold">{team.name}</div>
-                <div className="text-sm text-slate-500">{team.category}</div>
-                {team.status === 'rejected' && team.justification && (
-                  <div className="text-xs text-red-500 mt-1">Motivo da recusa: {team.justification}</div>
+                <div className="text-lg font-bold">{activeTeam.name}</div>
+                <div className="text-sm text-slate-500">{activeTeam.category}</div>
+                {activeTeam.status === 'rejected' && activeTeam.justification && (
+                  <div className="text-xs text-red-500 mt-1">Motivo da recusa: {activeTeam.justification}</div>
                 )}
               </div>
-              <StatusBadge status={team.status} />
+              <StatusBadge status={activeTeam.status} />
             </CardContent>
           </Card>
 
-          <Tabs defaultValue="elenco">
+          <Tabs defaultValue="elenco" key={activeTeam.id}>
             <TabsList>
               <TabsTrigger value="elenco">Elenco</TabsTrigger>
               <TabsTrigger value="frequencia">Frequência</TabsTrigger>
               <TabsTrigger value="classificacao">Classificação</TabsTrigger>
               <TabsTrigger value="agenda">Agenda</TabsTrigger>
             </TabsList>
-            <TabsContent value="elenco"><GestorRoster token={token} team={team} /></TabsContent>
-            <TabsContent value="frequencia"><GestorFrequency token={token} /></TabsContent>
-            <TabsContent value="classificacao"><GestorStandings token={token} category={team.category} /></TabsContent>
-            <TabsContent value="agenda"><GestorAgenda category={team.category} token={token} team={team} /></TabsContent>
+            <TabsContent value="elenco"><GestorRoster token={token} team={activeTeam} /></TabsContent>
+            <TabsContent value="frequencia"><GestorFrequency token={token} teamId={activeTeam.id} /></TabsContent>
+            <TabsContent value="classificacao"><GestorStandings token={token} category={activeTeam.category} /></TabsContent>
+            <TabsContent value="agenda"><GestorAgenda category={activeTeam.category} token={token} team={activeTeam} /></TabsContent>
           </Tabs>
-        </>
-      )}
+        </>}
+      </>}
+
+      <Card className={teams.length ? 'mt-6 max-w-lg' : 'max-w-lg'}>
+        <CardHeader>
+          <CardTitle>{teams.length ? 'Cadastrar outra equipe' : 'Inscrever equipe'}</CardTitle>
+          <CardDescription>As inscrições de equipes acontecem no período definido pelo administrador para cada categoria.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div>
+            <Label>Nome da equipe</Label>
+            <Input value={teamForm.name} onChange={(e) => setTeamForm({ ...teamForm, name: e.target.value })} />
+          </div>
+          <div>
+            <Label>Categoria</Label>
+            <Select value={teamForm.category} onValueChange={(v) => setTeamForm({ ...teamForm, category: v })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>{categories.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          {teamRegistrationOpen
+            ? <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800 sm:col-span-2">
+              Inscrições abertas até {new Date(teamPeriod.ends_at).toLocaleString('pt-BR')}.
+            </div>
+            : <div role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 sm:col-span-2">
+              {teamPeriod?.message || 'Inscrições encerradas, te aguardamos na próxima temporada.'}
+            </div>}
+          <Button className="text-white border-0" style={{ background: ORANGE }} onClick={createTeam} disabled={!teamForm.name || !teamRegistrationOpen}>
+            Solicitar inscrição
+          </Button>
+        </CardContent>
+      </Card>
     </main>
   )
 }
@@ -1442,12 +1462,12 @@ function GestorRoster({ token, team }) {
   const [athletes, setAthletes] = useState([])
   const [athletePeriod, setAthletePeriod] = useState(null)
   const [loadingAthletePeriod, setLoadingAthletePeriod] = useState(true)
-  // LGPD (varredura, item L2): guardianName/guardianCpf/guardianRelationship só são obrigatórios
+  // LGPD (varredura, item L2): guardianName/guardianRg/guardianRelationship só são obrigatórios
   // quando a data de nascimento informada indicar menor de 18 anos (ver isMinor abaixo). Sem data
   // de nascimento aqui, não dá para saber a idade — mesma limitação já existente no backend.
   const [form, setForm] = useState({
-    name: '', cpf: '', position: '', birthdate: '', email: '', photo: null, consent: false,
-    guardianName: '', guardianCpf: '', guardianRelationship: '',
+    name: '', rg: '', position: '', birthdate: '', email: '', photo: null, consent: false,
+    guardianName: '', guardianRg: '', guardianRelationship: '',
   })
   const [rejectId, setRejectId] = useState(null)
   const [justification, setJustification] = useState('')
@@ -1456,11 +1476,12 @@ function GestorRoster({ token, team }) {
   // calculado a partir da data de nascimento, para decidir se mostra os campos do responsável legal.
   const athleteAge = getAge(form.birthdate)
   const isMinor = athleteAge !== null && athleteAge < 18
-  const validGuardianCpf = isValidCpf(form.guardianCpf)
+  const validGuardianRg = isValidRg(form.guardianRg)
 
   const load = useCallback(() => {
-    api('/athletes/mine', { token }).then((d) => setAthletes(d.athletes || [])).catch(() => {})
-  }, [token])
+    // Risco 1 (varredura, análise LVJ 2027): o elenco mostrado aqui é só da equipe ativa.
+    api(`/athletes/mine?team_id=${team.id}`, { token }).then((d) => setAthletes(d.athletes || [])).catch(() => {})
+  }, [token, team.id])
   useEffect(load, [load])
   useEffect(() => {
     api('/registration-periods')
@@ -1480,7 +1501,7 @@ function GestorRoster({ token, team }) {
         const upload = await api('/athletes/biometry-upload', {
           method: 'POST',
           token,
-          body: { content_type: form.photo.type },
+          body: { team_id: team.id, content_type: form.photo.type },
         })
         const uploadForm = new FormData()
         Object.entries(upload.uploadFields).forEach(([key, value]) => uploadForm.append(key, value))
@@ -1493,8 +1514,9 @@ function GestorRoster({ token, team }) {
         method: 'POST',
         token,
         body: {
+          team_id: team.id,
           name: form.name,
-          cpf: form.cpf,
+          rg: form.rg,
           position: form.position,
           birthdate: form.birthdate || undefined,
           email: form.email || undefined,
@@ -1504,15 +1526,15 @@ function GestorRoster({ token, team }) {
           // um menor sem esses três campos (GUARDIAN_REQUIRED).
           ...(isMinor ? {
             guardian_name: form.guardianName.trim(),
-            guardian_cpf: form.guardianCpf,
+            guardian_rg: form.guardianRg,
             guardian_relationship: form.guardianRelationship.trim(),
           } : {}),
         },
       })
       toast.success('Atleta cadastrado e aguardando aprovação do gestor.')
       setForm({
-        name: '', cpf: '', position: '', birthdate: '', email: '', photo: null, consent: false,
-        guardianName: '', guardianCpf: '', guardianRelationship: '',
+        name: '', rg: '', position: '', birthdate: '', email: '', photo: null, consent: false,
+        guardianName: '', guardianRg: '', guardianRelationship: '',
       })
       load()
     } catch (e) {
@@ -1548,8 +1570,8 @@ function GestorRoster({ token, team }) {
               <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </div>
             <div>
-              <Label className="text-xs">CPF</Label>
-              <Input value={form.cpf} onChange={(e) => setForm({ ...form, cpf: e.target.value })} />
+              <Label className="text-xs">RG</Label>
+              <Input value={form.rg} onChange={(e) => setForm({ ...form, rg: formatRg(e.target.value) })} />
             </div>
             <div>
               <Label className="text-xs">Posição</Label>
@@ -1586,8 +1608,8 @@ function GestorRoster({ token, team }) {
                   <Input value={form.guardianName} onChange={(e) => setForm({ ...form, guardianName: e.target.value })} />
                 </div>
                 <div>
-                  <Label className="text-xs">CPF do responsável</Label>
-                  <Input value={form.guardianCpf} onChange={(e) => setForm({ ...form, guardianCpf: e.target.value })} />
+                  <Label className="text-xs">RG do responsável</Label>
+                  <Input value={form.guardianRg} onChange={(e) => setForm({ ...form, guardianRg: formatRg(e.target.value) })} />
                 </div>
                 <div>
                   <Label className="text-xs">Parentesco</Label>
@@ -1605,9 +1627,9 @@ function GestorRoster({ token, team }) {
               className="text-white border-0"
               style={{ background: PURPLE }}
               onClick={add}
-              disabled={!form.name || !form.cpf || !form.position || !form.birthdate || !form.consent ||
+              disabled={!form.name || !form.rg || !form.position || !form.birthdate || !form.consent ||
                 (form.photo && form.photo.size > 5 * 1024 * 1024) ||
-                (isMinor && (!form.guardianName.trim() || !validGuardianCpf || !form.guardianRelationship.trim()))}
+                (isMinor && (!form.guardianName.trim() || !validGuardianRg || !form.guardianRelationship.trim()))}
             >
               <UserPlus className="h-4 w-4 mr-1" /> Adicionar
             </Button>
@@ -1627,7 +1649,7 @@ function GestorRoster({ token, team }) {
             <div key={a.id} className="flex items-center justify-between rounded-lg border p-3">
               <div className="text-sm">
                 <div className="font-semibold">{a.name}</div>
-                <div className="text-xs text-slate-500">CPF {a.cpf} {a.position ? `• ${a.position}` : ''}</div>
+                <div className="text-xs text-slate-500">RG {a.rg} {a.position ? `• ${a.position}` : ''}</div>
                 {a.status === 'rejected' && a.justification && <div className="text-xs text-red-500">Motivo: {a.justification}</div>}
               </div>
               <div className="flex items-center gap-2">
@@ -1660,11 +1682,14 @@ function GestorRoster({ token, team }) {
   )
 }
 
-function GestorFrequency({ token }) {
+function GestorFrequency({ token, teamId }) {
   const [data, setData] = useState({ attendance: [] })
   useEffect(() => {
     api('/attendance/mine', { token }).then(setData).catch(() => {})
   }, [token])
+  // Risco 1 (varredura, análise LVJ 2027): /attendance/mine soma as equipes do gestor; aqui
+  // filtramos para a equipe ativa no painel.
+  const rows = (data.attendance || []).filter((item) => !teamId || item.team_id === teamId)
   return (
     <Card className="mt-4">
       <CardHeader>
@@ -1672,7 +1697,7 @@ function GestorFrequency({ token }) {
         <CardDescription>Acompanhe a presença de cada atleta em relação à meta mínima da liga.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-2">
-        {(data.attendance || []).map((f) => (
+        {rows.map((f) => (
           <div key={f.athlete_id} className="rounded-lg border p-3">
             <div className="flex items-center justify-between text-sm">
               <span className="font-semibold">{f.name}</span>
@@ -1686,7 +1711,7 @@ function GestorFrequency({ token }) {
             <div className="text-xs text-slate-500 mt-1">{f.present}/{f.total_sessions} presenças • {f.percent}%</div>
           </div>
         ))}
-        {(data.attendance || []).length === 0 && <p className="text-sm text-slate-400">Ainda não há registros de presença.</p>}
+        {rows.length === 0 && <p className="text-sm text-slate-400">Ainda não há registros de presença.</p>}
       </CardContent>
     </Card>
   )

@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { query, transaction } from '../db/pool.js'
 import { AppError, notFound } from '../errors.js'
 import { authenticate, authorize } from '../security/auth.js'
-import { decryptSensitive, maskCpf } from '../security/crypto.js'
+import { decryptSensitive, maskRg } from '../security/crypto.js'
 import { cleanText, parse, uuidSchema } from '../security/validation.js'
 import { categories, getRegistrationPeriods, registrationStatus } from '../services/registration.js'
 import { asyncRoute, audit } from '../utils.js'
@@ -121,7 +121,7 @@ adminRouter.get('/logs', asyncRoute(async (_req, res) => {
 adminRouter.get('/attendance', asyncRoute(async (req, res) => {
   const input = parse(z.object({ team_id: uuidSchema }).strict(), req.query)
   const result = await query(
-    `SELECT a.id AS athlete_id, a.name, a.cpf_ciphertext,
+    `SELECT a.id AS athlete_id, a.name, a.rg_ciphertext,
        count(att.id)::int AS total_sessions,
        count(att.id) FILTER (WHERE att.present)::int AS present
      FROM athletes a LEFT JOIN attendance att ON att.athlete_id = a.id AND att.deleted_at IS NULL
@@ -132,12 +132,12 @@ adminRouter.get('/attendance', asyncRoute(async (req, res) => {
   const rules = await query('SELECT min_attendance_percent FROM rules WHERE id = $1', ['league_rules'])
   const minimum = Number(rules.rows[0]?.min_attendance_percent ?? 70)
   const attendance = result.rows.map((row) => {
-    const cpf = decryptSensitive(row.cpf_ciphertext)
+    const rg = decryptSensitive(row.rg_ciphertext)
     const percent = row.total_sessions ? Number(((row.present / row.total_sessions) * 100).toFixed(1)) : 0
     return {
       athlete_id: row.athlete_id,
       name: row.name,
-      cpf: maskCpf(cpf),
+      rg: maskRg(rg),
       total_sessions: row.total_sessions,
       present: row.present,
       percent,

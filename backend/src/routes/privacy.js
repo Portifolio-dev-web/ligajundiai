@@ -47,14 +47,14 @@ privacyRouter.delete('/me', asyncRoute(async (req, res) => {
     )
     const now = new Date()
     // LGPD (varredura, item L2): a referência de LGPD do time de segurança descreve um achado real
-    // em outro sistema — a anonimização apagava o titular e deixava nome/CPF do responsável para
-    // trás. Por isso guardian_name/guardian_cpf_ciphertext/guardian_relationship entram aqui junto
+    // em outro sistema — a anonimização apagava o titular e deixava nome/RG do responsável para
+    // trás. Por isso guardian_name/guardian_rg_ciphertext/guardian_relationship entram aqui junto
     // com os outros campos identificáveis do atleta.
     await client.query(
-      `UPDATE athletes SET name = 'Atleta anonimizado', cpf_ciphertext = NULL, cpf_hash = NULL,
+      `UPDATE athletes SET name = 'Atleta anonimizado', rg_ciphertext = NULL, rg_hash = NULL,
          birthdate = NULL, age_at_registration = NULL, positions = '{}', biometry_url = NULL,
          biometry_object_key = NULL, control_id_reference = NULL,
-         guardian_name = NULL, guardian_cpf_ciphertext = NULL, guardian_relationship = NULL,
+         guardian_name = NULL, guardian_rg_ciphertext = NULL, guardian_relationship = NULL,
          deleted_at = $2, updated_at = $2
        WHERE (user_id = $1 OR manager_user_id = $1) AND deleted_at IS NULL`,
       [req.user.id, now],
@@ -68,7 +68,7 @@ privacyRouter.delete('/me', asyncRoute(async (req, res) => {
     const passwordHash = await argon2.hash(randomBytes(48).toString('hex'), { type: argon2.argon2id })
     await client.query(
       `UPDATE users SET name = 'Usuário anonimizado', email = $2, password_hash = $3,
-         phone = NULL, cpf_ciphertext = NULL, cpf_hash = NULL, totp_secret_ciphertext = NULL,
+         phone = NULL, rg_ciphertext = NULL, rg_hash = NULL, totp_secret_ciphertext = NULL,
          status = 'suspended', deleted_at = $4, updated_at = $4 WHERE id = $1`,
       [req.user.id, anonymizedEmail, passwordHash, now],
     )

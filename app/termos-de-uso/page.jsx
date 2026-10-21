@@ -62,7 +62,7 @@ export default function TermosDeUsoPage() {
 
           <Section title="4. Sua responsabilidade pelos dados informados">
             <p>
-              Você é responsável por informar dados verdadeiros (nome, CPF, data de nascimento) e por
+              Você é responsável por informar dados verdadeiros (nome, RG, data de nascimento) e por
               enviar uma foto sua (ou do atleta sob sua responsabilidade) para o cadastro biométrico.
               Cadastro com dados falsos pode ser recusado ou cancelado pela administração da liga.
             </p>

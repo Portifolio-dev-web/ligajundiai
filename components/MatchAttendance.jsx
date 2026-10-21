@@ -26,7 +26,7 @@ function printDeclaration(match, attendance) {
 
 export default function MatchAttendance({ expectedRole }) {
   const [user, setUser] = useState(null)
-  const [team, setTeam] = useState(null)
+  const [teams, setTeams] = useState([])
   const [matches, setMatches] = useState([])
   const [attendance, setAttendance] = useState([])
   const [loading, setLoading] = useState(true)
@@ -50,7 +50,8 @@ export default function MatchAttendance({ expectedRole }) {
       setMatches(matchResult.matches || [])
       if (session.user.role === 'atleta') setAttendance(extra.attendance || [])
       else {
-        setTeam(extra[0].team)
+        // Risco 1 (varredura, análise LVJ 2027): um gestor pode ter mais de uma equipe.
+        setTeams(extra[0].teams || [])
         setAttendance(extra[1].attendance || [])
       }
     } catch (requestError) {
@@ -62,9 +63,10 @@ export default function MatchAttendance({ expectedRole }) {
 
   useEffect(() => { load() }, [load])
 
-  const visibleMatches = user?.role === 'gestor' && team
-    ? matches.filter((match) => match.home_team_id === team.id || match.away_team_id === team.id)
-    : user?.role === 'gestor' ? [] : matches
+  const myTeamIds = new Set(teams.map((item) => item.id))
+  const visibleMatches = user?.role === 'gestor'
+    ? matches.filter((match) => myTeamIds.has(match.home_team_id) || myTeamIds.has(match.away_team_id))
+    : matches
   const attendanceByMatch = new Map(attendance.filter((item) => item.match_id).map((item) => [item.match_id, item]))
 
   return (

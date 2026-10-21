@@ -21,8 +21,8 @@ export function decryptSensitive(value) {
   return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8')
 }
 
-export function cpfDigest(cpf) {
-  return createHash('sha256').update(cpf).digest('hex')
+export function rgDigest(rg) {
+  return createHash('sha256').update(rg).digest('hex')
 }
 
 export function safeEqual(left, right) {
@@ -31,6 +31,11 @@ export function safeEqual(left, right) {
   return a.length === b.length && timingSafeEqual(a, b)
 }
 
-export function maskCpf(cpf) {
-  return cpf ? `***.***.${cpf.slice(-5, -2)}-${cpf.slice(-2)}` : null
+// Decisão (análise LVJ 2027, risco 1): RG no lugar do CPF — sem formato nacional fixo (cada
+// estado emite o seu), então a máscara não assume tamanho ou pontuação, só revela os últimos
+// 3 caracteres.
+export function maskRg(rg) {
+  if (!rg) return null
+  const visible = rg.slice(-3)
+  return `${'*'.repeat(Math.max(rg.length - visible.length, 3))}${visible}`
 }

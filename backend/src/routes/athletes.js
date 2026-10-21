@@ -4,12 +4,12 @@ import { config } from '../config.js'
 import { query, transaction } from '../db/pool.js'
 import { AppError, notFound } from '../errors.js'
 import { authenticate, authorize, createSession, hashPassword } from '../security/auth.js'
-import { cpfDigest, encryptSensitive, maskCpf } from '../security/crypto.js'
-import { cleanText, emailSchema, parse, requireValidCpf, validatePositions, uuidSchema } from '../security/validation.js'
+import { rgDigest, encryptSensitive, maskRg } from '../security/crypto.js'
+import { cleanText, emailSchema, parse, requireValidRg, validatePositions, uuidSchema } from '../security/validation.js'
 import { enqueueEmail, escapeHtml } from '../services/email.js'
 import { createBiometryUpload } from '../services/storage.js'
 import { assertRegistrationOpen } from '../services/registration.js'
-import { asyncRoute, audit, notify, toPublicAthlete, userTeam } from '../utils.js'
+import { asyncRoute, audit, notify, toPublicAthlete, teamForManager, userTeams } from '../utils.js'
 import { authRateLimit } from '../security/rate-limit.js'
 
 export const athletesRouter = Router()
@@ -29,17 +29,18 @@ const MINOR_AGE_LIMIT = 18
 async function createAthlete(client, { userId, managerId, team, input, actor }) {
   await assertRegistrationOpen(team.category, 'athlete', client)
   if (!input.consent) throw new AppError(400, 'CONSENT_REQUIRED', 'É necessário registrar o consentimento explícito')
-  const cpf = requireValidCpf(input.cpf)
+  // Decisão (análise LVJ 2027, risco 1): identificação por RG, não mais por CPF.
+  const rg = requireValidRg(input.rg)
   const positions = positionsFrom(input)
   const key = input.biometry_key || null
   if (key && !key.startsWith(`biometry/${managerId}/`)) {
     throw new AppError(400, 'INVALID_BIOMETRY_KEY', 'A chave de biometria não pertence a esta equipe')
   }
   const existing = await client.query(
-    `SELECT id FROM athletes WHERE cpf_hash = $1 AND team_id = $2 AND deleted_at IS NULL`,
-    [cpfDigest(cpf), team.id],
+    `SELECT id FROM athletes WHERE rg_hash = $1 AND team_id = $2 AND deleted_at IS NULL`,
+    [rgDigest(rg), team.id],
   )
-  if (existing.rowCount) throw new AppError(409, 'ATHLETE_ALREADY_EXISTS', 'Este CPF já está cadastrado nesta equipe')
+  if (existing.rowCount) throw new AppError(409, 'ATHLETE_ALREADY_EXISTS', 'Este RG já está cadastrado nesta equipe')
   const date = input.birthdate ? new Date(`${input.birthdate}T00:00:00Z`) : null
   if (date && Number.isNaN(date.getTime())) throw new AppError(400, 'INVALID_BIRTHDATE', 'Data de nascimento inválida')
   const calculatedAge = date ? Math.floor((Date.now() - date.getTime()) / (365.2425 * 24 * 60 * 60 * 1000)) : null
@@ -50,36 +51,36 @@ async function createAthlete(client, { userId, managerId, team, input, actor }) 
   }
 
   // LGPD (varredura, item L2): atleta menor de idade precisa do responsável legal identificado —
-  // nome, CPF e parentesco — e não só de alguém marcar uma caixinha de "confirmo que obtive o
+  // nome, RG e parentesco — e não só de alguém marcar uma caixinha de "confirmo que obtive o
   // consentimento". Sem essa identificação, não há como provar quem consentiu (art. 8º, ônus da
   // prova é do controlador) nem como a liga responder se o responsável pedir a exclusão dos dados.
   const isMinor = age !== null && age < MINOR_AGE_LIMIT
-  let guardianCpf = null
+  let guardianRg = null
   if (isMinor) {
-    if (!input.guardian_name || !input.guardian_cpf || !input.guardian_relationship) {
-      throw new AppError(400, 'GUARDIAN_REQUIRED', 'Para atletas menores de 18 anos, informe nome, CPF e parentesco do responsável legal')
+    if (!input.guardian_name || !input.guardian_rg || !input.guardian_relationship) {
+      throw new AppError(400, 'GUARDIAN_REQUIRED', 'Para atletas menores de 18 anos, informe nome, RG e parentesco do responsável legal')
     }
-    guardianCpf = requireValidCpf(input.guardian_cpf)
+    guardianRg = requireValidRg(input.guardian_rg)
   }
 
   const result = await client.query(
     `INSERT INTO athletes
-     (user_id, team_id, manager_user_id, name, cpf_ciphertext, cpf_hash, birthdate,
+     (user_id, team_id, manager_user_id, name, rg_ciphertext, rg_hash, birthdate,
        age_at_registration, positions, status, consent_at, consent_version, contact_email,
        consent_confirmed, biometry_object_key, biometry_url,
-       guardian_name, guardian_cpf_ciphertext, guardian_relationship)
+       guardian_name, guardian_rg_ciphertext, guardian_relationship)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'awaiting_manager', now(), $10, $11, true, $12, $13, $14, $15, $16)
      RETURNING id, user_id, team_id, manager_user_id, name, birthdate,
        age_at_registration, positions, status, justification, biometry_url,
        biometry_status, control_id_reference, created_at,
-       guardian_name, guardian_cpf_ciphertext, guardian_relationship`,
+       guardian_name, guardian_rg_ciphertext, guardian_relationship`,
     [
       userId,
       team.id,
       managerId,
       cleanText(input.name, 120),
-      encryptSensitive(cpf),
-      cpfDigest(cpf),
+      encryptSensitive(rg),
+      rgDigest(rg),
       date,
       age,
       positions,
@@ -88,7 +89,7 @@ async function createAthlete(client, { userId, managerId, team, input, actor }) 
       key,
       key ? `s3://${config.S3_BUCKET}/${key}` : null,
       isMinor ? cleanText(input.guardian_name, 120) : null,
-      isMinor ? encryptSensitive(guardianCpf) : null,
+      isMinor ? encryptSensitive(guardianRg) : null,
       isMinor ? cleanText(input.guardian_relationship, 60) : null,
     ],
   )
@@ -105,8 +106,13 @@ async function createAthlete(client, { userId, managerId, team, input, actor }) 
 }
 
 athletesRouter.post('/biometry-upload', authenticate, authorize('gestor'), asyncRoute(async (req, res) => {
-  const input = parse(z.object({ content_type: z.enum(['image/jpeg', 'image/png', 'image/webp']) }).strict(), req.body)
-  const team = await userTeam(req.user.id)
+  const input = parse(z.object({
+    team_id: uuidSchema,
+    content_type: z.enum(['image/jpeg', 'image/png', 'image/webp']),
+  }).strict(), req.body)
+  // Risco 1 (varredura, análise LVJ 2027): um gestor pode ter mais de uma equipe, então a equipe
+  // precisa vir explícita no corpo da requisição — teamForManager já confirma que ela é dele.
+  const team = await teamForManager(req.user.id, input.team_id)
   if (!team || team.status !== 'approved') {
     throw new AppError(403, 'TEAM_NOT_APPROVED', 'A equipe precisa ser aprovada antes do cadastro de atletas')
   }
@@ -136,8 +142,9 @@ athletesRouter.post('/biometry-upload-public', authRateLimit, asyncRoute(async (
 
 athletesRouter.post('/', authenticate, authorize('gestor'), asyncRoute(async (req, res) => {
   const input = parse(z.object({
+    team_id: uuidSchema,
     name: z.string().trim().min(2).max(120),
-    cpf: z.string().min(1).max(20),
+    rg: z.string().min(1).max(20),
     birthdate: z.string().date().optional(),
     age: z.number().int().min(0).max(120).optional(),
     email: z.string().trim().email().max(254).optional(),
@@ -148,17 +155,19 @@ athletesRouter.post('/', authenticate, authorize('gestor'), asyncRoute(async (re
     consent_version: z.string().max(40).optional(),
     // LGPD (varredura, item L2): só exigidos pelo createAthlete quando a idade informada for < 18.
     guardian_name: z.string().trim().min(2).max(120).optional(),
-    guardian_cpf: z.string().min(1).max(20).optional(),
+    guardian_rg: z.string().min(1).max(20).optional(),
     guardian_relationship: z.string().trim().min(2).max(60).optional(),
   }).strict(), req.body)
-  const team = await userTeam(req.user.id)
-  if (!team) throw new AppError(400, 'TEAM_REQUIRED', 'Cadastre sua equipe primeiro')
+  // Risco 1 (varredura, análise LVJ 2027): a equipe agora vem explícita no corpo (team_id),
+  // já que o gestor pode ter mais de uma; teamForManager confirma que ela é dele.
+  const team = await teamForManager(req.user.id, input.team_id)
+  if (!team) throw new AppError(400, 'TEAM_REQUIRED', 'Selecione uma equipe sua para cadastrar o atleta')
   if (team.status !== 'approved') throw new AppError(403, 'TEAM_NOT_APPROVED', 'A equipe precisa ser aprovada antes do cadastro de atletas')
   const athlete = await transaction((client) => createAthlete(client, {
     userId: null, managerId: req.user.id, team, input, actor: req.user,
   }))
   // LGPD (varredura, item L2): troquei o spread manual por toPublicAthlete — createAthlete agora
-  // devolve também guardian_cpf_ciphertext, que não pode ir para a resposta sem ser mascarado.
+  // devolve também guardian_rg_ciphertext, que não pode ir para a resposta sem ser mascarado.
   res.status(201).json({ athlete: { ...toPublicAthlete(athlete), position: athlete.positions[0] } })
 }))
 
@@ -168,7 +177,7 @@ athletesRouter.post('/self-register', authRateLimit, asyncRoute(async (req, res)
     name: z.string().trim().min(2).max(120),
     email: emailSchema,
     password: z.string().min(12).max(128),
-    cpf: z.string().min(1).max(20),
+    rg: z.string().min(1).max(20),
     birthdate: z.string().date().optional(),
     age: z.number().int().min(0).max(120).optional(),
     positions: positionSchema,
@@ -178,7 +187,7 @@ athletesRouter.post('/self-register', authRateLimit, asyncRoute(async (req, res)
     // LGPD (varredura, item L2): o próprio atleta pode ser menor de idade (categorias Sub-19); se a
     // idade informada for < 18, createAthlete exige esses três campos antes de gravar o cadastro.
     guardian_name: z.string().trim().min(2).max(120).optional(),
-    guardian_cpf: z.string().min(1).max(20).optional(),
+    guardian_rg: z.string().min(1).max(20).optional(),
     guardian_relationship: z.string().trim().min(2).max(60).optional(),
   }).strict(), req.body)
   const selected = await query(
@@ -194,12 +203,12 @@ athletesRouter.post('/self-register', authRateLimit, asyncRoute(async (req, res)
   if (!input.biometry_key.startsWith(keyPrefix)) {
     throw new AppError(400, 'INVALID_BIOMETRY_KEY', 'A chave da foto não pertence à equipe selecionada')
   }
-  const cpf = requireValidCpf(input.cpf)
+  const rg = requireValidRg(input.rg)
   const passwordHash = await hashPassword(input.password)
   const result = await transaction(async (client) => {
     const createdUser = await client.query(
       `INSERT INTO users
-       (role, name, email, password_hash, cpf_ciphertext, cpf_hash,
+       (role, name, email, password_hash, rg_ciphertext, rg_hash,
         consent_at, consent_version, consent_confirmed)
        VALUES ('atleta', $1, $2, $3, $4, $5, now(), $6, true)
        RETURNING id, role, name, email`,
@@ -207,8 +216,8 @@ athletesRouter.post('/self-register', authRateLimit, asyncRoute(async (req, res)
         cleanText(input.name, 120),
         input.email,
         passwordHash,
-        encryptSensitive(cpf),
-        cpfDigest(cpf),
+        encryptSensitive(rg),
+        rgDigest(rg),
         input.consent_version || config.CONSENT_VERSION,
       ],
     )
@@ -228,18 +237,21 @@ athletesRouter.post('/self-register', authRateLimit, asyncRoute(async (req, res)
 }))
 
 athletesRouter.get('/mine', authenticate, authorize('gestor'), asyncRoute(async (req, res) => {
-  const team = await userTeam(req.user.id)
-  if (!team) return res.json({ athletes: [] })
+  // Risco 1 (varredura, análise LVJ 2027): sem team_id na query, lista o elenco de TODAS as
+  // equipes do gestor; com team_id, filtra para uma delas (confirmando que é dele).
+  const teamId = req.query.team_id ? parse(uuidSchema, req.query.team_id) : null
+  const teams = teamId ? [await teamForManager(req.user.id, teamId)].filter(Boolean) : await userTeams(req.user.id)
+  if (!teams.length) return res.json({ athletes: [] })
   const result = await query(
-    // LGPD (varredura, item L2): guardian_name/guardian_cpf_ciphertext/guardian_relationship
+    // LGPD (varredura, item L2): guardian_name/guardian_rg_ciphertext/guardian_relationship
     // entram aqui para o gestor conseguir ver, nos próprios atletas da equipe, quem é o
-    // responsável legal registrado (toPublicAthlete mascara o CPF do responsável, igual ao do atleta).
+    // responsável legal registrado (toPublicAthlete mascara o RG do responsável, igual ao do atleta).
     `SELECT a.id, a.user_id, a.team_id, a.manager_user_id, a.name, a.birthdate,
        a.age_at_registration, a.positions, a.status, a.justification, a.biometry_url,
-       a.biometry_status, a.control_id_reference, a.created_at, a.cpf_ciphertext,
-       a.guardian_name, a.guardian_cpf_ciphertext, a.guardian_relationship
-     FROM athletes a WHERE a.team_id = $1 AND a.deleted_at IS NULL ORDER BY a.created_at DESC`,
-    [team.id],
+       a.biometry_status, a.control_id_reference, a.created_at, a.rg_ciphertext,
+       a.guardian_name, a.guardian_rg_ciphertext, a.guardian_relationship
+     FROM athletes a WHERE a.team_id = ANY($1::uuid[]) AND a.deleted_at IS NULL ORDER BY a.created_at DESC`,
+    [teams.map((team) => team.id)],
   )
   res.json({ athletes: result.rows.map((athlete) => ({ ...toPublicAthlete(athlete), position: athlete.positions[0] })) })
 }))
@@ -256,20 +268,21 @@ athletesRouter.get('/me', authenticate, authorize('atleta'), asyncRoute(async (r
 
 // SEGURANÇA (varredura, item S3): antes era GET /cpf/:cpf — o CPF ia na própria URL e por isso
 // ficava em log de proxy/servidor e no histórico do navegador, mesmo autenticado. Virou POST com o
-// CPF no corpo da requisição, igual ao resto da API já fazia para outros dados sensíveis.
-athletesRouter.post('/cpf-lookup', authenticate, authorize('admin', 'gestor'), asyncRoute(async (req, res) => {
-  const input = parse(z.object({ cpf: z.string().min(1).max(20) }).strict(), req.body)
-  const cpf = requireValidCpf(input.cpf)
+// documento no corpo da requisição, igual ao resto da API já fazia para outros dados sensíveis.
+// Decisão (análise LVJ 2027, risco 1): /cpf-lookup virou /rg-lookup com a troca de CPF por RG.
+athletesRouter.post('/rg-lookup', authenticate, authorize('admin', 'gestor'), asyncRoute(async (req, res) => {
+  const input = parse(z.object({ rg: z.string().min(1).max(20) }).strict(), req.body)
+  const rg = requireValidRg(input.rg)
   const result = await query(
     `SELECT a.id, a.team_id, a.name, a.status, a.created_at,
        t.name AS team_name, t.category
      FROM athletes a JOIN teams t ON t.id = a.team_id
-     WHERE a.cpf_hash = $1 AND a.deleted_at IS NULL
+     WHERE a.rg_hash = $1 AND a.deleted_at IS NULL
        AND ($2::app_role = 'admin' OR t.manager_user_id = $3)
      ORDER BY a.created_at DESC`,
-    [cpfDigest(cpf), req.user.role, req.user.id],
+    [rgDigest(rg), req.user.role, req.user.id],
   )
-  res.json({ cpf: maskCpf(cpf), registrations: result.rows })
+  res.json({ rg: maskRg(rg), registrations: result.rows })
 }))
 
 gestorAthletesRouter.use(authenticate, authorize('gestor'))
@@ -278,18 +291,21 @@ gestorAthletesRouter.get('/', asyncRoute(async (req, res) => {
   if (!['awaiting_manager', 'awaiting_admin', 'approved', 'rejected'].includes(status)) {
     throw new AppError(400, 'INVALID_STATUS', 'Status inválido')
   }
-  const team = await userTeam(req.user.id)
-  if (!team) return res.json({ athletes: [] })
+  // Risco 1 (varredura, análise LVJ 2027): sem team_id na query, a fila de aprovação junta as
+  // equipes do gestor; team_name ajuda a distinguir de qual equipe é cada atleta na lista.
+  const teamId = req.query.team_id ? parse(uuidSchema, req.query.team_id) : null
+  const teams = teamId ? [await teamForManager(req.user.id, teamId)].filter(Boolean) : await userTeams(req.user.id)
+  if (!teams.length) return res.json({ athletes: [] })
   const result = await query(
     // LGPD (varredura, item L2): guardian_name/guardian_relationship aparecem aqui para o gestor
     // confirmar, na hora de aprovar, que um atleta menor de idade tem responsável identificado.
     `SELECT a.id, a.name, a.birthdate, a.age_at_registration, a.positions,
-       a.status, a.justification, a.biometry_status, a.created_at,
+       a.status, a.justification, a.biometry_status, a.created_at, a.team_id, t.name AS team_name,
        a.guardian_name, a.guardian_relationship
-     FROM athletes a
-     WHERE a.team_id = $1 AND a.status = $2 AND a.deleted_at IS NULL
+     FROM athletes a JOIN teams t ON t.id = a.team_id
+     WHERE a.team_id = ANY($1::uuid[]) AND a.status = $2 AND a.deleted_at IS NULL
      ORDER BY a.created_at DESC`,
-    [team.id, status],
+    [teams.map((team) => team.id), status],
   )
   res.json({ athletes: result.rows })
 }))
@@ -344,12 +360,12 @@ adminAthleteActionsRouter.get('/', asyncRoute(async (req, res) => {
   }
   const result = await query(
     // LGPD (varredura, item L2): o admin faz a aprovação final — precisa ver quem é o responsável
-    // legal de um atleta menor de idade antes de aprovar (toPublicAthlete mascara o CPF dele).
+    // legal de um atleta menor de idade antes de aprovar (toPublicAthlete mascara o RG dele).
     `SELECT a.id, a.user_id, a.team_id, a.manager_user_id, a.name, a.birthdate,
        a.age_at_registration, a.positions, a.status, a.justification, a.biometry_url,
-       a.biometry_status, a.control_id_reference, a.created_at, a.cpf_ciphertext, t.name AS team_name,
+       a.biometry_status, a.control_id_reference, a.created_at, a.rg_ciphertext, t.name AS team_name,
        t.category, u.name AS manager_name, u.email AS manager_email,
-       a.guardian_name, a.guardian_cpf_ciphertext, a.guardian_relationship
+       a.guardian_name, a.guardian_rg_ciphertext, a.guardian_relationship
      FROM athletes a JOIN teams t ON t.id = a.team_id
      JOIN users u ON u.id = a.manager_user_id
      WHERE a.deleted_at IS NULL AND ($1::athlete_status IS NULL OR a.status = $1)

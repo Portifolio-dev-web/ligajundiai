@@ -142,7 +142,42 @@ describe('team creation constraints', () => {
   test('returns an empty session state for an anonymous visitor', async () => {
     const response = await request(app).get('/api/auth/me')
     expect(response.status).toBe(200)
-    expect(response.body).toEqual({ user: null, team: null })
+    expect(response.body).toEqual({ user: null, teams: [] })
+  })
+
+  test('allows a manager to register more than one team', async () => {
+    const manager = await createManager('multi-equipe')
+    const adminCookie = await createAdminSession()
+    await configurePeriod(adminCookie, 'Adulto Masculino', 'team')
+    await configurePeriod(adminCookie, 'Adulto Feminino', 'team')
+    const first = await request(app)
+      .post('/api/teams')
+      .set('Cookie', manager.headers['set-cookie'])
+      .send({ name: `${teamName} Multi A`, category: 'Adulto Masculino' })
+    expect(first.status).toBe(201)
+    createdTeams.push(first.body.team.id)
+
+    const second = await request(app)
+      .post('/api/teams')
+      .set('Cookie', manager.headers['set-cookie'])
+      .send({ name: `${teamName} Multi B`, category: 'Adulto Feminino' })
+    expect(second.status).toBe(201)
+    createdTeams.push(second.body.team.id)
+
+    const mine = await request(app)
+      .get('/api/teams/mine')
+      .set('Cookie', manager.headers['set-cookie'])
+    expect(mine.status).toBe(200)
+    expect(mine.body.teams.map((team) => team.id)).toEqual(
+      expect.arrayContaining([first.body.team.id, second.body.team.id]),
+    )
+
+    const me = await request(app)
+      .get('/api/auth/me')
+      .set('Cookie', manager.headers['set-cookie'])
+    expect(me.body.teams.map((team) => team.id)).toEqual(
+      expect.arrayContaining([first.body.team.id, second.body.team.id]),
+    )
   })
 
   test('enforces gestor then admin approval and blocks admin membership as team manager', async () => {
@@ -168,8 +203,9 @@ describe('team creation constraints', () => {
       .post('/api/athletes')
       .set('Cookie', manager.headers['set-cookie'])
       .send({
+        team_id: teamId,
         name: 'Atleta de integração',
-        cpf: '529.982.247-25',
+        rg: '123456789',
         age: 24,
         position: 'levantador',
         consent: true,
@@ -262,7 +298,7 @@ describe('team creation constraints', () => {
         name: 'Atleta de cadastro público',
         email: `atleta-${randomUUID()}@example.test`,
         password: 'Senha-Forte-Atleta-2026',
-        cpf: '529.982.247-25',
+        rg: '987654321',
         age: 22,
         positions: ['levantador'],
         biometry_key: presign.body.key,

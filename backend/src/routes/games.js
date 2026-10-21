@@ -4,7 +4,7 @@ import { query, transaction } from '../db/pool.js'
 import { AppError, forbidden, notFound } from '../errors.js'
 import { authenticate, authorize } from '../security/auth.js'
 import { cleanText, parse, uuidSchema } from '../security/validation.js'
-import { asyncRoute, audit, notify, userTeam } from '../utils.js'
+import { asyncRoute, audit, notify } from '../utils.js'
 
 export const gamesRouter = Router()
 export const adminGamesRouter = Router()
@@ -144,22 +144,24 @@ adminGamesRouter.put('/matches/:matchId/result', asyncRoute(async (req, res) => 
 gestorGamesRouter.use(authenticate, authorize('gestor'))
 gestorGamesRouter.post('/:matchId/accept', asyncRoute(async (req, res) => {
   const match = await transaction(async (client) => {
-    const team = await client.query(
-      'SELECT id FROM teams WHERE manager_user_id = $1 AND status = $2 AND deleted_at IS NULL LIMIT 1',
+    // Risco 1 (varredura, análise LVJ 2027): um gestor pode ter mais de uma equipe aprovada,
+    // então o aceite precisa procurar o jogo em TODAS elas, não só na primeira encontrada.
+    const teams = await client.query(
+      'SELECT id FROM teams WHERE manager_user_id = $1 AND status = $2 AND deleted_at IS NULL',
       [req.user.id, 'approved'],
     )
-    if (!team.rowCount) throw forbidden('Somente gestores de equipes aprovadas podem aceitar jogos')
+    if (!teams.rowCount) throw forbidden('Somente gestores de equipes aprovadas podem aceitar jogos')
+    const teamIds = teams.rows.map((team) => team.id)
     const selected = await client.query(
       'SELECT * FROM matches WHERE id = $1 AND deleted_at IS NULL FOR UPDATE',
       [req.params.matchId],
     )
     const current = selected.rows[0]
     if (!current) throw notFound('Jogo não encontrado')
-    if (![current.home_team_id, current.away_team_id].includes(team.rows[0].id)) {
-      throw forbidden('Este jogo não foi proposto para sua equipe')
-    }
+    const myTeamId = [current.home_team_id, current.away_team_id].find((id) => teamIds.includes(id))
+    if (!myTeamId) throw forbidden('Este jogo não foi proposto para sua equipe')
     if (current.status !== 'proposed') throw new AppError(409, 'INVALID_TRANSITION', 'Este jogo não está aguardando aceite')
-    const side = current.home_team_id === team.rows[0].id ? 'home_accepted_at' : 'away_accepted_at'
+    const side = current.home_team_id === myTeamId ? 'home_accepted_at' : 'away_accepted_at'
     const updated = await client.query(
       `UPDATE matches SET ${side} = now(),
          status = CASE
@@ -170,7 +172,7 @@ gestorGamesRouter.post('/:matchId/accept', asyncRoute(async (req, res) => {
        WHERE id = $1 RETURNING *`,
       [current.id, side],
     )
-    await audit(client, req.user, 'match.accept', 'match', current.id, { team_id: team.rows[0].id })
+    await audit(client, req.user, 'match.accept', 'match', current.id, { team_id: myTeamId })
     return updated.rows[0]
   })
   res.json({ match })

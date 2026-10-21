@@ -105,10 +105,7 @@ export default function CameraCapture({ teamId, onUploaded, disabled = false, pu
         ? '/athletes/biometry-upload-public'
         : '/athletes/biometry-upload', {
         method: 'POST',
-        body: {
-          content_type: captured.type,
-          ...(publicRegistration ? { team_id: teamId } : {}),
-        },
+        body: { team_id: teamId, content_type: captured.type },
       })
       const form = new FormData()
       for (const [name, value] of Object.entries(uploadFields)) form.append(name, value)

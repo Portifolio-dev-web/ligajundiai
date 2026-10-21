@@ -1,19 +1,20 @@
 import { describe, expect, test } from '@jest/globals'
-import { decryptSensitive, encryptSensitive, maskCpf } from './crypto.js'
-import { cleanText, isValidCpf } from './validation.js'
+import { decryptSensitive, encryptSensitive, maskRg } from './crypto.js'
+import { cleanText, isValidRg } from './validation.js'
 
 describe('input and sensitive data helpers', () => {
-  test('validates CPF check digits and rejects repeated digits', () => {
-    expect(isValidCpf('529.982.247-25')).toBe(true)
-    expect(isValidCpf('111.111.111-11')).toBe(false)
-    expect(isValidCpf('529.982.247-24')).toBe(false)
+  test('validates RG length and accepts the alphabetic check digit', () => {
+    expect(isValidRg('12.345.678-9')).toBe(true)
+    expect(isValidRg('12.345.678-X')).toBe(true)
+    expect(isValidRg('123')).toBe(false)
+    expect(isValidRg('1234567890123')).toBe(false)
   })
 
-  test('encrypts CPF with authenticated encryption and exposes only a mask', () => {
-    const encrypted = encryptSensitive('52998224725')
-    expect(encrypted).not.toContain('52998224725')
-    expect(decryptSensitive(encrypted)).toBe('52998224725')
-    expect(maskCpf(decryptSensitive(encrypted))).toBe('***.***.247-25')
+  test('encrypts RG with authenticated encryption and exposes only a mask', () => {
+    const encrypted = encryptSensitive('123456789')
+    expect(encrypted).not.toContain('123456789')
+    expect(decryptSensitive(encrypted)).toBe('123456789')
+    expect(maskRg(decryptSensitive(encrypted))).toBe('******789')
   })
 
   test('strips markup from user-controlled text', () => {

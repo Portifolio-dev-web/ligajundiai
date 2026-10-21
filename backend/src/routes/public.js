@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { query } from '../db/pool.js'
-import { asyncRoute, userTeam } from '../utils.js'
+import { asyncRoute, userTeams } from '../utils.js'
 import { authenticate, authorize } from '../security/auth.js'
 import { categories, getRegistrationPeriods } from '../services/registration.js'
 
@@ -31,16 +31,18 @@ publicRouter.get('/sponsors', asyncRoute(async (_req, res) => {
 
 export const attendanceRouter = Router()
 attendanceRouter.get('/mine', authenticate, authorize('gestor'), asyncRoute(async (req, res) => {
-  const team = await userTeam(req.user.id)
-  if (!team) return res.json({ attendance: [], team: null })
+  // Risco 1 (varredura, análise LVJ 2027): a frequência agora soma os atletas de todas as
+  // equipes do gestor, não só de uma.
+  const teams = await userTeams(req.user.id)
+  if (!teams.length) return res.json({ attendance: [], teams: [] })
   const result = await query(
-    `SELECT a.id AS athlete_id, a.name,
+    `SELECT a.id AS athlete_id, a.name, a.team_id,
        count(att.id)::int AS total_sessions,
        count(att.id) FILTER (WHERE att.present)::int AS present
      FROM athletes a LEFT JOIN attendance att ON att.athlete_id = a.id AND att.deleted_at IS NULL
-     WHERE a.team_id = $1 AND a.status = 'approved' AND a.deleted_at IS NULL
+     WHERE a.team_id = ANY($1::uuid[]) AND a.status = 'approved' AND a.deleted_at IS NULL
      GROUP BY a.id ORDER BY a.name`,
-    [team.id],
+    [teams.map((team) => team.id)],
   )
   const rules = await query('SELECT min_attendance_percent FROM rules WHERE id = $1', ['league_rules'])
   const minimum = Number(rules.rows[0]?.min_attendance_percent ?? 70)
@@ -48,7 +50,7 @@ attendanceRouter.get('/mine', authenticate, authorize('gestor'), asyncRoute(asyn
     const percent = row.total_sessions ? Number(((row.present / row.total_sessions) * 100).toFixed(1)) : 0
     return { ...row, percent, min_required: minimum, eligible: percent >= minimum }
   })
-  res.json({ attendance, team })
+  res.json({ attendance, teams })
 }))
 
 attendanceRouter.get('/athlete/mine', authenticate, authorize('atleta'), asyncRoute(async (req, res) => {

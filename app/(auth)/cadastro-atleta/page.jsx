@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import CameraCapture from '@/components/CameraCapture'
 import { api } from '@/lib/api'
-import { ATHLETE_POSITIONS, digitsOnly, formatCpf, isValidCpf } from '@/lib/athlete'
+import { ATHLETE_POSITIONS, formatRg, isValidRg } from '@/lib/athlete'
 
 const steps = ['Conta e atleta', 'Equipe e biometria', 'Consentimento']
 
@@ -25,11 +25,11 @@ export default function CadastroAtletaPage() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [created, setCreated] = useState(false)
-  // LGPD (varredura, item L2): guardianName/guardianCpf/guardianRelationship só são obrigatórios
+  // LGPD (varredura, item L2): guardianName/guardianRg/guardianRelationship só são obrigatórios
   // quando a idade informada for menor de 18 anos (ver isMinor abaixo).
   const [form, setForm] = useState({
-    name: '', email: '', password: '', cpf: '', age: '', positions: [], consent: false,
-    guardianName: '', guardianCpf: '', guardianRelationship: '',
+    name: '', email: '', password: '', rg: '', age: '', positions: [], consent: false,
+    guardianName: '', guardianRg: '', guardianRelationship: '',
   })
   const [biometryKey, setBiometryKey] = useState('')
 
@@ -50,11 +50,11 @@ export default function CadastroAtletaPage() {
     return () => controller.abort()
   }, [])
 
-  const validCpf = useMemo(() => isValidCpf(form.cpf), [form.cpf])
+  const validRg = useMemo(() => isValidRg(form.rg), [form.rg])
   // LGPD (varredura, item L2): 18 é o corte de maioridade civil usado também no backend
   // (createAthlete, backend/src/routes/athletes.js) — as duas pontas precisam concordar.
   const isMinor = form.age !== '' && Number.isInteger(Number(form.age)) && Number(form.age) < 18
-  const validGuardianCpf = useMemo(() => isValidCpf(form.guardianCpf), [form.guardianCpf])
+  const validGuardianRg = useMemo(() => isValidRg(form.guardianRg), [form.guardianRg])
   const approvedTeam = teams.find((item) => item.id === selectedTeamId) ?? null
   const openAthletePeriods = registrationPeriods.filter((period) => (
     period.registration_type === 'athlete' && period.status === 'open'
@@ -77,14 +77,14 @@ export default function CadastroAtletaPage() {
       if (form.name.trim().length < 2) return 'Informe o nome completo do atleta.'
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) return 'Informe um e-mail válido.'
       if (form.password.length < 12) return 'A senha deve ter pelo menos 12 caracteres.'
-      if (!validCpf) return 'Informe um CPF válido.'
+      if (!validRg) return 'Informe um RG válido.'
       if (form.age === '' || !Number.isInteger(Number(form.age)) || Number(form.age) < 0 || Number(form.age) > 120) return 'Informe uma idade válida.'
       if (form.positions.length === 0) return 'Selecione pelo menos uma posição.'
       // LGPD (varredura, item L2): menor de idade precisa do responsável legal identificado — não
       // basta marcar uma caixinha, igual o backend (createAthlete) também passou a exigir.
       if (isMinor) {
         if (form.guardianName.trim().length < 2) return 'Informe o nome completo do responsável legal.'
-        if (!validGuardianCpf) return 'Informe um CPF válido para o responsável legal.'
+        if (!validGuardianRg) return 'Informe um RG válido para o responsável legal.'
         if (form.guardianRelationship.trim().length < 2) return 'Informe o grau de parentesco do responsável legal.'
       }
     }
@@ -116,7 +116,7 @@ export default function CadastroAtletaPage() {
           name: form.name.trim(),
           email: form.email.trim(),
           password: form.password,
-          cpf: digitsOnly(form.cpf),
+          rg: formatRg(form.rg),
           age: Number(form.age),
           positions: form.positions,
           biometry_key: biometryKey,
@@ -125,7 +125,7 @@ export default function CadastroAtletaPage() {
           // um menor sem esses três campos (GUARDIAN_REQUIRED).
           ...(isMinor ? {
             guardian_name: form.guardianName.trim(),
-            guardian_cpf: digitsOnly(form.guardianCpf),
+            guardian_rg: formatRg(form.guardianRg),
             guardian_relationship: form.guardianRelationship.trim(),
           } : {}),
         },
@@ -173,7 +173,7 @@ export default function CadastroAtletaPage() {
                   : upcomingAthletePeriods.length
                     ? 'As inscrições de atletas ainda não começaram.'
                     : 'O período de cadastro de atletas está encerrado.'
-                  : 'Preencha os dados em etapas. CPF e imagem são tratados com segurança.'}
+                  : 'Preencha os dados em etapas. RG e imagem são tratados com segurança.'}
           </CardDescription>
           {teams.length > 0 && <div className="flex flex-wrap gap-2 pt-2" aria-label="Etapas do formulário">
             {steps.map((title, index) => (
@@ -240,9 +240,9 @@ export default function CadastroAtletaPage() {
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="athlete-cpf">CPF</Label>
-                  <Input id="athlete-cpf" inputMode="numeric" autoComplete="off" placeholder="000.000.000-00" maxLength={14} value={form.cpf} aria-invalid={form.cpf.length > 0 && !validCpf} onChange={(event) => setForm({ ...form, cpf: formatCpf(event.target.value) })} required />
-                  <p className="text-xs text-muted-foreground">{form.cpf.length > 0 ? validCpf ? 'CPF válido' : 'Confira os dígitos verificadores.' : 'O CPF será criptografado no banco de dados.'}</p>
+                  <Label htmlFor="athlete-rg">RG</Label>
+                  <Input id="athlete-rg" inputMode="text" autoComplete="off" placeholder="00.000.000-0" maxLength={12} value={form.rg} aria-invalid={form.rg.length > 0 && !validRg} onChange={(event) => setForm({ ...form, rg: formatRg(event.target.value) })} required />
+                  <p className="text-xs text-muted-foreground">{form.rg.length > 0 ? validRg ? 'RG válido' : 'Confira o número informado.' : 'O RG será criptografado no banco de dados.'}</p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="athlete-age">Idade</Label>
@@ -260,8 +260,8 @@ export default function CadastroAtletaPage() {
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label htmlFor="guardian-cpf">CPF do responsável</Label>
-                    <Input id="guardian-cpf" inputMode="numeric" autoComplete="off" placeholder="000.000.000-00" maxLength={14} value={form.guardianCpf} aria-invalid={form.guardianCpf.length > 0 && !validGuardianCpf} onChange={(event) => setForm({ ...form, guardianCpf: formatCpf(event.target.value) })} required />
+                    <Label htmlFor="guardian-rg">RG do responsável</Label>
+                    <Input id="guardian-rg" inputMode="text" autoComplete="off" placeholder="00.000.000-0" maxLength={12} value={form.guardianRg} aria-invalid={form.guardianRg.length > 0 && !validGuardianRg} onChange={(event) => setForm({ ...form, guardianRg: formatRg(event.target.value) })} required />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="guardian-relationship">Parentesco</Label>
@@ -301,7 +301,7 @@ export default function CadastroAtletaPage() {
               <div className="rounded-md bg-muted p-4 text-sm">
                 <p><strong>Atleta:</strong> {form.name}</p>
                 <p><strong>E-mail da conta:</strong> {form.email}</p>
-                <p><strong>CPF:</strong> {form.cpf}</p>
+                <p><strong>RG:</strong> {form.rg}</p>
                 <p><strong>Idade:</strong> {form.age}</p>
                 <p><strong>Posições:</strong> {form.positions.map((position) => ATHLETE_POSITIONS.find((item) => item.value === position)?.label).join(', ')}</p>
                 <p><strong>Equipe:</strong> {approvedTeam?.name} — {approvedTeam?.category}</p>

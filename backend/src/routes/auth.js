@@ -7,8 +7,8 @@ import { config } from '../config.js'
 import { query, transaction } from '../db/pool.js'
 import { AppError, unauthorized } from '../errors.js'
 import { createSession, authenticate, authenticateIfPresent, hashPassword, requireTotp, revokeSession, verifyUserPassword } from '../security/auth.js'
-import { cpfDigest, encryptSensitive, decryptSensitive, safeEqual } from '../security/crypto.js'
-import { emailSchema, parse, requireValidCpf, cleanText } from '../security/validation.js'
+import { rgDigest, encryptSensitive, decryptSensitive, safeEqual } from '../security/crypto.js'
+import { emailSchema, parse, requireValidRg, cleanText } from '../security/validation.js'
 import { enqueueEmail, escapeHtml } from '../services/email.js'
 import { asyncRoute, audit } from '../utils.js'
 import { authRateLimit } from '../security/rate-limit.js'
@@ -21,18 +21,18 @@ const registerSchema = z.object({
   email: emailSchema,
   password: z.string().min(12).max(128),
   phone: z.string().trim().max(30).optional().default(''),
-  cpf: z.string().optional().default(''),
+  rg: z.string().optional().default(''),
   consent: z.literal(true),
   consent_version: z.string().trim().max(40).optional(),
 }).strict()
 
 authRouter.post('/register', asyncRoute(async (req, res) => {
   const input = parse(registerSchema, req.body)
-  const cpf = input.cpf ? requireValidCpf(input.cpf) : null
+  const rg = input.rg ? requireValidRg(input.rg) : null
   const user = await transaction(async (client) => {
     const created = await client.query(
       `INSERT INTO users
-       (role, name, email, password_hash, phone, cpf_ciphertext, cpf_hash, consent_at, consent_version, consent_confirmed)
+       (role, name, email, password_hash, phone, rg_ciphertext, rg_hash, consent_at, consent_version, consent_confirmed)
        VALUES ('gestor', $1, $2, $3, $4, $5, $6, now(), $7, true)
        RETURNING id, role, name, email, phone, created_at`,
       [
@@ -40,8 +40,8 @@ authRouter.post('/register', asyncRoute(async (req, res) => {
         input.email,
         await hashPassword(input.password),
         cleanText(input.phone, 30),
-        cpf ? encryptSensitive(cpf) : null,
-        cpf ? cpfDigest(cpf) : null,
+        rg ? encryptSensitive(rg) : null,
+        rg ? rgDigest(rg) : null,
         input.consent_version || config.CONSENT_VERSION,
       ],
     )
@@ -150,18 +150,20 @@ authRouter.post('/otp/verify', asyncRoute(async (req, res) => {
 }))
 
 authRouter.get('/me', authenticateIfPresent, asyncRoute(async (req, res) => {
-  if (!req.user) return res.json({ user: null, team: null })
-  let team = null
+  if (!req.user) return res.json({ user: null, teams: [] })
+  let teams = []
   if (req.user.role === 'gestor') {
+    // Risco 1 (varredura, análise LVJ 2027): um gestor pode ter mais de uma equipe, então a
+    // sessão devolve a lista inteira, não mais "a equipe" no singular.
     const result = await query(
       `SELECT t.*, u.name AS manager_name, u.email AS manager_email
        FROM teams t JOIN users u ON u.id = t.manager_user_id
-       WHERE t.manager_user_id = $1 AND t.deleted_at IS NULL LIMIT 1`,
+       WHERE t.manager_user_id = $1 AND t.deleted_at IS NULL ORDER BY t.created_at`,
       [req.user.id],
     )
-    team = result.rows[0] ?? null
+    teams = result.rows
   }
-  res.json({ user: req.user, team })
+  res.json({ user: req.user, teams })
 }))
 
 authRouter.post('/logout', authenticate, asyncRoute(async (req, res) => {

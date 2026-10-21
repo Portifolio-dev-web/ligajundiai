@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { query } from './db/pool.js'
-import { decryptSensitive, maskCpf } from './security/crypto.js'
+import { decryptSensitive, maskRg } from './security/crypto.js'
 
 export function asyncRoute(handler) {
   return (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next)
@@ -21,25 +21,38 @@ export async function notify(client, target, type, title, body) {
   )
 }
 
-export async function userTeam(userId) {
+// Risco 1 (varredura, análise LVJ 2027): um gestor pode ter mais de uma equipe, então não existe
+// mais "a equipe do gestor" no singular — userTeams lista todas, e teamForManager busca uma
+// equipe específica já confirmando que ela pertence a este gestor (ownership check).
+export async function userTeams(userId) {
   const result = await query(
     `SELECT t.*, u.name AS manager_name, u.email AS manager_email
      FROM teams t JOIN users u ON u.id = t.manager_user_id
-     WHERE t.manager_user_id = $1 AND t.deleted_at IS NULL LIMIT 1`,
+     WHERE t.manager_user_id = $1 AND t.deleted_at IS NULL ORDER BY t.created_at`,
     [userId],
+  )
+  return result.rows
+}
+
+export async function teamForManager(userId, teamId) {
+  const result = await query(
+    `SELECT t.*, u.name AS manager_name, u.email AS manager_email
+     FROM teams t JOIN users u ON u.id = t.manager_user_id
+     WHERE t.id = $1 AND t.manager_user_id = $2 AND t.deleted_at IS NULL LIMIT 1`,
+    [teamId, userId],
   )
   return result.rows[0] ?? null
 }
 
 export function toPublicAthlete(row) {
   if (!row) return row
-  // LGPD (varredura, item L2): o CPF do responsável legal (menores de idade) segue a mesma regra do
-  // CPF do próprio atleta — nunca sai em texto puro da API, só mascarado.
-  const { cpf_ciphertext, cpf_hash, guardian_cpf_ciphertext, ...safe } = row
+  // LGPD (varredura, item L2): o RG do responsável legal (menores de idade) segue a mesma regra do
+  // RG do próprio atleta — nunca sai em texto puro da API, só mascarado.
+  const { rg_ciphertext, rg_hash, guardian_rg_ciphertext, ...safe } = row
   return {
     ...safe,
-    ...(cpf_ciphertext ? { cpf: maskCpf(decryptSensitive(cpf_ciphertext)) } : {}),
-    ...(guardian_cpf_ciphertext ? { guardian_cpf: maskCpf(decryptSensitive(guardian_cpf_ciphertext)) } : {}),
+    ...(rg_ciphertext ? { rg: maskRg(decryptSensitive(rg_ciphertext)) } : {}),
+    ...(guardian_rg_ciphertext ? { guardian_rg: maskRg(decryptSensitive(guardian_rg_ciphertext)) } : {}),
   }
 }
 

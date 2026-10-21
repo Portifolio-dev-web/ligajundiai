@@ -7,7 +7,6 @@ import { config } from '../config.js'
 import { pool, transaction } from './pool.js'
 import { runMigrations } from './migrate.js'
 import { seedAdmin } from './seed-admin.js'
-import { encryptSensitive, cpfDigest } from '../security/crypto.js'
 import { unusablePasswordHash } from '../security/auth.js'
 import { cleanText } from '../security/validation.js'
 
@@ -93,7 +92,9 @@ export async function migrateLegacyData({ mongoUrl, mongoDatabase }) {
         if (role === 'admin' && email !== adminEmail) {
           throw new Error(`Legacy admin ${email} is not ADMIN_EMAIL; configure the intended administrator before importing`)
         }
-        const cpf = oldUser.cpf ? String(oldUser.cpf).replace(/\D/g, '') : null
+        // Decisão (análise LVJ 2027, risco 1): o sistema legado identificava por CPF, o atual por
+        // RG — são documentos diferentes, um não vira o outro. O cadastro importado entra sem RG
+        // (rg_ciphertext/rg_hash ficam NULL); alguém precisa recadastrar o RG dessas pessoas depois.
         const legacyHash = oldUser.password_hash && oldUser.password_salt ? String(oldUser.password_hash) : null
         const legacySalt = legacyHash ? String(oldUser.password_salt) : null
         const createdAt = dateOr(oldUser.created_at, new Date())
@@ -104,18 +105,17 @@ export async function migrateLegacyData({ mongoUrl, mongoDatabase }) {
         await client.query(
           `INSERT INTO users
            (id, role, status, name, email, password_hash, legacy_password_salt, legacy_password_hash,
-            phone, cpf_ciphertext, cpf_hash, consent_at, consent_version, consent_confirmed,
+            phone, consent_at, consent_version, consent_confirmed,
             created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NULL,
-             'legacy-import-no-recorded-consent', false, $12, $12)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NULL,
+             'legacy-import-no-recorded-consent', false, $10, $10)
            ON CONFLICT (id) DO NOTHING`,
           [
             id, role, oldUser.status === 'suspended' ? 'suspended' : 'active',
             cleanText(oldUser.name || 'Usuário importado', 120), email,
             legacyHash ? '!legacy-scrypt!' : unusablePasswordHash(),
             legacySalt, legacyHash,
-            cleanText(oldUser.phone || '', 30) || null,
-            cpf ? encryptSensitive(cpf) : null, cpf ? cpfDigest(cpf) : null, createdAt,
+            cleanText(oldUser.phone || '', 30) || null, createdAt,
           ],
         )
       }
@@ -146,7 +146,8 @@ export async function migrateLegacyData({ mongoUrl, mongoDatabase }) {
         const oldTeam = teamById.get(oldTeamId)
         if (!oldTeam) throw new Error(`Legacy athlete ${oldAthlete.id ?? oldAthlete._id} refers to unknown team ${oldTeamId}`)
         const id = mappedId(athleteIds, oldAthlete.id ?? oldAthlete._id, 'athlete')
-        const cpf = oldAthlete.cpf ? String(oldAthlete.cpf).replace(/\D/g, '') : null
+        // Decisão (análise LVJ 2027, risco 1): mesmo caso dos usuários acima — o CPF do atleta
+        // importado não vira RG; entra sem documento (rg_ciphertext/rg_hash NULL).
         const status = oldAthlete.status === 'approved' ? 'approved' :
           oldAthlete.status === 'rejected' ? 'rejected' : 'awaiting_admin'
         const position = normalizePosition(oldAthlete.position)
@@ -157,16 +158,15 @@ export async function migrateLegacyData({ mongoUrl, mongoDatabase }) {
         const createdAt = dateOr(oldAthlete.created_at, new Date())
         await client.query(
           `INSERT INTO athletes
-           (id, team_id, manager_user_id, name, cpf_ciphertext, cpf_hash, birthdate,
+           (id, team_id, manager_user_id, name, birthdate,
             positions, status, justification, consent_at, consent_version, consent_confirmed,
             biometry_status, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NULL,
-             'legacy-import-no-recorded-consent', false, 'pending', $11, $11)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULL,
+             'legacy-import-no-recorded-consent', false, 'pending', $9, $9)
            ON CONFLICT (id) DO NOTHING`,
           [
             id, mappedId(teamIds, oldTeam.id ?? oldTeam._id, 'team'), managerId,
             cleanText(oldAthlete.name || 'Atleta importado', 120),
-            cpf ? encryptSensitive(cpf) : null, cpf ? cpfDigest(cpf) : null,
             date, position, status, cleanText(oldAthlete.justification || '', 500) || null, createdAt,
           ],
         )

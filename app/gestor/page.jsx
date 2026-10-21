@@ -13,7 +13,7 @@ import { api } from '@/lib/api'
 import { CATEGORY_FALLBACK } from '@/lib/lvjApi'
 
 export default function GestorDashboardPage() {
-  const [team, setTeam] = useState(null)
+  const [teams, setTeams] = useState([])
   const [registrationPeriods, setRegistrationPeriods] = useState([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -27,7 +27,7 @@ export default function GestorDashboardPage() {
         api('/teams/mine'),
         api('/registration-periods'),
       ])
-      setTeam(result.team)
+      setTeams(result.teams || [])
       setRegistrationPeriods(registrationResult.periods || [])
     } catch (requestError) {
       setError(requestError.message)
@@ -48,7 +48,9 @@ export default function GestorDashboardPage() {
     setError('')
     try {
       const result = await api('/teams', { method: 'POST', body: { name: name.trim(), category } })
-      setTeam(result.team)
+      setTeams((current) => [...current, result.team])
+      setName('')
+      setCategory('')
     } catch (requestError) {
       setError(requestError.message)
     } finally {
@@ -60,29 +62,40 @@ export default function GestorDashboardPage() {
     period.category === category && period.registration_type === 'team'
   ))
   const canRegisterTeam = teamPeriod?.status === 'open'
+  const hasApprovedTeam = teams.some((team) => team.status === 'approved')
 
   return (
     <main className="mx-auto min-h-screen max-w-5xl space-y-6 px-4 py-10">
-      <header><p className="text-sm font-medium text-muted-foreground">Área do gestor</p><h1 className="text-3xl font-bold">Painel da equipe</h1></header>
+      <header>
+        <p className="text-sm font-medium text-muted-foreground">Área do gestor</p>
+        <h1 className="text-3xl font-bold">Painel do gestor</h1>
+        {/* Risco 1 (varredura, análise LVJ 2027): o questionário confirmou que um gestor pode
+            gerenciar mais de uma equipe, em categorias diferentes, com um único login. */}
+        <p className="text-sm text-muted-foreground">Você pode cadastrar e gerenciar mais de uma equipe, em categorias diferentes.</p>
+      </header>
       {error && <Alert variant="destructive"><AlertTitle>Erro</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}
       {loading
-        ? <div className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="h-4 w-4 animate-spin" /> Carregando equipe…</div>
-        : team
-          ? <Card>
-            <CardHeader><CardTitle>{team.name}</CardTitle><CardDescription>{team.category}</CardDescription></CardHeader>
-            <CardContent className="space-y-4">
-              {team.status === 'pending' && <Alert><ShieldCheck className="h-4 w-4" /><AlertTitle>Pendente de aprovação pelo Admin</AlertTitle><AlertDescription>A equipe ficará indisponível para cadastro de atletas até a aprovação do administrador.</AlertDescription></Alert>}
-              {team.status === 'rejected' && <Alert variant="destructive"><AlertTitle>Equipe não aprovada</AlertTitle><AlertDescription>{team.justification || 'Entre em contato com o administrador.'}</AlertDescription></Alert>}
-              {team.status === 'approved' && <Alert><ShieldCheck className="h-4 w-4" /><AlertTitle>Equipe aprovada</AlertTitle><AlertDescription>Você já pode cadastrar e acompanhar atletas.</AlertDescription></Alert>}
-              <div className="flex flex-wrap gap-3">
-                <Button asChild disabled={team.status !== 'approved'}><Link href="/cadastro-atleta"><Users className="h-4 w-4" /> Cadastrar atleta</Link></Button>
-                <Button asChild variant="outline"><Link href="/gestor/aprovar-atletas">Aprovar atletas <ArrowRight className="h-4 w-4" /></Link></Button>
-                <Button asChild variant="outline"><Link href="/gestor/jogos">Agenda de jogos</Link></Button>
-              </div>
-            </CardContent>
-          </Card>
-          : <Card>
-            <CardHeader><CardTitle>Cadastro da equipe</CardTitle><CardDescription>Cadastre o nome e a categoria durante o período de inscrição definido para a temporada.</CardDescription></CardHeader>
+        ? <div className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="h-4 w-4 animate-spin" /> Carregando equipes…</div>
+        : <div className="space-y-4">
+          {teams.map((team) => (
+            <Card key={team.id}>
+              <CardHeader><CardTitle>{team.name}</CardTitle><CardDescription>{team.category}</CardDescription></CardHeader>
+              <CardContent className="space-y-4">
+                {team.status === 'pending' && <Alert><ShieldCheck className="h-4 w-4" /><AlertTitle>Pendente de aprovação pelo Admin</AlertTitle><AlertDescription>A equipe ficará indisponível para cadastro de atletas até a aprovação do administrador.</AlertDescription></Alert>}
+                {team.status === 'rejected' && <Alert variant="destructive"><AlertTitle>Equipe não aprovada</AlertTitle><AlertDescription>{team.justification || 'Entre em contato com o administrador.'}</AlertDescription></Alert>}
+                {team.status === 'approved' && <Alert><ShieldCheck className="h-4 w-4" /><AlertTitle>Equipe aprovada</AlertTitle><AlertDescription>Você já pode cadastrar e acompanhar atletas desta equipe.</AlertDescription></Alert>}
+              </CardContent>
+            </Card>
+          ))}
+
+          {hasApprovedTeam && <div className="flex flex-wrap gap-3">
+            <Button asChild><Link href="/cadastro-atleta"><Users className="h-4 w-4" /> Cadastrar atleta</Link></Button>
+            <Button asChild variant="outline"><Link href="/gestor/aprovar-atletas">Aprovar atletas <ArrowRight className="h-4 w-4" /></Link></Button>
+            <Button asChild variant="outline"><Link href="/gestor/jogos">Agenda de jogos</Link></Button>
+          </div>}
+
+          <Card>
+            <CardHeader><CardTitle>{teams.length ? 'Cadastrar outra equipe' : 'Cadastro da equipe'}</CardTitle><CardDescription>Cadastre o nome e a categoria durante o período de inscrição definido para a temporada.</CardDescription></CardHeader>
             <CardContent>
               <form onSubmit={createTeam} className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2"><Label htmlFor="team-name">Nome da equipe</Label><Input id="team-name" required minLength={2} maxLength={100} value={name} onChange={(event) => setName(event.target.value)} /></div>
@@ -97,7 +110,8 @@ export default function GestorDashboardPage() {
                 <Button className="sm:col-span-2" type="submit" disabled={saving || !category || !canRegisterTeam}>{saving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null} Enviar equipe</Button>
               </form>
             </CardContent>
-          </Card>}
+          </Card>
+        </div>}
     </main>
   )
 }
