@@ -6,7 +6,8 @@ import { AppError, notFound } from '../errors.js'
 import { authenticate, authorize } from '../security/auth.js'
 import { cleanText, parse } from '../security/validation.js'
 import { enqueueEmail, escapeHtml } from '../services/email.js'
-import { assertRegistrationOpen, categories } from '../services/registration.js'
+import { assertRegistrationOpen } from '../services/registration.js'
+import { assertValidCategory } from '../services/categories.js'
 import { asyncRoute, audit, notify } from '../utils.js'
 
 export const teamsRouter = Router()
@@ -16,7 +17,7 @@ teamsRouter.use(authenticate, authorize('gestor'))
 teamsRouter.post('/', asyncRoute(async (req, res) => {
   const input = parse(z.object({
     name: z.string().trim().min(2).max(100),
-    category: z.enum(categories),
+    category: z.string().trim().min(1).max(80),
     // Risco 3 (análise LVJ 2027): o Termo de Responsabilidade Financeira ("me responsabilizando
     // pela equipe X, inscrita na categoria Y... aceito o artigo 7º") é específico da equipe, então
     // o aceite dele é exigido aqui, na criação da equipe — não no cadastro da conta do gestor.
@@ -24,6 +25,7 @@ teamsRouter.post('/', asyncRoute(async (req, res) => {
     consent_version: z.string().trim().max(40).optional(),
   }).strict(), req.body)
   const team = await transaction(async (client) => {
+    await assertValidCategory(input.category, client)
     await assertRegistrationOpen(input.category, 'team', client)
     // Risco 1 (varredura, análise LVJ 2027): um gestor pode gerenciar mais de uma equipe, em
     // categorias diferentes, com um único login — por isso não há mais bloqueio aqui por já

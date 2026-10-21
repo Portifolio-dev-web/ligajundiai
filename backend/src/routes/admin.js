@@ -5,7 +5,8 @@ import { AppError, notFound } from '../errors.js'
 import { authenticate, authorize } from '../security/auth.js'
 import { decryptSensitive, maskRg } from '../security/crypto.js'
 import { cleanText, parse, uuidSchema } from '../security/validation.js'
-import { categories, getRegistrationPeriods, registrationStatus } from '../services/registration.js'
+import { getRegistrationPeriods, registrationStatus } from '../services/registration.js'
+import { assertValidCategory } from '../services/categories.js'
 import { asyncRoute, audit } from '../utils.js'
 
 export const adminRouter = Router()
@@ -17,7 +18,7 @@ adminRouter.get('/registration-periods', asyncRoute(async (_req, res) => {
 
 adminRouter.put('/registration-periods/:category/:type', asyncRoute(async (req, res) => {
   const input = parse(z.object({
-    category: z.enum(categories),
+    category: z.string().trim().min(1).max(80),
     type: z.enum(['team', 'athlete']),
   }).strict(), req.params)
   const window = parse(z.object({
@@ -29,6 +30,7 @@ adminRouter.put('/registration-periods/:category/:type', asyncRoute(async (req, 
   if (endsAt <= startsAt) throw new AppError(400, 'INVALID_REGISTRATION_PERIOD', 'A data final deve ser posterior à data inicial')
 
   const period = await transaction(async (client) => {
+    await assertValidCategory(input.category, client)
     const result = await client.query(
       `INSERT INTO registration_periods
        (category, registration_type, starts_at, ends_at, created_by)
@@ -49,7 +51,7 @@ adminRouter.put('/registration-periods/:category/:type', asyncRoute(async (req, 
 
 adminRouter.delete('/registration-periods/:category/:type', asyncRoute(async (req, res) => {
   const input = parse(z.object({
-    category: z.enum(categories),
+    category: z.string().trim().min(1).max(80),
     type: z.enum(['team', 'athlete']),
   }).strict(), req.params)
   await transaction(async (client) => {

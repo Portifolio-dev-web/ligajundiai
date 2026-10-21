@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Switch } from '@/components/ui/switch'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
@@ -56,6 +57,8 @@ import {
   UserPlus,
   Plus,
   Info,
+  Trash2,
+  Save,
 } from 'lucide-react'
 import { api, CATEGORY_FALLBACK } from '@/lib/lvjApi'
 import { formatRg, getAge, isValidRg } from '@/lib/athlete'
@@ -97,10 +100,14 @@ function App() {
     }
   }, [])
 
-  useEffect(() => {
+  const loadCategories = useCallback(() => {
     api('/categories').then((d) => setCategories(d.categories || CATEGORY_FALLBACK)).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    loadCategories()
     loadMe().finally(() => setBooting(false))
-  }, [loadMe])
+  }, [loadCategories, loadMe])
 
   const onAuthed = (authenticatedUser) => {
     setToken('cookie-session')
@@ -141,7 +148,7 @@ function App() {
           conteúdo" em app/layout.js — fica depois do TopNav, então o link realmente pula a navegação. */}
       <main id="main-content">
         {user?.role === 'admin' ? (
-          <AdminPanel token={token} categories={categories} />
+          <AdminPanel token={token} categories={categories} onCategoriesChanged={loadCategories} />
         ) : user?.role === 'gestor' ? (
           <GestorPanel token={token} categories={categories} user={user} myTeams={myTeams} refreshMe={() => loadMe(token)} />
         ) : (
@@ -692,7 +699,7 @@ function LoginDialog({ open, onOpenChange, onAuthed }) {
 // ============================================================================
 // ADMIN PANEL
 // ============================================================================
-function AdminPanel({ token, categories }) {
+function AdminPanel({ token, categories, onCategoriesChanged }) {
   const [notif, setNotif] = useState({ pending_teams: 0, pending_athletes: 0, unread: 0, items: [] })
   const [stats, setStats] = useState({})
 
@@ -735,6 +742,7 @@ function AdminPanel({ token, categories }) {
           <TabsTrigger value="presenca">Presença</TabsTrigger>
           <TabsTrigger value="regulamento">Regulamento</TabsTrigger>
           <TabsTrigger value="classificacao">Classificação</TabsTrigger>
+          <TabsTrigger value="categorias">Categorias</TabsTrigger>
           <TabsTrigger value="emails">E-mails</TabsTrigger>
         </TabsList>
 
@@ -742,6 +750,7 @@ function AdminPanel({ token, categories }) {
         <TabsContent value="atletas"><AdminAthletes token={token} reload={loadNotif} /></TabsContent>
         <TabsContent value="jogos"><AdminMatches token={token} categories={categories} /></TabsContent>
         <TabsContent value="presenca"><AdminAttendance token={token} categories={categories} /></TabsContent>
+        <TabsContent value="categorias"><AdminCategories token={token} onCategoriesChanged={onCategoriesChanged} /></TabsContent>
         <TabsContent value="regulamento"><RulesEngine token={token} /></TabsContent>
         <TabsContent value="classificacao"><AdminStandings token={token} categories={categories} /></TabsContent>
         <TabsContent value="emails"><AdminEmails token={token} /></TabsContent>
@@ -1377,6 +1386,184 @@ function AdminStandings({ token, categories }) {
         </div>
       </CardHeader>
       <CardContent className="p-0"><StandingsTable standings={standings} category={category} /></CardContent>
+    </Card>
+  )
+}
+
+function AdminCategories({ token, onCategoriesChanged }) {
+  const [categories, setCategories] = useState([])
+  const [drafts, setDrafts] = useState({})
+  const [savingId, setSavingId] = useState(null)
+  const [newForm, setNewForm] = useState({ name: '', abbreviation: '', sort_order: '' })
+  const [creating, setCreating] = useState(false)
+
+  const load = useCallback(() => {
+    api('/admin/categories', { token }).then((d) => {
+      const list = d.categories || []
+      setCategories(list)
+      setDrafts(Object.fromEntries(list.map((c) => [c.id, { name: c.name, abbreviation: c.abbreviation, sort_order: String(c.sort_order) }])))
+    }).catch(() => {})
+  }, [token])
+  useEffect(load, [load])
+
+  const setDraft = (id, field, value) => {
+    setDrafts((prev) => ({ ...prev, [id]: { ...prev[id], [field]: value } }))
+  }
+
+  const isDirty = (cat) => {
+    const d = drafts[cat.id]
+    if (!d) return false
+    return d.name !== cat.name || d.abbreviation !== cat.abbreviation || Number(d.sort_order) !== cat.sort_order
+  }
+
+  const saveCategory = async (cat) => {
+    const d = drafts[cat.id]
+    setSavingId(cat.id)
+    try {
+      const { category } = await api(`/admin/categories/${cat.id}`, {
+        method: 'PUT',
+        token,
+        body: { name: d.name.trim(), abbreviation: d.abbreviation.trim(), sort_order: Number(d.sort_order) || 0 },
+      })
+      setCategories((prev) => prev.map((c) => (c.id === category.id ? category : c)))
+      setDrafts((prev) => ({ ...prev, [category.id]: { name: category.name, abbreviation: category.abbreviation, sort_order: String(category.sort_order) } }))
+      toast.success('Categoria atualizada')
+      onCategoriesChanged?.()
+    } catch (e) {
+      toast.error(e.message)
+    } finally {
+      setSavingId(null)
+    }
+  }
+
+  const toggleActive = async (cat) => {
+    try {
+      const { category } = await api(`/admin/categories/${cat.id}`, { method: 'PUT', token, body: { active: !cat.active } })
+      setCategories((prev) => prev.map((c) => (c.id === category.id ? category : c)))
+      toast.success(category.active ? 'Categoria ativada' : 'Categoria desativada')
+      onCategoriesChanged?.()
+    } catch (e) {
+      toast.error(e.message)
+    }
+  }
+
+  const removeCategory = async (cat) => {
+    if (!window.confirm(`Remover a categoria "${cat.name}"? Essa ação não pode ser desfeita.`)) return
+    try {
+      await api(`/admin/categories/${cat.id}`, { method: 'DELETE', token })
+      setCategories((prev) => prev.filter((c) => c.id !== cat.id))
+      toast.success('Categoria removida')
+      onCategoriesChanged?.()
+    } catch (e) {
+      toast.error(e.message)
+    }
+  }
+
+  const createCategory = async () => {
+    if (!newForm.name.trim() || !newForm.abbreviation.trim()) {
+      toast.error('Informe nome e sigla da categoria')
+      return
+    }
+    setCreating(true)
+    try {
+      const { category } = await api('/admin/categories', {
+        method: 'POST',
+        token,
+        body: {
+          name: newForm.name.trim(),
+          abbreviation: newForm.abbreviation.trim(),
+          sort_order: Number(newForm.sort_order) || (categories.length + 1),
+        },
+      })
+      setCategories((prev) => [...prev, category].sort((a, b) => a.sort_order - b.sort_order))
+      setDrafts((prev) => ({ ...prev, [category.id]: { name: category.name, abbreviation: category.abbreviation, sort_order: String(category.sort_order) } }))
+      setNewForm({ name: '', abbreviation: '', sort_order: '' })
+      toast.success('Categoria criada')
+      onCategoriesChanged?.()
+    } catch (e) {
+      toast.error(e.message)
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  return (
+    <Card className="mt-4">
+      <CardHeader>
+        <CardTitle>Categorias</CardTitle>
+        <CardDescription>
+          Gerencie as categorias do campeonato (nome, sigla e ordem de exibição). Renomear ou remover uma categoria
+          com equipes ou jogos cadastrados é bloqueado — nesse caso, desative-a e crie uma nova.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="rounded-lg border p-3 grid grid-cols-1 sm:grid-cols-[1fr_120px_100px_auto] gap-2 items-end bg-slate-50">
+          <div>
+            <Label className="text-xs text-slate-500">Nova categoria</Label>
+            <Input placeholder="Ex: Sub-21 Masculino" value={newForm.name} onChange={(e) => setNewForm((f) => ({ ...f, name: e.target.value }))} />
+          </div>
+          <div>
+            <Label className="text-xs text-slate-500">Sigla</Label>
+            <Input placeholder="Ex: S21" maxLength={6} value={newForm.abbreviation} onChange={(e) => setNewForm((f) => ({ ...f, abbreviation: e.target.value.toUpperCase() }))} />
+          </div>
+          <div>
+            <Label className="text-xs text-slate-500">Ordem</Label>
+            <Input type="number" placeholder="Auto" value={newForm.sort_order} onChange={(e) => setNewForm((f) => ({ ...f, sort_order: e.target.value }))} />
+          </div>
+          <Button onClick={createCategory} disabled={creating} className="text-white border-0" style={{ background: PURPLE }}>
+            <Plus className="h-4 w-4 mr-1" /> Adicionar
+          </Button>
+        </div>
+
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Nome</TableHead>
+              <TableHead className="w-28">Sigla</TableHead>
+              <TableHead className="w-24 text-center">Ordem</TableHead>
+              <TableHead className="w-20 text-center">Ativa</TableHead>
+              <TableHead className="w-28 text-center">Ações</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {categories.map((cat) => {
+              const d = drafts[cat.id] || { name: cat.name, abbreviation: cat.abbreviation, sort_order: String(cat.sort_order) }
+              const dirty = isDirty(cat)
+              return (
+                <TableRow key={cat.id} className={!cat.active ? 'opacity-50' : ''}>
+                  <TableCell>
+                    <Input value={d.name} onChange={(e) => setDraft(cat.id, 'name', e.target.value)} />
+                  </TableCell>
+                  <TableCell>
+                    <Input maxLength={6} value={d.abbreviation} onChange={(e) => setDraft(cat.id, 'abbreviation', e.target.value.toUpperCase())} />
+                  </TableCell>
+                  <TableCell>
+                    <Input type="number" className="text-center" value={d.sort_order} onChange={(e) => setDraft(cat.id, 'sort_order', e.target.value)} />
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <Switch checked={cat.active} onCheckedChange={() => toggleActive(cat)} />
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center justify-center gap-1">
+                      <Button size="sm" variant="outline" disabled={!dirty || savingId === cat.id} onClick={() => saveCategory(cat)} title="Salvar alterações">
+                        <Save className="h-4 w-4" />
+                      </Button>
+                      <Button size="sm" variant="outline" className="text-red-600 hover:text-red-700" onClick={() => removeCategory(cat)} title="Remover categoria">
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              )
+            })}
+            {categories.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={5} className="text-center text-slate-400 py-8">Nenhuma categoria cadastrada.</TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </CardContent>
     </Card>
   )
 }

@@ -5,16 +5,12 @@ import { AppError, forbidden, notFound } from '../errors.js'
 import { authenticate, authorize } from '../security/auth.js'
 import { cleanText, parse, uuidSchema } from '../security/validation.js'
 import { asyncRoute, audit, notify } from '../utils.js'
+import { assertValidCategory, listCategoryNames } from '../services/categories.js'
 
 export const gamesRouter = Router()
 export const adminGamesRouter = Router()
 export const gestorGamesRouter = Router()
 export const matchesRouter = Router()
-
-const categories = [
-  'Adulto Masculino', 'Adulto Feminino', 'Master Masculino',
-  'Master Feminino', 'Sub-19 Masculino', 'Sub-19 Feminino',
-]
 
 matchesRouter.get('/', asyncRoute(async (req, res) => {
   const category = req.query.category ? String(req.query.category).slice(0, 80) : null
@@ -37,8 +33,9 @@ adminGamesRouter.post('/game-dates', asyncRoute(async (req, res) => {
   const input = parse(z.object({
     available_at: z.string().datetime(),
     venue: z.string().trim().max(200).optional().default(''),
-    category: z.enum(categories),
+    category: z.string().trim().min(1).max(80),
   }).strict(), req.body)
+  await assertValidCategory(input.category)
   const result = await query(
     `INSERT INTO game_dates (available_at, venue, category, created_by)
      VALUES ($1, $2, $3, $4) RETURNING *`,
@@ -180,7 +177,11 @@ gestorGamesRouter.post('/:matchId/accept', asyncRoute(async (req, res) => {
 
 export const scheduleRouter = Router()
 scheduleRouter.get('/standings', asyncRoute(async (req, res) => {
-  const category = String(req.query.category || categories[0]).slice(0, 80)
+  let category = req.query.category ? String(req.query.category).slice(0, 80) : ''
+  if (!category) {
+    const [firstCategory] = await listCategoryNames()
+    category = firstCategory ?? ''
+  }
   const teams = await query(
     `SELECT id, name FROM teams WHERE category = $1 AND status = 'approved' AND deleted_at IS NULL`,
     [category],

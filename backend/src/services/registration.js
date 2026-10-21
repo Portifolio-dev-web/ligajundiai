@@ -1,10 +1,6 @@
 import { query } from '../db/pool.js'
 import { AppError } from '../errors.js'
-
-export const categories = [
-  'Adulto Masculino', 'Adulto Feminino', 'Master Masculino',
-  'Master Feminino', 'Sub-19 Masculino', 'Sub-19 Feminino',
-]
+import { listCategoryNames } from './categories.js'
 
 export const registrationTypes = ['team', 'athlete']
 
@@ -54,10 +50,13 @@ export async function assertRegistrationOpen(category, type, executor = query) {
 }
 
 export async function getRegistrationPeriods(executor = query) {
-  const result = await executeQuery(executor,
-    `SELECT category, registration_type, starts_at, ends_at
-     FROM registration_periods ORDER BY category, registration_type`,
-  )
+  const [result, categories] = await Promise.all([
+    executeQuery(executor,
+      `SELECT category, registration_type, starts_at, ends_at
+       FROM registration_periods ORDER BY category, registration_type`,
+    ),
+    listCategoryNames(executor),
+  ])
   const periods = new Map(result.rows.map((period) => [`${period.category}:${period.registration_type}`, period]))
   const now = new Date()
   return categories.flatMap((category) => registrationTypes.map((type) => {

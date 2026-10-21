@@ -280,6 +280,30 @@ CREATE TABLE IF NOT EXISTS rules (
 );
 INSERT INTO rules (id) VALUES ('league_rules') ON CONFLICT (id) DO NOTHING;
 
+CREATE TABLE IF NOT EXISTS categories (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name text NOT NULL,
+  abbreviation text NOT NULL,
+  sort_order integer NOT NULL DEFAULT 0,
+  active boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS categories_name_uq ON categories (lower(name));
+CREATE UNIQUE INDEX IF NOT EXISTS categories_abbreviation_uq ON categories (lower(abbreviation));
+
+INSERT INTO categories (name, abbreviation, sort_order)
+SELECT seed.name, seed.abbreviation, seed.sort_order
+FROM (VALUES
+  ('Adulto Masculino', 'AM', 1),
+  ('Adulto Feminino', 'AF', 2),
+  ('Master Masculino', 'MM', 3),
+  ('Master Feminino', 'MF', 4),
+  ('Sub-19 Masculino', 'SM', 5),
+  ('Sub-19 Feminino', 'SF', 6)
+) AS seed(name, abbreviation, sort_order)
+WHERE NOT EXISTS (SELECT 1 FROM categories);
+
 CREATE TABLE IF NOT EXISTS notifications (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   target text NOT NULL,

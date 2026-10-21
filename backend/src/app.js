@@ -20,6 +20,7 @@ import {
   scheduleRouter,
 } from './routes/games.js'
 import { adminRouter } from './routes/admin.js'
+import { adminCategoriesRouter } from './routes/categories.js'
 import { attendanceRouter, approvedTeamsRouter, publicRouter } from './routes/public.js'
 import { privacyRouter } from './routes/privacy.js'
 import { webhooksRouter } from './routes/webhooks.js'
@@ -79,6 +80,7 @@ export function createApp() {
   app.use('/api/gestor/athletes', gestorAthletesRouter)
   app.use('/api/admin/athletes', adminAthleteActionsRouter)
   app.use('/api/admin', adminRouter)
+  app.use('/api/admin/categories', adminCategoriesRouter)
   app.use('/api/admin', adminGamesRouter)
   app.use('/api/gestor/matches', gestorGamesRouter)
   app.use('/api/matches', matchesRouter)

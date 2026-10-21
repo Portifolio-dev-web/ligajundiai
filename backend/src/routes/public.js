@@ -2,12 +2,13 @@ import { Router } from 'express'
 import { query } from '../db/pool.js'
 import { asyncRoute, userTeams } from '../utils.js'
 import { authenticate, authorize } from '../security/auth.js'
-import { categories, getRegistrationPeriods } from '../services/registration.js'
+import { getRegistrationPeriods } from '../services/registration.js'
+import { listCategoryNames } from '../services/categories.js'
 
 export const publicRouter = Router()
 
 publicRouter.get('/', (_req, res) => res.json({ message: 'LVJ API online', app: 'Liga de Voleibol Jundiaí' }))
-publicRouter.get('/categories', (_req, res) => res.json({ categories }))
+publicRouter.get('/categories', asyncRoute(async (_req, res) => res.json({ categories: await listCategoryNames() })))
 publicRouter.get('/approved-teams', asyncRoute(async (_req, res) => {
   const result = await query(
     `SELECT id, name, category FROM teams
