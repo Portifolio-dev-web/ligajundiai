@@ -32,6 +32,13 @@ Troque todas as credenciais, chaves JWT/criptografia e o segredo do webhook ante
 de qualquer implantação. O admin não tem cadastro público. Para sobrescrever os
 valores locais, configure as variáveis correspondentes no `compose.yaml`.
 
+Antes de operar com dados reais, defina também `DPO_NAME`, `DPO_ROLE` e `DPO_EMAIL`
+no serviço `frontend` do Compose (ou no ambiente de produção): identificam o
+encarregado de proteção de dados exigido pelo art. 41 da LGPD nas páginas
+`/privacidade` e `/termos-de-uso`. Sem essas variáveis, as páginas mostram
+"a definir" em vez de um contato — isso é esperado em desenvolvimento, mas não
+pode ir para produção assim.
+
 Os e-mails transacionais são enviados ao Mailpit, não a destinatários externos.
 O upload biométrico usa POST pré-assinado para o RustFS, com limite de 5 MB e
 tipos JPEG, PNG e WebP. A integração Control ID inicia em modo de simulação.

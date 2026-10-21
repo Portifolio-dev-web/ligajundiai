@@ -30,6 +30,9 @@ export default function CadastroAtletaPage() {
   // quando a idade informada for menor de 18 anos (ver isMinor abaixo).
   const [form, setForm] = useState({
     name: '', email: '', password: '', rg: '', age: '', positions: [], consent: false,
+    // LGPD (varredura, item L4): biometricConsent é um consentimento separado do geral (consent) —
+    // a foto é dado sensível (art. 11, I) e precisa de aceite específico e destacado.
+    biometricConsent: false,
     guardianName: '', guardianRg: '', guardianRelationship: '',
   })
   const [biometryKey, setBiometryKey] = useState('')
@@ -107,6 +110,11 @@ export default function CadastroAtletaPage() {
       setError('O consentimento para o tratamento dos dados é obrigatório.')
       return
     }
+    // LGPD (varredura, item L4): consentimento específico da biometria, além do geral acima.
+    if (!form.biometricConsent) {
+      setError('O consentimento específico para o tratamento da foto biométrica é obrigatório.')
+      return
+    }
     setError('')
     setSubmitting(true)
     try {
@@ -122,6 +130,7 @@ export default function CadastroAtletaPage() {
           positions: form.positions,
           biometry_key: biometryKey,
           consent: true,
+          biometric_consent: true,
           // LGPD (varredura, item L2): só enviados quando isMinor; o backend rejeita o cadastro de
           // um menor sem esses três campos (GUARDIAN_REQUIRED).
           ...(isMinor ? {
@@ -314,6 +323,13 @@ export default function CadastroAtletaPage() {
                   de Atletas Menores — não mais o aceite genérico de dados. */}
               {isMinor && <div className="rounded-md border bg-amber-50 p-4 text-xs text-amber-900">{MINOR_GUARDIAN_TERM}</div>}
               <div className="rounded-md border bg-muted p-4 text-xs text-muted-foreground">{IMAGE_USE_TERM}</div>
+              {/* LGPD (varredura, item L4): checkbox separado do consentimento geral abaixo — a foto
+                  biométrica é dado sensível (art. 11, I) e exige consentimento específico e destacado,
+                  não só implícito no aceite da Política/Termos. */}
+              <label className="flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm">
+                <Checkbox checked={form.biometricConsent} onCheckedChange={(checked) => setForm({ ...form, biometricConsent: checked === true })} />
+                <span>Autorizo especificamente o tratamento da minha foto biométrica para o controle de acesso aos jogos (reconhecimento facial), como dado pessoal sensível (art. 11 da LGPD).</span>
+              </label>
               <label className="flex items-start gap-3 rounded-md border p-4 text-sm">
                 <Checkbox checked={form.consent} onCheckedChange={(checked) => setForm({ ...form, consent: checked === true })} />
                 {/* LGPD (varredura, item L1): agora linka também os Termos de Uso, não só a Política de Privacidade */}
@@ -329,7 +345,7 @@ export default function CadastroAtletaPage() {
                   if (validationError) setError(validationError)
                   else { setError(''); setStep((current) => current + 1) }
                 }}>Continuar <ArrowRight className="h-4 w-4" /></Button>
-                : <Button type="submit" disabled={submitting || !form.consent || !biometryKey}>
+                : <Button type="submit" disabled={submitting || !form.consent || !form.biometricConsent || !biometryKey}>
                   {submitting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                   {submitting ? 'Enviando cadastro…' : 'Concluir cadastro'}
                 </Button>}

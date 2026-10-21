@@ -36,6 +36,12 @@ async function createAthlete(client, { userId, managerId, team, input, actor }) 
   if (key && !key.startsWith(`biometry/${managerId}/`)) {
     throw new AppError(400, 'INVALID_BIOMETRY_KEY', 'A chave de biometria não pertence a esta equipe')
   }
+  // LGPD (varredura, item L4): a foto biométrica é dado sensível (art. 11, I) — precisa de um
+  // consentimento específico e destacado, não só o aceite genérico da Política/Termos (input.consent).
+  // Só se aplica quando há foto: no cadastro do gestor ela é opcional.
+  if (key && !input.biometric_consent) {
+    throw new AppError(400, 'BIOMETRIC_CONSENT_REQUIRED', 'É necessário o consentimento específico para o tratamento da foto biométrica')
+  }
   const existing = await client.query(
     `SELECT id FROM athletes WHERE rg_hash = $1 AND team_id = $2 AND deleted_at IS NULL`,
     [rgDigest(rg), team.id],
@@ -67,9 +73,9 @@ async function createAthlete(client, { userId, managerId, team, input, actor }) 
     `INSERT INTO athletes
      (user_id, team_id, manager_user_id, name, rg_ciphertext, rg_hash, birthdate,
        age_at_registration, positions, status, consent_at, consent_version, contact_email,
-       consent_confirmed, biometry_object_key, biometry_url,
+       consent_confirmed, biometry_object_key, biometry_url, biometric_consent_at,
        guardian_name, guardian_rg_ciphertext, guardian_relationship)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'awaiting_manager', now(), $10, $11, true, $12, $13, $14, $15, $16)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'awaiting_manager', now(), $10, $11, true, $12, $13, $14, $15, $16, $17)
      RETURNING id, user_id, team_id, manager_user_id, name, birthdate,
        age_at_registration, positions, status, justification, biometry_url,
        biometry_status, control_id_reference, created_at,
@@ -88,6 +94,7 @@ async function createAthlete(client, { userId, managerId, team, input, actor }) 
       input.email || null,
       key,
       key ? `s3://${config.S3_BUCKET}/${key}` : null,
+      key ? new Date() : null,
       isMinor ? cleanText(input.guardian_name, 120) : null,
       isMinor ? encryptSensitive(guardianRg) : null,
       isMinor ? cleanText(input.guardian_relationship, 60) : null,
@@ -109,6 +116,15 @@ async function createAthlete(client, { userId, managerId, team, input, actor }) 
     consent_version: input.consent_version || config.CONSENT_VERSION,
     is_minor: isMinor,
   })
+  // LGPD (varredura, item L4): trilha separada para o consentimento específico da biometria —
+  // sobrevive à anonimização (privacy.js nunca apaga audit_logs) e prova que esse segundo aceite
+  // existiu, não só o genérico acima.
+  if (key) {
+    await audit(client, actor, 'consent.biometric_recorded', 'athlete', athlete.id, {
+      consent_version: input.consent_version || config.CONSENT_VERSION,
+      is_minor: isMinor,
+    })
+  }
   return athlete
 }
 
@@ -159,6 +175,10 @@ athletesRouter.post('/', authenticate, authorize('gestor'), asyncRoute(async (re
     positions: positionSchema.optional(),
     biometry_key: z.string().max(300).optional(),
     consent: z.literal(true),
+    // LGPD (varredura, item L4): aqui a foto é opcional (gestor pode cadastrar sem ela ainda), então
+    // o consentimento biométrico também é opcional no schema — createAthlete só o exige quando
+    // biometry_key vier preenchido.
+    biometric_consent: z.boolean().optional(),
     consent_version: z.string().max(40).optional(),
     // LGPD (varredura, item L2): só exigidos pelo createAthlete quando a idade informada for < 18.
     guardian_name: z.string().trim().min(2).max(120).optional(),
@@ -190,6 +210,10 @@ athletesRouter.post('/self-register', authRateLimit, asyncRoute(async (req, res)
     positions: positionSchema,
     biometry_key: z.string().min(1).max(300),
     consent: z.literal(true),
+    // LGPD (varredura, item L4): aqui a foto é obrigatória (ver canContinue no formulário público),
+    // então o consentimento biométrico específico também é — sem ele a catraca nunca teria base
+    // legal (art. 11, I) para tratar a foto.
+    biometric_consent: z.literal(true),
     consent_version: z.string().trim().max(40).optional(),
     // LGPD (varredura, item L2): o próprio atleta pode ser menor de idade (categorias Sub-19); se a
     // idade informada for < 18, createAthlete exige esses três campos antes de gravar o cadastro.

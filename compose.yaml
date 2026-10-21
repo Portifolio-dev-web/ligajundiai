@@ -31,8 +31,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      # SEGURANÇA (varredura, item S5): o Dockerfile agora tem um estágio "production" (build real +
+      # usuário não-root) além do "development" — sem "target" aqui, o build local passaria a usar o
+      # último estágio do arquivo (production), que não monta o volume do código-fonte em dev.
+      target: development
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       NODE_ENV: development
       NODE_OPTIONS: --max-old-space-size=512
@@ -56,8 +60,11 @@ services:
       dockerfile: backend/Dockerfile
       target: production
     environment: *api-environment
+    # SEGURANÇA (varredura, item S10): portas de dev publicadas em 127.0.0.1, não em 0.0.0.0 — numa
+    # rede compartilhada (Wi-Fi de escritório, VM de homologação), outra máquina não alcança mais
+    # a API, o banco, o Redis nem o console do RustFS, só quem está na própria máquina.
     ports:
-      - "4000:4000"
+      - "127.0.0.1:4000:4000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -82,7 +89,7 @@ services:
       POSTGRES_USER: liga
       POSTGRES_PASSWORD: liga_local_only
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -94,7 +101,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -128,8 +135,8 @@ services:
       # Local-only: named Docker volumes share one backing device.
       RUSTFS_UNSAFE_BYPASS_DISK_CHECK: "true"
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
     volumes:
       - object_storage_0:/data/rustfs0
       - object_storage_1:/data/rustfs1
@@ -149,8 +156,8 @@ services:
   mailpit:
     image: axllent/mailpit:v1.27
     ports:
-      - "1025:1025"
-      - "8025:8025"
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
 
   postgres-test:
     profiles: ["test"]

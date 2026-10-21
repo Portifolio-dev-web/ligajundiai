@@ -7,10 +7,15 @@
 // as duas páginas são aceitas juntas no mesmo passo de consentimento do cadastro.
 const TERMS_VERSION = '2026-01'
 
+// LGPD (varredura, item L7): sem cache de página estática, para que DPO_NAME/DPO_ROLE/DPO_EMAIL
+// (lib/legalTerms.js) sejam lidos do ambiente a cada requisição, não congelados no build da imagem.
+export const dynamic = 'force-dynamic'
+
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { dpoContact } from '@/lib/legalTerms'
 
 function Section({ title, children }) {
   return (
@@ -22,6 +27,7 @@ function Section({ title, children }) {
 }
 
 export default function TermosDeUsoPage() {
+  const dpo = dpoContact()
   return (
     // ACESSIBILIDADE (varredura, item A1): id="main-content" é o alvo do link "Pular para o
     // conteúdo" em app/layout.js.
@@ -117,7 +123,10 @@ export default function TermosDeUsoPage() {
           </Section>
 
           <Section title="12. Contato">
-            <p>Dúvidas sobre estes termos: <strong>contato@lvj.com.br</strong>.</p>
+            <p>
+              Dúvidas sobre estes termos: <strong>{dpo.email}</strong>
+              {dpo.configured && <> ({dpo.name}, {dpo.role})</>}.
+            </p>
           </Section>
         </CardContent>
       </Card>

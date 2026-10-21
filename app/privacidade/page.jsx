@@ -9,10 +9,15 @@
 // (backend/src/config.js). Se o texto mudar de forma relevante, suba a versão nas duas pontas.
 const POLICY_VERSION = '2026-01'
 
+// LGPD (varredura, item L7): sem cache de página estática, para que DPO_NAME/DPO_ROLE/DPO_EMAIL
+// (lib/legalTerms.js) sejam lidos do ambiente a cada requisição, não congelados no build da imagem.
+export const dynamic = 'force-dynamic'
+
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { dpoContact } from '@/lib/legalTerms'
 
 function Section({ title, children }) {
   return (
@@ -24,6 +29,7 @@ function Section({ title, children }) {
 }
 
 export default function PrivacidadePage() {
+  const dpo = dpoContact()
   return (
     // ACESSIBILIDADE (varredura, item A1): id="main-content" é o alvo do link "Pular para o
     // conteúdo" em app/layout.js.
@@ -114,7 +120,11 @@ export default function PrivacidadePage() {
               <li><strong>Exclusão/anonimização</strong>: disponível a qualquer momento dentro da sua conta.</li>
               <li><strong>Revogação do consentimento</strong> para a foto biométrica: tem o mesmo efeito do pedido de exclusão e impede novo acesso biométrico às partidas.</li>
             </ul>
-            <p>Canal de contato para exercer esses direitos: <strong>contato@lvj.com.br</strong>.</p>
+            <p>
+              Canal de contato para exercer esses direitos: <strong>{dpo.email}</strong>
+              {dpo.configured && <> — {dpo.name}, {dpo.role}</>}.
+              {!dpo.configured && <span className="block text-xs text-amber-700">O encarregado (DPO) ainda não foi identificado nominalmente; configure DPO_NAME, DPO_ROLE e DPO_EMAIL antes de operar com dados reais.</span>}
+            </p>
           </Section>
 
           <Section title="9. Crianças e adolescentes">
@@ -143,7 +153,10 @@ export default function PrivacidadePage() {
           </Section>
 
           <Section title="12. Contato">
-            <p>Dúvidas sobre privacidade ou sobre esta política: <strong>contato@lvj.com.br</strong>.</p>
+            <p>
+              Dúvidas sobre privacidade ou sobre esta política: <strong>{dpo.email}</strong>
+              {dpo.configured && <> ({dpo.name}, {dpo.role})</>}.
+            </p>
           </Section>
         </CardContent>
       </Card>

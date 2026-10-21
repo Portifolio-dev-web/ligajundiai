@@ -16,6 +16,13 @@ node_modules/
 !.yarn/releases
 !.yarn/versions
 
+# SEGURANÇA (varredura, item S6): .env/.env.* nunca podiam ser commitados — só o .dockerignore
+# cobria isso antes, então um "git add ." num .env local (JWT_SECRET, APP_ENCRYPTION_KEY,
+# credenciais reais) ia direto para o histórico do git.
+.env
+.env.*
+!.env.example
+
 # Testing
 /coverage
 

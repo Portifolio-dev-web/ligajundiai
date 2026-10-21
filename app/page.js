@@ -1743,6 +1743,9 @@ function GestorRoster({ token, team }) {
   // de nascimento aqui, não dá para saber a idade — mesma limitação já existente no backend.
   const [form, setForm] = useState({
     name: '', rg: '', position: '', birthdate: '', email: '', photo: null, consent: false,
+    // LGPD (varredura, item L4): consentimento separado do geral (consent), só exigido quando há
+    // foto — a biometria é dado sensível (art. 11, I) e precisa de aceite específico e destacado.
+    biometricConsent: false,
     guardianName: '', guardianRg: '', guardianRelationship: '',
   })
   const [rejectId, setRejectId] = useState(null)
@@ -1797,7 +1800,7 @@ function GestorRoster({ token, team }) {
           birthdate: form.birthdate || undefined,
           email: form.email || undefined,
           consent: form.consent,
-          ...(biometry_key ? { biometry_key } : {}),
+          ...(biometry_key ? { biometry_key, biometric_consent: form.biometricConsent } : {}),
           // LGPD (varredura, item L2): só enviados quando isMinor; o backend rejeita o cadastro de
           // um menor sem esses três campos (GUARDIAN_REQUIRED).
           ...(isMinor ? {
@@ -1810,6 +1813,7 @@ function GestorRoster({ token, team }) {
       toast.success('Atleta cadastrado e aguardando aprovação do gestor.')
       setForm({
         name: '', rg: '', position: '', birthdate: '', email: '', photo: null, consent: false,
+        biometricConsent: false,
         guardianName: '', guardianRg: '', guardianRelationship: '',
       })
       load()
@@ -1898,6 +1902,12 @@ function GestorRoster({ token, team }) {
                 Atletas Menores — não mais o aceite genérico de dados. */}
             {isMinor && <div className="md:col-span-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">{MINOR_GUARDIAN_TERM}</div>}
             <div className="md:col-span-2 rounded-md border bg-slate-50 p-3 text-xs text-slate-600">{IMAGE_USE_TERM}</div>
+            {/* LGPD (varredura, item L4): checkbox separado do consentimento geral abaixo, só exigido
+                quando há foto anexada — a biometria é dado sensível (art. 11, I). */}
+            {form.photo && <label className="flex items-start gap-2 text-xs text-amber-900 md:col-span-2 rounded-md border border-amber-200 bg-amber-50 p-3">
+              <input type="checkbox" checked={form.biometricConsent} onChange={(e) => setForm({ ...form, biometricConsent: e.target.checked })} />
+              <span>Confirmo o consentimento específico do atleta (ou responsável legal) para o tratamento da foto biométrica para controle de acesso (reconhecimento facial), como dado pessoal sensível (art. 11 da LGPD).</span>
+            </label>}
             <label className="flex items-start gap-2 text-xs text-slate-600 md:col-span-2">
               <input type="checkbox" checked={form.consent} onChange={(e) => setForm({ ...form, consent: e.target.checked })} />
               <span>Confirmo que obtive o consentimento do atleta (ou responsável legal) para os termos acima e para tratar os dados e a foto biométrica, conforme a <Link className="underline" href="/privacidade" target="_blank">Política de Privacidade</Link> e os <Link className="underline" href="/termos-de-uso" target="_blank">Termos de Uso</Link>.</span>
@@ -1908,6 +1918,7 @@ function GestorRoster({ token, team }) {
               onClick={add}
               disabled={!form.name || !form.rg || !form.position || !form.birthdate || !form.consent ||
                 (form.photo && form.photo.size > 5 * 1024 * 1024) ||
+                (form.photo && !form.biometricConsent) ||
                 (isMinor && (!form.guardianName.trim() || !validGuardianRg || !form.guardianRelationship.trim()))}
             >
               <UserPlus className="h-4 w-4 mr-1" /> Adicionar

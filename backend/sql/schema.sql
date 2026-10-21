@@ -143,6 +143,11 @@ CREATE TABLE IF NOT EXISTS athletes (
   biometry_object_key text,
   biometry_status biometry_status NOT NULL DEFAULT 'pending',
   control_id_reference text,
+  -- LGPD (varredura, item L4): a foto biométrica é dado sensível (art. 5º, II, e art. 11, I, da
+  -- LGPD) e precisa de consentimento específico e destacado, separado do aceite geral da Política
+  -- de Privacidade/Termos de Uso. Esta coluna só é preenchida quando há uma foto (biometry_object_key)
+  -- e comprova esse segundo consentimento, não só o genérico.
+  biometric_consent_at timestamptz,
   -- LGPD (varredura, item L2): existem categorias Sub-19, ou seja, atletas menores de 18 anos são
   -- esperados. Para menores (art. 14 da LGPD), o cadastro passa a exigir a identificação de quem deu
   -- o consentimento em nome do atleta — nome, RG (criptografado, igual ao do atleta) e o parentesco.
@@ -167,6 +172,7 @@ DROP INDEX IF EXISTS athletes_cpf_team_active_uq;
 ALTER TABLE athletes ADD COLUMN IF NOT EXISTS rg_ciphertext text;
 ALTER TABLE athletes ADD COLUMN IF NOT EXISTS rg_hash text;
 ALTER TABLE athletes ADD COLUMN IF NOT EXISTS guardian_rg_ciphertext text;
+ALTER TABLE athletes ADD COLUMN IF NOT EXISTS biometric_consent_at timestamptz;
 CREATE UNIQUE INDEX IF NOT EXISTS athletes_rg_team_active_uq
   ON athletes (rg_hash, team_id) WHERE deleted_at IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS athletes_control_reference_active_uq

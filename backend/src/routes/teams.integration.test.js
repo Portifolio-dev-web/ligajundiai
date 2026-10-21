@@ -303,6 +303,7 @@ describe('team creation constraints', () => {
         positions: ['levantador'],
         biometry_key: presign.body.key,
         consent: true,
+        biometric_consent: true,
       })
 
     expect(registration.status).toBe(201)
@@ -324,5 +325,82 @@ describe('team creation constraints', () => {
       .set('Cookie', registration.headers['set-cookie'])
     expect(athleteProfile.status).toBe(200)
     expect(athleteProfile.body.athletes.map((athlete) => athlete.id)).toContain(registration.body.athlete.id)
+  })
+
+  // LGPD (varredura, item L4): a foto biométrica é dado sensível (art. 11, I) e precisa de um
+  // consentimento específico, separado do aceite geral (consent) — este teste prova que o backend
+  // rejeita um cadastro com foto sem esse segundo consentimento, nos dois fluxos (público e gestor).
+  test('requires a specific consent for the biometric photo, separate from the general consent', async () => {
+    const manager = await createManager('consentimento-biometria')
+    const adminCookie = await createAdminSession()
+    const teamResponse = await request(app)
+      .post('/api/teams')
+      .set('Cookie', manager.headers['set-cookie'])
+      .send({ name: `${teamName} Biometria`, category: 'Adulto Feminino', consent: true })
+    expect(teamResponse.status).toBe(201)
+    const team = teamResponse.body.team
+    createdTeams.push(team.id)
+    const approval = await request(app)
+      .post(`/api/admin/teams/${team.id}/approve`)
+      .set('Cookie', adminCookie)
+      .send({})
+    expect(approval.status).toBe(200)
+
+    const publicPresign = await request(app)
+      .post('/api/athletes/biometry-upload-public')
+      .send({ team_id: team.id, content_type: 'image/jpeg' })
+    expect(publicPresign.status).toBe(201)
+
+    const selfRegisterWithoutBiometricConsent = await request(app)
+      .post('/api/athletes/self-register')
+      .send({
+        team_id: team.id,
+        name: 'Atleta sem consentimento de biometria',
+        email: `atleta-${randomUUID()}@example.test`,
+        password: 'Senha-Forte-Atleta-2026',
+        rg: '111222333',
+        age: 23,
+        positions: ['levantador'],
+        biometry_key: publicPresign.body.key,
+        consent: true,
+      })
+    expect(selfRegisterWithoutBiometricConsent.status).toBe(400)
+
+    const managerPresign = await request(app)
+      .post('/api/athletes/biometry-upload')
+      .set('Cookie', manager.headers['set-cookie'])
+      .send({ team_id: team.id, content_type: 'image/jpeg' })
+    expect(managerPresign.status).toBe(201)
+
+    const gestorCreatedWithoutBiometricConsent = await request(app)
+      .post('/api/athletes')
+      .set('Cookie', manager.headers['set-cookie'])
+      .send({
+        team_id: team.id,
+        name: 'Atleta do gestor sem consentimento de biometria',
+        rg: '444555666',
+        age: 25,
+        position: 'central',
+        biometry_key: managerPresign.body.key,
+        consent: true,
+      })
+    expect(gestorCreatedWithoutBiometricConsent.status).toBe(400)
+    expect(gestorCreatedWithoutBiometricConsent.body.error).toBe('É necessário o consentimento específico para o tratamento da foto biométrica')
+
+    const gestorCreatedWithBiometricConsent = await request(app)
+      .post('/api/athletes')
+      .set('Cookie', manager.headers['set-cookie'])
+      .send({
+        team_id: team.id,
+        name: 'Atleta do gestor com consentimento de biometria',
+        rg: '777888999',
+        age: 25,
+        position: 'central',
+        biometry_key: managerPresign.body.key,
+        consent: true,
+        biometric_consent: true,
+      })
+    expect(gestorCreatedWithBiometricConsent.status).toBe(201)
+    createdAthletes.push(gestorCreatedWithBiometricConsent.body.athlete.id)
   })
 })
