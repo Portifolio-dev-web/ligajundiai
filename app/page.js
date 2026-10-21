@@ -64,9 +64,11 @@ import { api, CATEGORY_FALLBACK } from '@/lib/lvjApi'
 import { formatRg, getAge, isValidRg } from '@/lib/athlete'
 import { financialResponsibilityTerm, IMAGE_USE_TERM, MINOR_GUARDIAN_TERM } from '@/lib/legalTerms'
 
-const PURPLE = '#6D28D9'
-const ORANGE = '#F97316'
-const DARKBLUE = '#0F172A'
+// Paleta alinhada ao logo oficial da LVJ (marinho + vermelho + azul da bola), substituindo o
+// roxo/laranja genérico usado antes de o logo real entrar no projeto.
+const BLUE = '#2458A6'
+const RED = '#E4242A'
+const NAVY = '#1E1B4B'
 
 const HERO = 'https://images.unsplash.com/photo-1547347298-4074fc3086f0'
 const IMG_COURT = 'https://images.unsplash.com/photo-1666901356149-93f2eb3ba5a2'
@@ -129,8 +131,8 @@ function App() {
 
   if (booting) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#0F172A] text-white">
-        <Volleyball className="h-8 w-8 animate-spin" style={{ color: ORANGE }} />
+      <div className="min-h-screen flex items-center justify-center bg-[#1E1B4B] text-white">
+        <Volleyball className="h-8 w-8 animate-spin" style={{ color: RED }} />
       </div>
     )
   }
@@ -166,12 +168,12 @@ function App() {
 // ============================================================================
 function TopNav({ user, token, onLoginClick, onLogout }) {
   return (
-    <header className="sticky top-0 z-40 border-b border-white/10" style={{ background: DARKBLUE }}>
+    <header className="sticky top-0 z-40 border-b border-white/10" style={{ background: NAVY }}>
       <div className="container flex h-16 items-center justify-between">
         <div className="flex items-center gap-2 text-white">
           <div
             className="flex h-9 w-9 items-center justify-center rounded-lg"
-            style={{ background: `linear-gradient(135deg, ${PURPLE}, ${ORANGE})` }}
+            style={{ background: `linear-gradient(135deg, ${BLUE}, ${RED})` }}
           >
             <Volleyball className="h-5 w-5 text-white" />
           </div>
@@ -186,7 +188,7 @@ function TopNav({ user, token, onLoginClick, onLogout }) {
             <>
               <Badge
                 className="hidden sm:inline-flex text-white border-0"
-                style={{ background: user.role === 'admin' ? PURPLE : ORANGE }}
+                style={{ background: user.role === 'admin' ? BLUE : RED }}
               >
                 {user.role === 'admin' ? 'Administrador' : 'Gestor de Equipe'}
               </Badge>
@@ -213,7 +215,7 @@ function TopNav({ user, token, onLoginClick, onLogout }) {
               size="sm"
               onClick={onLoginClick}
               className="text-white border-0"
-              style={{ background: ORANGE }}
+              style={{ background: RED }}
             >
               Entrar
             </Button>
@@ -250,27 +252,27 @@ function PublicSite({ categories, currentYear, onLoginClick }) {
   return (
     <main>
       {/* HERO */}
-      <section className="relative overflow-hidden" style={{ background: DARKBLUE }}>
+      <section className="relative overflow-hidden" style={{ background: NAVY }}>
         <img src={HERO} alt="Vôlei" className="absolute inset-0 h-full w-full object-cover opacity-25" />
         <div
           className="absolute inset-0"
-          style={{ background: `linear-gradient(120deg, ${DARKBLUE}ee, ${PURPLE}aa)` }}
+          style={{ background: `linear-gradient(120deg, ${NAVY}ee, ${BLUE}aa)` }}
         />
         <div className="container relative py-20 md:py-28 text-white">
-          <Badge className="mb-4 border-0 text-white" style={{ background: ORANGE }}>
+          <Badge className="mb-4 border-0 text-white" style={{ background: RED }}>
             Temporada {currentYear}
           </Badge>
           <h1 className="max-w-2xl text-4xl md:text-6xl font-extrabold leading-tight">
-            A casa do vôlei em <span style={{ color: ORANGE }}>Jundiaí</span>
+            A casa do vôlei em <span style={{ color: RED }}>Jundiaí</span>
           </h1>
           <p className="mt-4 max-w-xl text-slate-200 text-lg">
             Classificação em tempo real, agenda de jogos, gestão de equipes e atletas. Tudo em um só lugar.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
-            <Button size="lg" onClick={onLoginClick} className="text-white border-0" style={{ background: ORANGE }}>
+            <Button size="lg" onClick={onLoginClick} className="text-white border-0" style={{ background: RED }}>
               Inscrever minha equipe
             </Button>
-            <Button size="lg" onClick={onLoginClick} className="text-white border-0" style={{ background: ORANGE }}>
+            <Button size="lg" onClick={onLoginClick} className="text-white border-0" style={{ background: RED }}>
               <a href="/cadastro-atleta">Cadastrar atleta</a>
             </Button>
             <Button
@@ -300,7 +302,7 @@ function PublicSite({ categories, currentYear, onLoginClick }) {
               >
                 <div
                   className="flex h-8 w-8 items-center justify-center rounded-md text-white text-xs font-bold"
-                  style={{ background: PURPLE }}
+                  style={{ background: BLUE }}
                 >
                   {s.name.charAt(0)}
                 </div>
@@ -318,7 +320,7 @@ function PublicSite({ categories, currentYear, onLoginClick }) {
       <section id="classificacao" className="container py-12">
         <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-6">
           <div>
-            <h2 className="text-3xl font-extrabold" style={{ color: DARKBLUE }}>
+            <h2 className="text-3xl font-extrabold" style={{ color: NAVY }}>
               Classificação
             </h2>
             <p className="text-slate-500">Tabela calculada automaticamente pelo Motor de Regras da liga.</p>
@@ -342,9 +344,9 @@ function PublicSite({ categories, currentYear, onLoginClick }) {
 
         <div className="grid gap-6 lg:grid-cols-3">
           <Card className="lg:col-span-2 overflow-hidden">
-            <CardHeader className="text-white" style={{ background: `linear-gradient(90deg, ${PURPLE}, ${DARKBLUE})` }}>
+            <CardHeader className="text-white" style={{ background: `linear-gradient(90deg, ${BLUE}, ${NAVY})` }}>
               <CardTitle className="flex items-center gap-2">
-                <Trophy className="h-5 w-5" style={{ color: ORANGE }} /> {category}
+                <Trophy className="h-5 w-5" style={{ color: RED }} /> {category}
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
@@ -354,10 +356,10 @@ function PublicSite({ categories, currentYear, onLoginClick }) {
 
           <div className="space-y-6">
             {/* Sponsor highlight box next to standings */}
-            <Card className="overflow-hidden border-2" style={{ borderColor: ORANGE }}>
+            <Card className="overflow-hidden border-2" style={{ borderColor: RED }}>
               <div className="relative h-28">
                 <img src={IMG_COURT} alt="" className="h-full w-full object-cover" />
-                <div className="absolute inset-0 flex items-center justify-center" style={{ background: `${PURPLE}bb` }}>
+                <div className="absolute inset-0 flex items-center justify-center" style={{ background: `${BLUE}bb` }}>
                   <span className="text-white font-bold text-lg">Espaço Patrocinador</span>
                 </div>
               </div>
@@ -369,7 +371,7 @@ function PublicSite({ categories, currentYear, onLoginClick }) {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
-                  <CalendarDays className="h-4 w-4" style={{ color: PURPLE }} /> Próximos jogos
+                  <CalendarDays className="h-4 w-4" style={{ color: BLUE }} /> Próximos jogos
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -395,7 +397,7 @@ function PublicSite({ categories, currentYear, onLoginClick }) {
       {/* RESULTS / AGENDA */}
       <section className="bg-white border-t">
         <div className="container py-12">
-          <h2 className="text-2xl font-extrabold mb-6" style={{ color: DARKBLUE }}>
+          <h2 className="text-2xl font-extrabold mb-6" style={{ color: NAVY }}>
             Últimos resultados
           </h2>
           <div className="grid gap-4 md:grid-cols-3">
@@ -412,10 +414,10 @@ function PublicSite({ categories, currentYear, onLoginClick }) {
       {/* Community / sponsor banner */}
       <section className="relative">
         <img src={IMG_ARENA} alt="" className="h-64 w-full object-cover" />
-        <div className="absolute inset-0 flex items-center" style={{ background: `${DARKBLUE}cc` }}>
+        <div className="absolute inset-0 flex items-center" style={{ background: `${NAVY}cc` }}>
           <div className="container text-white">
             <h3 className="text-3xl font-extrabold max-w-lg">Faça parte da maior liga de vôlei da região</h3>
-            <Button className="mt-4 text-white border-0" style={{ background: ORANGE }} onClick={onLoginClick}>
+            <Button className="mt-4 text-white border-0" style={{ background: RED }} onClick={onLoginClick}>
               Cadastrar equipe
             </Button>
           </div>
@@ -472,7 +474,7 @@ function StandingsLegend({ category, abbr }) {
         <ul className="space-y-1">
           {STANDINGS_LEGEND.map((item) => (
             <li key={item.abbr} className="flex gap-2">
-              <span className="w-10 shrink-0 font-bold" style={{ color: PURPLE }}>
+              <span className="w-10 shrink-0 font-bold" style={{ color: BLUE }}>
                 {item.abbr}
               </span>
               <span>{item.label}</span>
@@ -514,13 +516,13 @@ function StandingsTable({ standings, category }) {
               <TableCell>
                 <span
                   className="inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold text-white"
-                  style={{ background: s.position <= 4 ? ORANGE : '#94a3b8' }}
+                  style={{ background: s.position <= 4 ? RED : '#94a3b8' }}
                 >
                   {s.position}
                 </span>
               </TableCell>
               <TableCell className="font-semibold">{s.name}</TableCell>
-              <TableCell className="text-center font-bold" style={{ color: PURPLE }}>
+              <TableCell className="text-center font-bold" style={{ color: BLUE }}>
                 {s.points}
               </TableCell>
               <TableCell className="text-center">{s.played}</TableCell>
@@ -557,7 +559,7 @@ function MatchResultCard({ m }) {
       </div>
       <div className="flex items-center justify-between">
         <span className={`font-semibold ${hs > as ? 'text-slate-900' : 'text-slate-400'}`}>{m.home_name}</span>
-        <span className="mx-2 font-extrabold text-lg" style={{ color: PURPLE }}>
+        <span className="mx-2 font-extrabold text-lg" style={{ color: BLUE }}>
           {hs} - {as}
         </span>
         <span className={`font-semibold text-right ${as > hs ? 'text-slate-900' : 'text-slate-400'}`}>{m.away_name}</span>
@@ -621,7 +623,7 @@ function LoginDialog({ open, onOpenChange, onAuthed }) {
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Volleyball className="h-5 w-5" style={{ color: PURPLE }} /> Acesso LVJ
+            <Volleyball className="h-5 w-5" style={{ color: BLUE }} /> Acesso LVJ
           </DialogTitle>
           <DialogDescription>
             Gestores podem entrar ou criar uma conta para inscrever a equipe. Atletas devem usar o cadastro público, disponível após a aprovação da equipe.
@@ -652,7 +654,7 @@ function LoginDialog({ open, onOpenChange, onAuthed }) {
                 <Input id="login-password-totp" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={pwTotp} onChange={(e) => setPwTotp(e.target.value.replace(/\D/g, ''))} placeholder="000000" />
               </div>
             )}
-            <Button className="w-full text-white border-0" style={{ background: PURPLE }} onClick={loginPw} disabled={loading}>
+            <Button className="w-full text-white border-0" style={{ background: BLUE }} onClick={loginPw} disabled={loading}>
               Entrar
             </Button>
           </TabsContent>
@@ -686,7 +688,7 @@ function LoginDialog({ open, onOpenChange, onAuthed }) {
               <input id="manager-register-consent" type="checkbox" checked={reg.consent} onChange={(e) => setReg({ ...reg, consent: e.target.checked })} />
               <span>Consinto com o tratamento dos meus dados para gestão da liga, conforme a <Link className="underline" href="/privacidade" target="_blank">Política de Privacidade</Link> e os <Link className="underline" href="/termos-de-uso" target="_blank">Termos de Uso</Link>.</span>
             </label>
-            <Button className="w-full text-white border-0" style={{ background: ORANGE }} onClick={doRegister} disabled={loading || !reg.name || !reg.email || reg.password.length < 12 || !reg.consent}>
+            <Button className="w-full text-white border-0" style={{ background: RED }} onClick={doRegister} disabled={loading || !reg.name || !reg.email || reg.password.length < 12 || !reg.consent}>
               <UserPlus className="h-4 w-4 mr-2" /> Criar conta de Gestor
             </Button>
           </TabsContent>
@@ -718,8 +720,8 @@ function AdminPanel({ token, categories, onCategoriesChanged }) {
     <main className="container py-8">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-extrabold flex items-center gap-2" style={{ color: DARKBLUE }}>
-            <ShieldCheck className="h-6 w-6" style={{ color: PURPLE }} /> Painel Administrativo
+          <h1 className="text-2xl font-extrabold flex items-center gap-2" style={{ color: NAVY }}>
+            <ShieldCheck className="h-6 w-6" style={{ color: BLUE }} /> Painel Administrativo
           </h1>
           <p className="text-slate-500 text-sm">Gestão completa da Liga de Voleibol Jundiaí</p>
         </div>
@@ -727,9 +729,9 @@ function AdminPanel({ token, categories, onCategoriesChanged }) {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
-        <StatCard label="Equipes" value={stats.teams || 0} icon={Users} color={PURPLE} />
-        <StatCard label="Atletas" value={stats.athletes || 0} icon={Volleyball} color={ORANGE} />
-        <StatCard label="Jogos" value={stats.matches || 0} icon={CalendarDays} color={DARKBLUE} />
+        <StatCard label="Equipes" value={stats.teams || 0} icon={Users} color={BLUE} />
+        <StatCard label="Atletas" value={stats.athletes || 0} icon={Volleyball} color={RED} />
+        <StatCard label="Jogos" value={stats.matches || 0} icon={CalendarDays} color={NAVY} />
         <StatCard label="Equipes pend." value={stats.pending_teams || 0} icon={ClipboardList} color="#dc2626" />
         <StatCard label="Atletas pend." value={stats.pending_athletes || 0} icon={ClipboardList} color="#dc2626" />
       </div>
@@ -789,7 +791,7 @@ function NotificationBell({ notif, token, reload }) {
           {total > 0 && (
             <span
               className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold text-white"
-              style={{ background: ORANGE }}
+              style={{ background: RED }}
             >
               {total}
             </span>
@@ -797,15 +799,15 @@ function NotificationBell({ notif, token, reload }) {
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-80 p-0" align="end">
-        <div className="p-3 border-b flex items-center justify-between" style={{ background: DARKBLUE }}>
+        <div className="p-3 border-b flex items-center justify-between" style={{ background: NAVY }}>
           <span className="text-white font-semibold text-sm flex items-center gap-2">
-            <Bell className="h-4 w-4" style={{ color: ORANGE }} /> Central de Notificações
+            <Bell className="h-4 w-4" style={{ color: RED }} /> Central de Notificações
           </span>
           <button className="text-xs text-slate-300 hover:text-white" onClick={markAll}>
             marcar lidas
           </button>
         </div>
-        <div className="p-3 space-y-2 border-b bg-orange-50">
+        <div className="p-3 space-y-2 border-b bg-red-50">
           {notif.pending_teams > 0 && (
             <div className="text-sm text-slate-700">
               <strong>{notif.pending_teams}</strong> equipe(s) aguardando aprovação
@@ -1059,13 +1061,13 @@ function RulesEngine({ token }) {
     <Card className="mt-4">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Settings className="h-5 w-5" style={{ color: PURPLE }} /> Motor de Regras Configuráveis
+          <Settings className="h-5 w-5" style={{ color: BLUE }} /> Motor de Regras Configuráveis
         </CardTitle>
         <CardDescription>Defina a pontuação, critérios de desempate e presença mínima. A tabela é recalculada automaticamente.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
         <div>
-          <h4 className="font-semibold mb-3" style={{ color: DARKBLUE }}>Pontuação por resultado</h4>
+          <h4 className="font-semibold mb-3" style={{ color: NAVY }}>Pontuação por resultado</h4>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
             {pointFields.map(([k, label]) => (
               <div key={k}>
@@ -1077,13 +1079,13 @@ function RulesEngine({ token }) {
         </div>
 
         <div>
-          <h4 className="font-semibold mb-3" style={{ color: DARKBLUE }}>Critérios de desempate (ordem de prioridade)</h4>
+          <h4 className="font-semibold mb-3" style={{ color: NAVY }}>Critérios de desempate (ordem de prioridade)</h4>
           <div className="space-y-2">
             {rules.tiebreakers.map((tb, idx) => {
               const opt = tiebreakerOptions.find((o) => o.key === tb)
               return (
                 <div key={tb} className="flex items-center gap-2 rounded-lg border p-2">
-                  <span className="flex h-6 w-6 items-center justify-center rounded-full text-white text-xs font-bold" style={{ background: PURPLE }}>
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full text-white text-xs font-bold" style={{ background: BLUE }}>
                     {idx + 1}
                   </span>
                   <span className="flex-1 text-sm">{opt?.label || tb}</span>
@@ -1096,7 +1098,7 @@ function RulesEngine({ token }) {
         </div>
 
         <div className="max-w-xs">
-          <h4 className="font-semibold mb-3" style={{ color: DARKBLUE }}>Presença mínima para finais/mata-mata</h4>
+          <h4 className="font-semibold mb-3" style={{ color: NAVY }}>Presença mínima para finais/mata-mata</h4>
           <div className="flex items-center gap-2">
             <Input
               type="number"
@@ -1107,7 +1109,7 @@ function RulesEngine({ token }) {
           </div>
         </div>
 
-        <Button className="text-white border-0" style={{ background: ORANGE }} onClick={save} disabled={saving}>
+        <Button className="text-white border-0" style={{ background: RED }} onClick={save} disabled={saving}>
           Salvar Regulamento
         </Button>
       </CardContent>
@@ -1197,7 +1199,7 @@ function AdminMatches({ token, categories }) {
             <Label className="text-xs">Local / Rodada</Label>
             <Input placeholder="Ginásio / Rodada 1" value={form.venue} onChange={(e) => setForm({ ...form, venue: e.target.value })} />
           </div>
-          <Button className="text-white border-0" style={{ background: PURPLE }} onClick={create}>
+          <Button className="text-white border-0" style={{ background: BLUE }} onClick={create}>
             <Plus className="h-4 w-4 mr-1" /> Agendar
           </Button>
         </div>
@@ -1211,7 +1213,7 @@ function AdminMatches({ token, categories }) {
                 <div className="text-sm">
                   <div className="font-semibold">
                     {m.home_name} <span className="text-slate-400">x</span> {m.away_name}
-                    {m.status === 'finished' && <span className="ml-2 font-bold" style={{ color: PURPLE }}>({hs}-{as})</span>}
+                    {m.status === 'finished' && <span className="ml-2 font-bold" style={{ color: BLUE }}>({hs}-{as})</span>}
                   </div>
                   <div className="text-xs text-slate-500">{new Date(m.scheduled_at).toLocaleString('pt-BR')} {m.venue ? `• ${m.venue}` : ''}</div>
                 </div>
@@ -1244,7 +1246,7 @@ function AdminMatches({ token, categories }) {
               </div>
             ))}
           </div>
-          <Button className="text-white border-0" style={{ background: ORANGE }} onClick={saveResult}>Salvar resultado</Button>
+          <Button className="text-white border-0" style={{ background: RED }} onClick={saveResult}>Salvar resultado</Button>
         </DialogContent>
       </Dialog>
     </Card>
@@ -1337,13 +1339,13 @@ function AdminAttendance({ token, categories }) {
               {athletes.length === 0 && <p className="p-3 text-sm text-slate-400">Nenhum atleta aprovado nesta equipe.</p>}
             </div>
             <div className="flex gap-2">
-              <Button className="text-white border-0" style={{ background: PURPLE }} onClick={save} disabled={athletes.length === 0}>Registrar presença</Button>
+              <Button className="text-white border-0" style={{ background: BLUE }} onClick={save} disabled={athletes.length === 0}>Registrar presença</Button>
               <Button variant="outline" onClick={uploadSumula}><ClipboardList className="h-4 w-4 mr-1" /> Importar súmula (MOCKED)</Button>
             </div>
 
             {freq.length > 0 && (
               <div>
-                <h4 className="font-semibold mt-4 mb-2" style={{ color: DARKBLUE }}>Frequência da equipe</h4>
+                <h4 className="font-semibold mt-4 mb-2" style={{ color: NAVY }}>Frequência da equipe</h4>
                 <div className="space-y-1">
                   {freq.map((f) => (
                     <div key={f.athlete_id} className="flex items-center justify-between text-sm rounded border p-2">
@@ -1510,7 +1512,7 @@ function AdminCategories({ token, onCategoriesChanged }) {
             <Label className="text-xs text-slate-500">Ordem</Label>
             <Input type="number" placeholder="Auto" value={newForm.sort_order} onChange={(e) => setNewForm((f) => ({ ...f, sort_order: e.target.value }))} />
           </div>
-          <Button onClick={createCategory} disabled={creating} className="text-white border-0" style={{ background: PURPLE }}>
+          <Button onClick={createCategory} disabled={creating} className="text-white border-0" style={{ background: BLUE }}>
             <Plus className="h-4 w-4 mr-1" /> Adicionar
           </Button>
         </div>
@@ -1576,7 +1578,7 @@ function AdminEmails({ token }) {
   return (
     <Card className="mt-4">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2"><Mail className="h-5 w-5" style={{ color: ORANGE }} /> E-mails transacionais (MOCKED)</CardTitle>
+        <CardTitle className="flex items-center gap-2"><Mail className="h-5 w-5" style={{ color: RED }} /> E-mails transacionais (MOCKED)</CardTitle>
         <CardDescription>Registro dos e-mails que seriam enviados via Resend. Plugue a chave para envio real.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-2">
@@ -1647,8 +1649,8 @@ function GestorPanel({ token, categories, user, myTeams, refreshMe }) {
 
   return (
     <main className="container py-8">
-      <h1 className="text-2xl font-extrabold flex items-center gap-2 mb-1" style={{ color: DARKBLUE }}>
-        <Users className="h-6 w-6" style={{ color: PURPLE }} /> Painel do Gestor
+      <h1 className="text-2xl font-extrabold flex items-center gap-2 mb-1" style={{ color: NAVY }}>
+        <Users className="h-6 w-6" style={{ color: BLUE }} /> Painel do Gestor
       </h1>
       <p className="text-slate-500 text-sm mb-6">Olá {user.name}, gerencie suas equipes e elencos.</p>
 
@@ -1723,7 +1725,7 @@ function GestorPanel({ token, categories, user, myTeams, refreshMe }) {
             <Checkbox checked={teamForm.consent} onCheckedChange={(checked) => setTeamForm({ ...teamForm, consent: checked === true })} />
             <span>Li e aceito o Termo de Responsabilidade Financeira acima.</span>
           </label>
-          <Button className="text-white border-0" style={{ background: ORANGE }} onClick={createTeam} disabled={!teamForm.name || !teamRegistrationOpen || !teamForm.consent}>
+          <Button className="text-white border-0" style={{ background: RED }} onClick={createTeam} disabled={!teamForm.name || !teamRegistrationOpen || !teamForm.consent}>
             Solicitar inscrição
           </Button>
         </CardContent>
@@ -1902,7 +1904,7 @@ function GestorRoster({ token, team }) {
             </label>
             <Button
               className="text-white border-0"
-              style={{ background: PURPLE }}
+              style={{ background: BLUE }}
               onClick={add}
               disabled={!form.name || !form.rg || !form.position || !form.birthdate || !form.consent ||
                 (form.photo && form.photo.size > 5 * 1024 * 1024) ||
@@ -1983,7 +1985,7 @@ function GestorFrequency({ token, teamId }) {
               </Badge>
             </div>
             <div className="mt-2 h-2 w-full rounded-full bg-slate-100 overflow-hidden">
-              <div className="h-full" style={{ width: `${Math.min(f.percent, 100)}%`, background: f.eligible ? '#16a34a' : ORANGE }} />
+              <div className="h-full" style={{ width: `${Math.min(f.percent, 100)}%`, background: f.eligible ? '#16a34a' : RED }} />
             </div>
             <div className="text-xs text-slate-500 mt-1">{f.present}/{f.total_sessions} presenças • {f.percent}%</div>
           </div>
@@ -2050,7 +2052,7 @@ function GestorAgenda({ category, token, team }) {
               <div>
                 <div className="font-semibold">
                   {m.home_name} <span className="text-slate-400">x</span> {m.away_name}
-                  {m.status === 'finished' && <span className="ml-2 font-bold" style={{ color: PURPLE }}>({hs}-{as})</span>}
+                  {m.status === 'finished' && <span className="ml-2 font-bold" style={{ color: BLUE }}>({hs}-{as})</span>}
                 </div>
                 <div className="text-xs text-slate-500">{new Date(m.scheduled_at).toLocaleString('pt-BR')} {m.venue ? `• ${m.venue}` : ''}</div>
               </div>
@@ -2074,12 +2076,12 @@ function GestorAgenda({ category, token, team }) {
 // ============================================================================
 function Footer() {
   return (
-    <footer className="mt-12" style={{ background: DARKBLUE }}>
+    <footer className="mt-12" style={{ background: NAVY }}>
       <div className="container py-10 text-slate-300">
         <div className="grid gap-8 md:grid-cols-3">
           <div>
             <div className="flex items-center gap-2 text-white mb-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg" style={{ background: `linear-gradient(135deg, ${PURPLE}, ${ORANGE})` }}>
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg" style={{ background: `linear-gradient(135deg, ${BLUE}, ${RED})` }}>
                 <Volleyball className="h-4 w-4" />
               </div>
               <span className="font-extrabold">Liga de Voleibol Jundiaí</span>
