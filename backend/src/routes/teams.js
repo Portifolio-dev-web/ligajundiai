@@ -4,10 +4,11 @@ import { config } from '../config.js'
 import { query, transaction } from '../db/pool.js'
 import { AppError, notFound } from '../errors.js'
 import { authenticate, authorize } from '../security/auth.js'
-import { cleanText, parse } from '../security/validation.js'
+import { cleanText, justificationSchema, parse } from '../security/validation.js'
 import { enqueueEmail, escapeHtml } from '../services/email.js'
 import { assertRegistrationOpen } from '../services/registration.js'
 import { assertValidCategory } from '../services/categories.js'
+import { financialResponsibilityTerm, consentTextHash } from '../services/legalTexts.js'
 import { asyncRoute, audit, notify } from '../utils.js'
 
 export const teamsRouter = Router()
@@ -43,9 +44,13 @@ teamsRouter.post('/', asyncRoute(async (req, res) => {
     // LGPD (risco 4, análise LVJ 2027): mesma lógica do consentimento do gestor e do atleta — trilha
     // separada e imutável para o Termo de Responsabilidade Financeira, que sobrevive mesmo se a
     // equipe for removida/anonimizada depois.
+    // LGPD (varredura, item L5): ip + hash do texto exato do Termo de Responsabilidade Financeira
+    // (com o nome/categoria já preenchidos, igual ao que a pessoa leu na tela) — ver legalTexts.js.
     await audit(client, req.user, 'consent.recorded', 'team', row.id, {
       consent_version: input.consent_version || config.CONSENT_VERSION,
       category: row.category,
+      ip: req.ip,
+      consent_text_sha256: consentTextHash(financialResponsibilityTerm({ teamName: row.name, category: row.category })),
     })
     return row
   })
@@ -79,7 +84,8 @@ adminTeamsRouter.get('/', asyncRoute(async (req, res) => {
 
 adminTeamsRouter.post('/:teamId/:action', asyncRoute(async (req, res) => {
   if (!['approve', 'reject'].includes(req.params.action)) throw notFound('Rota não encontrada')
-  const justification = cleanText(req.body?.justification ?? '', 500)
+  const input = parse(justificationSchema, req.body ?? {})
+  const justification = cleanText(input.justification ?? '', 500)
   const team = await transaction(async (client) => {
     const selected = await client.query(
       `SELECT t.*, u.name AS manager_name, u.email AS manager_email

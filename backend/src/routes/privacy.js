@@ -3,7 +3,7 @@ import { Router } from 'express'
 import argon2 from 'argon2'
 import { query, transaction } from '../db/pool.js'
 import { AppError } from '../errors.js'
-import { authenticate } from '../security/auth.js'
+import { authenticate, sessionCookieName, sessionCookieOptions } from '../security/auth.js'
 import { asyncRoute, audit } from '../utils.js'
 import { storageClient } from '../services/storage.js'
 import { DeleteObjectCommand } from '@aws-sdk/client-s3'
@@ -83,6 +83,9 @@ privacyRouter.delete('/me', asyncRoute(async (req, res) => {
   for (const key of objectKeys) {
     await storageClient.send(new DeleteObjectCommand({ Bucket: config.S3_BUCKET, Key: key }))
   }
-  res.clearCookie('lvj_session', { httpOnly: true, secure: config.COOKIE_SECURE, sameSite: 'lax', path: '/' })
+  // SEGURANÇA (varredura, item S18): usava o nome e as opções do cookie fixos e divergentes do
+  // resto do código (sameSite sempre 'lax', nunca o prefixo __Host-) — em produção isso limpava o
+  // cookie errado e deixava a sessão de pé depois da anonimização.
+  res.clearCookie(sessionCookieName(), sessionCookieOptions())
   res.status(204).end()
 }))

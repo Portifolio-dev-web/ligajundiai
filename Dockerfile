@@ -4,8 +4,11 @@ WORKDIR /app
 
 ENV NEXT_TELEMETRY_DISABLED=1
 
-COPY package.json ./
-RUN corepack enable && yarn install --non-interactive
+# SEGURANÇA (varredura, item S8): --frozen-lockfile falha o build se package.json e yarn.lock
+# divergirem, em vez de resolver versões novas silenciosamente dentro das faixas semver — sem
+# lockfile versionado antes, cada build podia trazer dependências diferentes das da última vez.
+COPY package.json yarn.lock ./
+RUN corepack enable && yarn install --non-interactive --frozen-lockfile
 
 COPY . .
 
@@ -17,7 +20,14 @@ CMD ["yarn", "dev:no-reload"]
 # "de produção" feito a partir dele continuava rodando `next dev` (mais lento, sem as otimizações do
 # `next build`, e sem o CSP restrito, que só desliga 'unsafe-eval' quando NODE_ENV=production;
 # `next dev` sempre usa eval()). Este estágio builda de verdade.
+# CORREÇÃO (achado ao verificar o item S18 em produção): next.config.js lê API_INTERNAL_URL dentro
+# de rewrites() para decidir para onde /api/* é encaminhado — o Next resolve isso durante o build
+# (next build), não a cada requisição, então a variável de ambiente passada só em "docker run"
+# nunca chegava a valer; o destino ficava preso no padrão de desenvolvimento (localhost:4000), que
+# não existe dentro do container em produção (API e frontend não compartilham localhost).
 FROM development AS build
+ARG API_INTERNAL_URL
+ENV API_INTERNAL_URL=$API_INTERNAL_URL
 ENV NODE_ENV=production
 RUN yarn build
 

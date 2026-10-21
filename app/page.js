@@ -19,6 +19,16 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog'
 import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from '@/components/ui/alert-dialog'
+import {
   Select,
   SelectTrigger,
   SelectValue,
@@ -94,6 +104,17 @@ function App() {
   const [booting, setBooting] = useState(true)
   const currentYear = new Date().getFullYear()
 
+  // ACESSIBILIDADE (varredura, item A4): a home vira o painel do admin/gestor dependendo de quem
+  // está logado, sem navegar para outra rota — sem isso, a aba sempre mostrava o título genérico
+  // do layout, mesmo para quem já estava num painel interno.
+  useEffect(() => {
+    document.title = user?.role === 'admin'
+      ? 'Painel do administrador | Liga de Voleibol Jundiaí (LVJ)'
+      : user?.role === 'gestor'
+        ? 'Painel do gestor | Liga de Voleibol Jundiaí (LVJ)'
+        : 'Liga de Voleibol Jundiaí (LVJ)'
+  }, [user?.role])
+
   const loadMe = useCallback(async () => {
     try {
       // Risco 1 (varredura, análise LVJ 2027): um gestor pode ter mais de uma equipe, então a
@@ -146,7 +167,10 @@ function App() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <Toaster position="top-right" richColors />
+      {/* UX (achado lateral, varredura do Lote 2): em "top-right" o toast ficava por cima do
+          cabeçalho fixo por alguns segundos em telas estreitas, bloqueando o clique no menu mobile
+          (item A5) até desaparecer. "bottom-right" nunca sobrepõe o cabeçalho. */}
+      <Toaster position="bottom-right" richColors />
       <TopNav
         user={user}
         token={token}
@@ -291,7 +315,10 @@ function PublicSite({ categories, currentYear, onLoginClick }) {
   }, [category])
 
   return (
-    <main>
+    // ACESSIBILIDADE (varredura, item A3): era um segundo <main>, aninhado dentro do
+    // <main id="main-content"> de TopNav/page.js — dois landmarks "main" (um dentro do outro)
+    // confundem a navegação por landmarks de leitor de tela. O <main> real já existe lá fora.
+    <div>
       {/* HERO */}
       <section className="relative overflow-hidden" style={{ background: NAVY }}>
         <img src={HERO} alt="Vôlei" className="absolute inset-0 h-full w-full object-cover opacity-25" />
@@ -464,7 +491,7 @@ function PublicSite({ categories, currentYear, onLoginClick }) {
           </div>
         </div>
       </section>
-    </main>
+    </div>
   )
 }
 
@@ -758,7 +785,9 @@ function AdminPanel({ token, categories, onCategoriesChanged }) {
   }, [loadNotif])
 
   return (
-    <main className="container py-8">
+    // ACESSIBILIDADE (varredura, item A3): mesmo motivo do PublicSite acima — este <main> também
+    // ficava aninhado dentro do <main id="main-content"> de TopNav/page.js.
+    <div className="container py-8">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-extrabold flex items-center gap-2" style={{ color: NAVY }}>
@@ -798,7 +827,7 @@ function AdminPanel({ token, categories, onCategoriesChanged }) {
         <TabsContent value="classificacao"><AdminStandings token={token} categories={categories} /></TabsContent>
         <TabsContent value="emails"><AdminEmails token={token} /></TabsContent>
       </Tabs>
-    </main>
+    </div>
   )
 }
 
@@ -1439,6 +1468,11 @@ function AdminCategories({ token, onCategoriesChanged }) {
   const [savingId, setSavingId] = useState(null)
   const [newForm, setNewForm] = useState({ name: '', abbreviation: '', sort_order: '' })
   const [creating, setCreating] = useState(false)
+  // ACESSIBILIDADE (varredura, item A6): window.confirm nativo era a única ação irreversível do
+  // app fora do padrão de diálogo real (AlertDialog já existia em components/ui, só não era usado
+  // em lugar nenhum) — inconsistente, sem foco gerenciado nem leitura por leitor de tela como os
+  // outros diálogos da aplicação.
+  const [removeTarget, setRemoveTarget] = useState(null)
 
   const load = useCallback(() => {
     api('/admin/categories', { token }).then((d) => {
@@ -1491,7 +1525,6 @@ function AdminCategories({ token, onCategoriesChanged }) {
   }
 
   const removeCategory = async (cat) => {
-    if (!window.confirm(`Remover a categoria "${cat.name}"? Essa ação não pode ser desfeita.`)) return
     try {
       await api(`/admin/categories/${cat.id}`, { method: 'DELETE', token })
       setCategories((prev) => prev.filter((c) => c.id !== cat.id))
@@ -1499,6 +1532,8 @@ function AdminCategories({ token, onCategoriesChanged }) {
       onCategoriesChanged?.()
     } catch (e) {
       toast.error(e.message)
+    } finally {
+      setRemoveTarget(null)
     }
   }
 
@@ -1591,7 +1626,7 @@ function AdminCategories({ token, onCategoriesChanged }) {
                       <Button size="sm" variant="outline" disabled={!dirty || savingId === cat.id} onClick={() => saveCategory(cat)} title="Salvar alterações">
                         <Save className="h-4 w-4" />
                       </Button>
-                      <Button size="sm" variant="outline" className="text-red-600 hover:text-red-700" onClick={() => removeCategory(cat)} title="Remover categoria">
+                      <Button size="sm" variant="outline" className="text-red-600 hover:text-red-700" onClick={() => setRemoveTarget(cat)} title="Remover categoria">
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
@@ -1607,6 +1642,22 @@ function AdminCategories({ token, onCategoriesChanged }) {
           </TableBody>
         </Table>
       </CardContent>
+      <AlertDialog open={!!removeTarget} onOpenChange={(open) => !open && setRemoveTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remover categoria</AlertDialogTitle>
+            <AlertDialogDescription>
+              Remover a categoria "{removeTarget?.name}"? Essa ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction className="bg-red-600 hover:bg-red-700" onClick={() => removeCategory(removeTarget)}>
+              Remover
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   )
 }
@@ -1689,7 +1740,8 @@ function GestorPanel({ token, categories, user, myTeams, refreshMe }) {
   }
 
   return (
-    <main className="container py-8">
+    // ACESSIBILIDADE (varredura, item A3): mesmo motivo do PublicSite/AdminPanel acima.
+    <div className="container py-8">
       <h1 className="text-2xl font-extrabold flex items-center gap-2 mb-1" style={{ color: NAVY }}>
         <Users className="h-6 w-6" style={{ color: BLUE }} /> Painel do Gestor
       </h1>
@@ -1771,7 +1823,7 @@ function GestorPanel({ token, categories, user, myTeams, refreshMe }) {
           </Button>
         </CardContent>
       </Card>
-    </main>
+    </div>
   )
 }
 

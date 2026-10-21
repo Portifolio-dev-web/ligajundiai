@@ -24,6 +24,10 @@ export default function GestorDashboardPage() {
   const [consent, setConsent] = useState(false)
   const [error, setError] = useState('')
 
+  // ACESSIBILIDADE (varredura, item A4): página de cliente, não pode exportar "metadata" do Next
+  // (ver app/layout.js) — mesmo sufixo que o template aplicaria numa página de servidor.
+  useEffect(() => { document.title = 'Painel do gestor | Liga de Voleibol Jundiaí (LVJ)' }, [])
+
   const load = useCallback(async () => {
     try {
       const [result, registrationResult] = await Promise.all([

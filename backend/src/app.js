@@ -70,6 +70,13 @@ export function createApp() {
     }
   })
 
+  // SEGURANÇA (varredura, item S17): sem isso, respostas da API (listas de atletas, exportação,
+  // e-mails) podiam ficar em cache de proxy compartilhado ou no disco do navegador — dado pessoal
+  // não deveria sobreviver fora da sessão de quem pediu.
+  app.use('/api', (_req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store')
+    next()
+  })
   app.use('/api', apiRateLimit)
   app.use('/api', publicRouter)
   app.use('/api/auth', authRouter)

@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowLeft, Check, LoaderCircle, X } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -20,6 +20,14 @@ export default function AdminAprovacoesPage() {
   const [busyId, setBusyId] = useState('')
   const [reject, setReject] = useState(null)
   const [error, setError] = useState('')
+  const reasonInputRef = useRef(null)
+
+  // ACESSIBILIDADE (varredura, item A4): ver o comentário em app/gestor/page.jsx.
+  useEffect(() => { document.title = 'Aprovações pendentes | Liga de Voleibol Jundiaí (LVJ)' }, [])
+
+  // ACESSIBILIDADE (varredura, item A9): clicar "Rejeitar" revela este campo, mas o foco ficava
+  // parado no botão — quem usa teclado ou leitor de tela não percebia que um campo novo apareceu.
+  useEffect(() => { if (reject) reasonInputRef.current?.focus() }, [reject?.id])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -91,7 +99,7 @@ export default function AdminAprovacoesPage() {
           {reject && <div className="space-y-2 rounded-md border p-4">
             <Label htmlFor="reject-reason">Motivo para rejeitar “{reject.name}”</Label>
             <div className="flex flex-wrap gap-2">
-              <Input id="reject-reason" className="min-w-64 flex-1" maxLength={500} value={reject.reason} onChange={(event) => setReject({ ...reject, reason: event.target.value })} />
+              <Input ref={reasonInputRef} id="reject-reason" className="min-w-64 flex-1" maxLength={500} value={reject.reason} onChange={(event) => setReject({ ...reject, reason: event.target.value })} />
               <Button variant="destructive" disabled={!reject.reason.trim() || !!busyId} onClick={() => review(reject.kind, reject.id, 'reject', reject.reason)}>Confirmar rejeição</Button>
               <Button variant="outline" onClick={() => setReject(null)}>Cancelar</Button>
             </div>

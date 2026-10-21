@@ -42,6 +42,9 @@ services:
       NODE_OPTIONS: --max-old-space-size=512
       API_INTERNAL_URL: http://api:4000
       JWT_SECRET: local-development-only-replace-before-deployment-2026
+      # SEGURANÇA (varredura, item S18): precisa ser o mesmo valor do serviço "api" abaixo —
+      # middleware.js usa para saber se procura o cookie "lvj_session" ou "__Host-lvj_session".
+      COOKIE_SECURE: "false"
       # SEGURANÇA (varredura, item S4): precisa ser a mesma origem de S3_PUBLIC_ENDPOINT do
       # serviço "api" abaixo — é para onde o navegador envia a foto biométrica direto, e o CSP
       # (middleware.js) só libera essa origem específica em connect-src.

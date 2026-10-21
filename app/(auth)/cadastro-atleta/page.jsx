@@ -37,6 +37,9 @@ export default function CadastroAtletaPage() {
   })
   const [biometryKey, setBiometryKey] = useState('')
 
+  // ACESSIBILIDADE (varredura, item A4): ver o comentário em app/gestor/page.jsx.
+  useEffect(() => { document.title = 'Cadastro de atleta | Liga de Voleibol Jundiaí (LVJ)' }, [])
+
   useEffect(() => {
     const controller = new AbortController()
     Promise.all([

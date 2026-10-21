@@ -21,6 +21,12 @@ export function parse(schema, value) {
 export const emailSchema = z.string().trim().toLowerCase().email().max(254)
 export const uuidSchema = z.string().uuid()
 
+// SEGURANÇA (varredura, item S19): as rotas de aprovação/recusa (athletes.js, teams.js) liam
+// req.body?.justification direto, sem Zod — aceitavam corpo com campos extras sem rejeitar,
+// diferente do resto da API, que valida tudo com schema .strict(). cleanText() já limitava o
+// tamanho do texto em si; o que faltava era rejeitar a requisição quando vinha algo a mais.
+export const justificationSchema = z.object({ justification: z.string().trim().max(500).optional() }).strict()
+
 // Decisão (análise LVJ 2027, risco 1): identificação por RG, não mais por CPF. Diferente do
 // CPF, o RG não tem um algoritmo de dígito verificador nacional — cada estado emite no seu
 // próprio formato —, então só validamos uma faixa de tamanho plausível, com o dígito

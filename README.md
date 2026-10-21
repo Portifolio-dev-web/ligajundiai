@@ -113,6 +113,20 @@ docker compose --profile test run --build --rm backend-test
 A API também pode ser executada fora do Compose após configurar as variáveis
 necessárias em `backend/.env`; veja `backend/src/config.js` para a lista validada.
 
+## Build de produção do frontend
+
+O `Dockerfile` da raiz tem um estágio `production` (build real com `next build`, usuário
+não-root, sem o código-fonte na imagem final). `docker compose up` usa o estágio `development`
+de propósito, para o hot-reload funcionar; para gerar a imagem de produção:
+
+```powershell
+docker build --target production --build-arg API_INTERNAL_URL=https://api.seu-dominio.com .
+```
+
+`API_INTERNAL_URL` precisa ser passado como *build arg* (não só em `docker run -e`), porque o
+Next.js resolve o destino de `rewrites()` durante o `next build`, não a cada requisição — passá-lo
+só em tempo de execução não tem efeito nenhum no build de produção.
+
 ## Retenção automática de dados
 
 A API roda diariamente uma rotina (`backend/src/services/retention.js`, agendada em

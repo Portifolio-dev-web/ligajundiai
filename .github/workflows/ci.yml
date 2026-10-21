@@ -1,0 +1,91 @@
+# SEGURANÇA (varredura, item S7): não havia CI nenhum — testes, build de produção, varredura de
+# segredo e dependências vulneráveis só eram percebidos manualmente, se alguém lembrasse de rodar.
+# Credenciais aqui são só para o Postgres efêmero do job (perdido no fim da execução), não segredos
+# reais — iguais às já documentadas em backend/.env.example para desenvolvimento local.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: ligajundiai
+          POSTGRES_USER: liga
+          POSTGRES_PASSWORD: liga_local_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U liga -d ligajundiai"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Instalar dependências do backend
+        working-directory: backend
+        run: npm ci
+      - name: Rodar a suíte de testes (unit + integração)
+        working-directory: backend
+        # test-env.cjs já aponta DATABASE_URL para localhost:5432 com estas mesmas credenciais.
+        run: npm test
+
+  backend-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Auditar dependências de produção do backend
+        working-directory: backend
+        run: npm audit --omit=dev --audit-level=high
+
+  frontend-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Instalar dependências do frontend (lockfile travado)
+        run: corepack enable && yarn install --non-interactive --frozen-lockfile
+      - name: Build de produção
+        run: yarn build
+
+  frontend-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Instalar dependências do frontend (lockfile travado)
+        run: corepack enable && yarn install --non-interactive --frozen-lockfile
+      - name: Auditar dependências do frontend
+        # Não falha o build: tailwindcss (3.x, devDependency só de build) ainda arrasta um "braces"
+        # sem patch disponível (só corrige migrando para tailwindcss 4) — risco baixo (uso só em
+        # build/dev, nunca recebe entrada não confiável), mas o resultado fica visível no log do CI.
+        run: yarn audit --level high || true
+
+  secret-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Procurar segredos commitados (gitleaks)
+        uses: docker://zricethezav/gitleaks:latest
+        with:
+          args: detect --source=/github/workspace --no-banner -v

@@ -76,8 +76,14 @@ describe('team creation constraints', () => {
     if (createdAdminJtis.length) await pool.query('DELETE FROM sessions WHERE jti = ANY($1::uuid[])', [createdAdminJtis])
     if (createdAthletes.length) await pool.query('DELETE FROM athletes WHERE id = ANY($1::uuid[])', [createdAthletes])
     if (createdTeams.length) await pool.query('DELETE FROM teams WHERE id = ANY($1::uuid[])', [createdTeams])
-    if (createdUsers.length) await pool.query('DELETE FROM users WHERE id = ANY($1::uuid[])', [createdUsers])
-    if (createdAdminIds.length) await pool.query('DELETE FROM users WHERE id = ANY($1::uuid[])', [createdAdminIds])
+    // SEGURANÇA (varredura, item S15): DELETE FROM users não funciona mais para quem já tem linha
+    // em audit_logs (praticamente todo mundo — registro e login já geram auditoria): a trigger nova
+    // bloqueia o UPDATE que o ON DELETE SET NULL de audit_logs.actor_id tentaria fazer em cascata.
+    // Isso é o comportamento correto (a trilha nunca deveria perder a referência silenciosamente) —
+    // a própria aplicação só anonimiza usuários (soft delete), nunca apaga a linha; o teste segue o
+    // mesmo caminho na limpeza, em vez de um DELETE que a aplicação real nunca faz.
+    if (createdUsers.length) await pool.query('UPDATE users SET deleted_at = now() WHERE id = ANY($1::uuid[])', [createdUsers])
+    if (createdAdminIds.length) await pool.query('UPDATE users SET deleted_at = now() WHERE id = ANY($1::uuid[])', [createdAdminIds])
     await pool.end()
   })
 
@@ -489,5 +495,25 @@ describe('team creation constraints', () => {
     expect(after.rows[0].rg_ciphertext).toBeNull()
     expect(after.rows[0].rg_hash).toBeNull()
     expect(after.rows[0].deleted_at).not.toBeNull()
+  })
+
+  // SEGURANÇA (varredura, item S15): a trilha de auditoria só serve como prova se for
+  // garantidamente append-only pelo próprio banco — este teste teria passado antes da trigger
+  // existir (UPDATE/DELETE funcionavam normalmente).
+  test('the database itself rejects UPDATE and DELETE on audit_logs', async () => {
+    const existing = await pool.query('SELECT id FROM audit_logs LIMIT 1')
+    expect(existing.rowCount).toBeGreaterThan(0)
+    const targetId = existing.rows[0].id
+
+    await expect(
+      pool.query("UPDATE audit_logs SET action = 'tampered' WHERE id = $1", [targetId]),
+    ).rejects.toMatchObject({ message: expect.stringContaining('append-only') })
+
+    await expect(
+      pool.query('DELETE FROM audit_logs WHERE id = $1', [targetId]),
+    ).rejects.toMatchObject({ message: expect.stringContaining('append-only') })
+
+    const untouched = await pool.query('SELECT action FROM audit_logs WHERE id = $1', [targetId])
+    expect(untouched.rows[0].action).not.toBe('tampered')
   })
 })

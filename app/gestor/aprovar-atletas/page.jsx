@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowLeft, Check, LoaderCircle, X } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -19,6 +19,14 @@ export default function AprovarAtletasPage() {
   const [rejectId, setRejectId] = useState('')
   const [justification, setJustification] = useState('')
   const [error, setError] = useState('')
+  const reasonInputRef = useRef(null)
+
+  // ACESSIBILIDADE (varredura, item A4): ver o comentário em app/gestor/page.jsx.
+  useEffect(() => { document.title = 'Aprovação de atletas | Liga de Voleibol Jundiaí (LVJ)' }, [])
+
+  // ACESSIBILIDADE (varredura, item A9): clicar "Rejeitar" revela este campo, mas o foco ficava
+  // parado no botão — quem usa teclado ou leitor de tela não percebia que um campo novo apareceu.
+  useEffect(() => { if (rejectId) reasonInputRef.current?.focus() }, [rejectId])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -94,7 +102,7 @@ export default function AprovarAtletasPage() {
                         {rejectId === athlete.id && <div className="mt-3 flex items-end justify-end gap-2">
                           <div className="max-w-xs space-y-1 text-left">
                             <Label htmlFor={`reason-${athlete.id}`}>Motivo da rejeição</Label>
-                            <Input id={`reason-${athlete.id}`} value={justification} maxLength={500} onChange={(event) => setJustification(event.target.value)} />
+                            <Input ref={reasonInputRef} id={`reason-${athlete.id}`} value={justification} maxLength={500} onChange={(event) => setJustification(event.target.value)} />
                           </div>
                           <Button size="sm" variant="destructive" disabled={!justification.trim() || busyId === athlete.id} onClick={() => review(athlete.id, 'reject', justification)}>Confirmar</Button>
                         </div>}

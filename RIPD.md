@@ -39,15 +39,19 @@ nos riscos e nas medidas de mitigação.
 | Vazamento de segredos (JWT/chave de criptografia) via commit acidental | Baixa / Alto | `.env`/`.env.*` fora do controle de versão; chaves obrigatórias e validadas no boot (fail-closed) |
 | Retenção indevida de dados sem base legal (cadastro recusado) | Média / Médio | Rotina automática de anonimização após o prazo de retenção configurado |
 | Consentimento insuficiente para dado sensível | Média / Alto | Checkbox específico e destacado para a foto biométrica, separado do aceite geral |
-| Uso indevido da trilha de auditoria (alteração/exclusão do histórico) | Baixa / Médio | *Residual — ver seção 4* |
+| Uso indevido da trilha de auditoria (alteração/exclusão do histórico) | Baixa / Médio | Trigger de banco bloqueia UPDATE/DELETE/TRUNCATE em `audit_logs` — append-only garantido pelo Postgres, não só por convenção no código |
 
 ## 4. Riscos residuais (em acompanhamento)
 
-- `audit_logs` ainda não tem uma trigger de banco que impeça `UPDATE`/`DELETE`/`TRUNCATE` por quem
-  tiver acesso de escrita ao Postgres (achado S15, pendente de correção).
 - Transferência internacional: hoje nenhum provedor está hospedado fora do Brasil (ver Política de
   Privacidade, seção 5); se isso mudar, este RIPD e a política devem ser atualizados antes da
   mudança entrar em vigor.
+- Dependências do frontend: `tailwindcss` 3.x ainda arrasta duas vulnerabilidades sem correção
+  disponível nessa major version (`braces`, DoS por padrão de glob profundamente aninhado, via
+  `chokidar`/`fast-glob`; `postcss-selector-parser`, CPU em seletor CSS malicioso). Risco aceito:
+  as duas só atuam em tempo de build/desenvolvimento (watcher de arquivos e processamento do CSS do
+  próprio projeto), nunca recebendo entrada de um usuário do site. Resolver exige migrar para
+  tailwindcss 4, com regressão visual completa — fora do escopo desta rodada.
 
 ## 5. Revisão
 

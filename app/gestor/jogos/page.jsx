@@ -16,6 +16,9 @@ export default function GestorJogosPage() {
   const [busyId, setBusyId] = useState('')
   const [error, setError] = useState('')
 
+  // ACESSIBILIDADE (varredura, item A4): ver o comentário em app/gestor/page.jsx.
+  useEffect(() => { document.title = 'Agenda de jogos | Liga de Voleibol Jundiaí (LVJ)' }, [])
+
   const load = useCallback(async () => {
     setLoading(true)
     setError('')

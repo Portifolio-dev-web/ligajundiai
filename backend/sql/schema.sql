@@ -333,6 +333,30 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 );
 CREATE INDEX IF NOT EXISTS audit_logs_created_idx ON audit_logs (created_at DESC);
 
+-- SEGURANÇA (varredura, item S15): nada impedia, a nível de banco, que UPDATE/DELETE/TRUNCATE
+-- reescrevesse ou apagasse a trilha de auditoria — quem tivesse acesso de escrita ao Postgres
+-- (deploy comprometido, erro operacional, bug futuro) conseguiria encobrir um incidente. A trilha
+-- só serve como prova (consentimento, aprovação, resposta a incidente) se for garantidamente
+-- append-only, pelo próprio banco, não só por convenção no código da aplicação. Nenhum fluxo do
+-- app faz DELETE FROM users (só UPDATE ... deleted_at, anonimização em privacy.js), então o
+-- "ON DELETE SET NULL" de actor_id nunca chega a disparar um UPDATE aqui na prática — se algum dia
+-- alguém apagar um usuário de verdade, a trigger abaixo vai bloquear esse UPDATE em cascata também;
+-- nesse cenário raro, troque para soft-delete antes.
+CREATE OR REPLACE FUNCTION forbid_audit_logs_mutation() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  RAISE EXCEPTION 'audit_logs é append-only: UPDATE, DELETE e TRUNCATE não são permitidos' USING ERRCODE = '42501';
+END $$;
+
+DROP TRIGGER IF EXISTS audit_logs_block_update_delete ON audit_logs;
+CREATE TRIGGER audit_logs_block_update_delete
+  BEFORE UPDATE OR DELETE ON audit_logs
+  FOR EACH ROW EXECUTE FUNCTION forbid_audit_logs_mutation();
+
+DROP TRIGGER IF EXISTS audit_logs_block_truncate ON audit_logs;
+CREATE TRIGGER audit_logs_block_truncate
+  BEFORE TRUNCATE ON audit_logs
+  FOR EACH STATEMENT EXECUTE FUNCTION forbid_audit_logs_mutation();
+
 CREATE TABLE IF NOT EXISTS email_outbox (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   event_id text NOT NULL UNIQUE,

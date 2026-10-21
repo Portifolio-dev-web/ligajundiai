@@ -47,6 +47,9 @@ export default function AdminInscricoesPage() {
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
 
+  // ACESSIBILIDADE (varredura, item A4): ver o comentário em app/gestor/page.jsx.
+  useEffect(() => { document.title = 'Períodos de inscrição | Liga de Voleibol Jundiaí (LVJ)' }, [])
+
   const load = useCallback(async () => {
     setLoading(true)
     setError('')

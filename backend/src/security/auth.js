@@ -6,7 +6,26 @@ import { query } from '../db/pool.js'
 import { config } from '../config.js'
 import { AppError, forbidden, unauthorized } from '../errors.js'
 
-export const sessionCookieName = 'lvj_session'
+// SEGURANÇA (varredura, item S18): o prefixo __Host- só é válido num cookie com Secure, Path=/ e
+// sem Domain — o navegador rejeita (silenciosamente) um Set-Cookie __Host- que não cumpra isso. Em
+// desenvolvimento (HTTP, COOKIE_SECURE=false) o cookie continua sem o prefixo; em produção
+// COOKIE_SECURE é obrigatoriamente true (fail-closed em config.js), então o prefixo sempre se aplica
+// junto com SameSite=Strict — defesa em profundidade a mais contra CSRF, somando com a checagem de
+// Origin que já existe em app.js. O frontend (middleware.js) precisa ler o mesmo nome: ver
+// COOKIE_SECURE no ambiente do serviço "frontend" no compose.yaml.
+export function sessionCookieName() {
+  return config.COOKIE_SECURE ? '__Host-lvj_session' : 'lvj_session'
+}
+
+export function sessionCookieOptions() {
+  return {
+    httpOnly: true,
+    secure: config.COOKIE_SECURE,
+    sameSite: config.COOKIE_SECURE ? 'strict' : 'lax',
+    path: '/',
+  }
+}
+
 const sessionDurationSeconds = 60 * 60 * 8
 
 export async function createSession(user, res) {
@@ -20,18 +39,15 @@ export async function createSession(user, res) {
     jwtid: jti,
   })
   await query('INSERT INTO sessions (jti, user_id, expires_at) VALUES ($1, $2, $3)', [jti, user.id, expiresAt])
-  res.cookie(sessionCookieName, token, {
-    httpOnly: true,
-    secure: config.COOKIE_SECURE,
-    sameSite: 'lax',
-    path: '/',
+  res.cookie(sessionCookieName(), token, {
+    ...sessionCookieOptions(),
     maxAge: sessionDurationSeconds * 1000,
   })
 }
 
 export async function authenticate(req, _res, next) {
   try {
-    const token = req.cookies?.[sessionCookieName]
+    const token = req.cookies?.[sessionCookieName()]
     if (!token) throw unauthorized()
     let payload
     try {
@@ -60,7 +76,7 @@ export async function authenticate(req, _res, next) {
 }
 
 export function authenticateIfPresent(req, res, next) {
-  if (!req.cookies?.[sessionCookieName]) {
+  if (!req.cookies?.[sessionCookieName()]) {
     req.user = null
     return next()
   }
@@ -120,7 +136,7 @@ export function unusablePasswordHash() {
 
 export async function revokeSession(req, res) {
   if (req.sessionJti) await query('UPDATE sessions SET revoked_at = now() WHERE jti = $1 AND revoked_at IS NULL', [req.sessionJti])
-  res.clearCookie(sessionCookieName, { httpOnly: true, secure: config.COOKIE_SECURE, sameSite: 'lax', path: '/' })
+  res.clearCookie(sessionCookieName(), sessionCookieOptions())
 }
 
 export function requireTotp(value) {

@@ -51,9 +51,12 @@ authRouter.post('/register', asyncRoute(async (req, res) => {
     // são uma trilha — um novo consentimento (ou a anonimização em privacy.js) sobrescreve os dois.
     // Este registro em audit_logs é separado, nunca é apagado pela anonimização, e por isso é a prova
     // de que o consentimento foi dado, mesmo depois que o titular peça a exclusão da conta.
+    // LGPD (varredura, item L5): ip do pedido — ver backend/src/services/legalTexts.js para o
+    // porquê de guardar hash do texto (nos fluxos que têm um texto específico), não o texto inteiro.
     await audit(client, createdUser, 'consent.recorded', 'user', createdUser.id, {
       consent_version: input.consent_version || config.CONSENT_VERSION,
       role: 'gestor',
+      ip: req.ip,
     })
     return createdUser
   })

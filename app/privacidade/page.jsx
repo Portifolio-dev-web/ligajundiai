@@ -18,6 +18,9 @@ const RETENTION_REJECTED_ATHLETE_DAYS = 180
 // (lib/legalTerms.js) sejam lidos do ambiente a cada requisição, não congelados no build da imagem.
 export const dynamic = 'force-dynamic'
 
+// ACESSIBILIDADE (varredura, item A4): ver o comentário em app/layout.js.
+export const metadata = { title: 'Política de Privacidade' }
+
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -158,10 +161,11 @@ export default function PrivacidadePage() {
 
           <Section title="10. Cookies">
             <p>
-              Usamos apenas o cookie de sessão <code>lvj_session</code>, técnico e necessário para manter
-              você logado — ele não serve para rastreamento, publicidade ou estatística. Não usamos
-              cookies de terceiros. Se isso mudar, esta política será atualizada antes da mudança entrar
-              em vigor.
+              Usamos apenas um cookie de sessão técnico e necessário para manter você logado —
+              <code>lvj_session</code> em desenvolvimento ou <code>__Host-lvj_session</code> em produção
+              (prefixo que reforça a segurança do cookie); ele não serve para rastreamento, publicidade
+              ou estatística. Não usamos cookies de terceiros. Se isso mudar, esta política será
+              atualizada antes da mudança entrar em vigor.
             </p>
           </Section>
 

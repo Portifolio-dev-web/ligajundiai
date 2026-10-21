@@ -5,10 +5,11 @@ import { query, transaction } from '../db/pool.js'
 import { AppError, notFound } from '../errors.js'
 import { authenticate, authorize, createSession, hashPassword } from '../security/auth.js'
 import { rgDigest, encryptSensitive, maskRg } from '../security/crypto.js'
-import { cleanText, emailSchema, parse, requireValidRg, validatePositions, uuidSchema } from '../security/validation.js'
+import { cleanText, emailSchema, justificationSchema, parse, requireValidRg, validatePositions, uuidSchema } from '../security/validation.js'
 import { enqueueEmail, escapeHtml } from '../services/email.js'
 import { createBiometryUpload } from '../services/storage.js'
 import { assertRegistrationOpen } from '../services/registration.js'
+import { IMAGE_USE_TERM, MINOR_GUARDIAN_TERM, consentTextHash } from '../services/legalTexts.js'
 import { asyncRoute, audit, notify, toPublicAthlete, teamForManager, userTeams } from '../utils.js'
 import { authRateLimit } from '../security/rate-limit.js'
 
@@ -26,7 +27,7 @@ function positionsFrom(input) {
 // (art. 14 da LGPD), não do próprio atleta. 18 é o corte adotado aqui (maioridade civil no Brasil).
 const MINOR_AGE_LIMIT = 18
 
-async function createAthlete(client, { userId, managerId, team, input, actor }) {
+async function createAthlete(client, { userId, managerId, team, input, actor, ip }) {
   await assertRegistrationOpen(team.category, 'athlete', client)
   if (!input.consent) throw new AppError(400, 'CONSENT_REQUIRED', 'É necessário registrar o consentimento explícito')
   // Decisão (análise LVJ 2027, risco 1): identificação por RG, não mais por CPF.
@@ -112,9 +113,14 @@ async function createAthlete(client, { userId, managerId, team, input, actor }) 
   // LGPD (risco 4, análise LVJ 2027): mesma lógica do consentimento do gestor (auth.js) — trilha
   // separada e imutável, sem dado pessoal no metadata (is_minor é um booleano, não identifica
   // ninguém), que sobrevive à anonimização do cadastro (privacy.js nunca apaga audit_logs).
+  // LGPD (varredura, item L5): ip + hash do texto exato aceito (ver legalTexts.js) — "aceitou a
+  // versão X" sozinho só prova a versão, não que este texto específico foi o lido.
+  const generalTermText = isMinor ? `${IMAGE_USE_TERM}\n\n${MINOR_GUARDIAN_TERM}` : IMAGE_USE_TERM
   await audit(client, actor, 'consent.recorded', 'athlete', athlete.id, {
     consent_version: input.consent_version || config.CONSENT_VERSION,
     is_minor: isMinor,
+    ip: ip ?? null,
+    consent_text_sha256: consentTextHash(generalTermText),
   })
   // LGPD (varredura, item L4): trilha separada para o consentimento específico da biometria —
   // sobrevive à anonimização (privacy.js nunca apaga audit_logs) e prova que esse segundo aceite
@@ -123,6 +129,8 @@ async function createAthlete(client, { userId, managerId, team, input, actor }) 
     await audit(client, actor, 'consent.biometric_recorded', 'athlete', athlete.id, {
       consent_version: input.consent_version || config.CONSENT_VERSION,
       is_minor: isMinor,
+      ip: ip ?? null,
+      consent_text_sha256: consentTextHash(IMAGE_USE_TERM),
     })
   }
   return athlete
@@ -191,7 +199,7 @@ athletesRouter.post('/', authenticate, authorize('gestor'), asyncRoute(async (re
   if (!team) throw new AppError(400, 'TEAM_REQUIRED', 'Selecione uma equipe sua para cadastrar o atleta')
   if (team.status !== 'approved') throw new AppError(403, 'TEAM_NOT_APPROVED', 'A equipe precisa ser aprovada antes do cadastro de atletas')
   const athlete = await transaction((client) => createAthlete(client, {
-    userId: null, managerId: req.user.id, team, input, actor: req.user,
+    userId: null, managerId: req.user.id, team, input, actor: req.user, ip: req.ip,
   }))
   // LGPD (varredura, item L2): troquei o spread manual por toPublicAthlete — createAthlete agora
   // devolve também guardian_rg_ciphertext, que não pode ir para a resposta sem ser mascarado.
@@ -255,9 +263,12 @@ athletesRouter.post('/self-register', authRateLimit, asyncRoute(async (req, res)
     const user = createdUser.rows[0]
     // LGPD (risco 4, análise LVJ 2027): a conta de atleta criada aqui tem seu próprio consentimento,
     // separado do consentimento do cadastro de atleta em si (createAthlete audita o segundo).
+    // LGPD (varredura, item L5): ip do pedido — ver legalTexts.js para o porquê do hash em vez do
+    // texto inteiro.
     await audit(client, user, 'consent.recorded', 'user', user.id, {
       consent_version: input.consent_version || config.CONSENT_VERSION,
       role: 'atleta',
+      ip: req.ip,
     })
     await assertRegistrationOpen(team.category, 'athlete', client)
     const athlete = await createAthlete(client, {
@@ -266,6 +277,7 @@ athletesRouter.post('/self-register', authRateLimit, asyncRoute(async (req, res)
       team,
       input,
       actor: user,
+      ip: req.ip,
     })
     return { user, athlete }
   })
@@ -349,7 +361,8 @@ gestorAthletesRouter.get('/', asyncRoute(async (req, res) => {
 
 gestorAthletesRouter.post('/:athleteId/:action', asyncRoute(async (req, res) => {
   if (!['approve', 'reject'].includes(req.params.action)) throw notFound('Rota não encontrada')
-  const justification = cleanText(req.body?.justification ?? '', 500)
+  const input = parse(justificationSchema, req.body ?? {})
+  const justification = cleanText(input.justification ?? '', 500)
   const athlete = await transaction(async (client) => {
     const result = await client.query(
       `SELECT a.*, t.name AS team_name, coalesce(u.email, a.contact_email) AS athlete_email
@@ -414,7 +427,8 @@ adminAthleteActionsRouter.get('/', asyncRoute(async (req, res) => {
 
 adminAthleteActionsRouter.post('/:athleteId/:action', asyncRoute(async (req, res) => {
   if (!['approve', 'reject'].includes(req.params.action)) throw notFound('Rota não encontrada')
-  const justification = cleanText(req.body?.justification ?? '', 500)
+  const input = parse(justificationSchema, req.body ?? {})
+  const justification = cleanText(input.justification ?? '', 500)
   const athlete = await transaction(async (client) => {
     const result = await client.query(
       `SELECT a.*, t.name AS team_name, u.name AS manager_name, u.email AS manager_email

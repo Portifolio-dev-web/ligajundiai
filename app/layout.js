@@ -2,8 +2,16 @@ import './globals.css'
 import { headers } from 'next/headers'
 import { Providers } from './providers'
 
+// ACESSIBILIDADE (varredura, item A4): o título da aba nunca mudava de tela — com várias abas
+// abertas (/gestor, /gestor/aprovar-atletas, /jogos...) não dava para distinguir uma da outra.
+// O "template" aplica o sufixo automaticamente quando uma página de servidor exporta seu próprio
+// "title" (ex.: app/jogos/page.jsx); páginas de cliente ('use client') não podem exportar metadata
+// do Next, então usam document.title com o mesmo sufixo escrito à mão (ver cada página).
 export const metadata = {
-  title: 'Liga de Voleibol Jundiaí (LVJ)',
+  title: {
+    default: 'Liga de Voleibol Jundiaí (LVJ)',
+    template: '%s | Liga de Voleibol Jundiaí (LVJ)',
+  },
   description: 'Sistema oficial da Liga de Voleibol Jundiaí: classificação, agenda, equipes e atletas.',
 }
 

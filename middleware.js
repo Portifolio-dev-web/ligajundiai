@@ -142,6 +142,13 @@ function applyCsp(response, nonce) {
   return response
 }
 
+// SEGURANÇA (varredura, item S18): precisa ser o MESMO nome que o backend usa (security/auth.js,
+// sessionCookieName) — COOKIE_SECURE aqui é passado pelo ambiente do serviço "frontend" no
+// compose.yaml e precisa bater com o do serviço "api", senão o middleware procura o cookie errado.
+function sessionCookieName() {
+  return process.env.COOKIE_SECURE === 'true' ? '__Host-lvj_session' : 'lvj_session'
+}
+
 export async function middleware(request) {
   // O nonce agora é gerado para TODA requisição de página (matcher abaixo), não só para as rotas
   // protegidas por papel — um CSP real precisa valer no site inteiro, inclusive na home e no
@@ -152,7 +159,7 @@ export async function middleware(request) {
 
   const requiredRole = roleForPath(request.nextUrl.pathname)
   if (requiredRole) {
-    const session = request.cookies.get('lvj_session')?.value
+    const session = request.cookies.get(sessionCookieName())?.value
     const payload = session ? await verifySession(session) : null
     if (!payload) {
       const destination = new URL('/', request.url)

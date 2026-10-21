@@ -11,6 +11,9 @@ const TERMS_VERSION = '2026-01'
 // (lib/legalTerms.js) sejam lidos do ambiente a cada requisição, não congelados no build da imagem.
 export const dynamic = 'force-dynamic'
 
+// ACESSIBILIDADE (varredura, item A4): ver o comentário em app/layout.js.
+export const metadata = { title: 'Termos de Uso' }
+
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
