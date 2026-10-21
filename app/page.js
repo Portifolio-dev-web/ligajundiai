@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
@@ -57,6 +58,7 @@ import {
 } from 'lucide-react'
 import { api, CATEGORY_FALLBACK } from '@/lib/lvjApi'
 import { formatRg, getAge, isValidRg } from '@/lib/athlete'
+import { financialResponsibilityTerm, IMAGE_USE_TERM, MINOR_GUARDIAN_TERM } from '@/lib/legalTerms'
 
 const PURPLE = '#6D28D9'
 const ORANGE = '#F97316'
@@ -1344,7 +1346,7 @@ function GestorPanel({ token, categories, user, myTeams, refreshMe }) {
   // mostrando uma equipe por vez, só que agora a pessoa escolhe qual.
   const [teams, setTeams] = useState(myTeams)
   const [activeTeamId, setActiveTeamId] = useState(myTeams[0]?.id ?? '')
-  const [teamForm, setTeamForm] = useState({ name: '', category: categories[0] })
+  const [teamForm, setTeamForm] = useState({ name: '', category: categories[0], consent: false })
   const [registrationPeriods, setRegistrationPeriods] = useState([])
 
   useEffect(() => setTeams(myTeams), [myTeams])
@@ -1368,11 +1370,15 @@ function GestorPanel({ token, categories, user, myTeams, refreshMe }) {
       toast.error(teamPeriod?.message || 'Inscrições encerradas, te aguardamos na próxima temporada.')
       return
     }
+    if (!teamForm.consent) {
+      toast.error('É necessário aceitar o Termo de Responsabilidade Financeira.')
+      return
+    }
     try {
       const d = await api('/teams', { method: 'POST', token, body: teamForm })
       setTeams((current) => [...current, d.team])
       setActiveTeamId(d.team.id)
-      setTeamForm({ name: '', category: categories[0] })
+      setTeamForm({ name: '', category: categories[0], consent: false })
       toast.success('Equipe enviada para aprovação!')
       refreshMe()
     } catch (e) {
@@ -1449,7 +1455,16 @@ function GestorPanel({ token, categories, user, myTeams, refreshMe }) {
             : <div role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 sm:col-span-2">
               {teamPeriod?.message || 'Inscrições encerradas, te aguardamos na próxima temporada.'}
             </div>}
-          <Button className="text-white border-0" style={{ background: ORANGE }} onClick={createTeam} disabled={!teamForm.name || !teamRegistrationOpen}>
+          {/* Risco 3 (análise LVJ 2027): texto real do Termo de Responsabilidade Financeira em
+              papel, não mais o aceite genérico de dados. */}
+          <div className="rounded-md border bg-slate-50 p-3 text-xs text-slate-600">
+            {financialResponsibilityTerm({ teamName: teamForm.name, category: teamForm.category })}
+          </div>
+          <label className="flex items-start gap-2 text-sm">
+            <Checkbox checked={teamForm.consent} onCheckedChange={(checked) => setTeamForm({ ...teamForm, consent: checked === true })} />
+            <span>Li e aceito o Termo de Responsabilidade Financeira acima.</span>
+          </label>
+          <Button className="text-white border-0" style={{ background: ORANGE }} onClick={createTeam} disabled={!teamForm.name || !teamRegistrationOpen || !teamForm.consent}>
             Solicitar inscrição
           </Button>
         </CardContent>
@@ -1617,11 +1632,14 @@ function GestorRoster({ token, team }) {
                 </div>
               </div>
             </div>}
-            {/* LGPD (varredura, item L1): este consentimento não linkava nenhum documento;
-                agora aponta para a política e os termos para o gestor poder mostrá-los ao atleta/responsável. */}
+            {/* Risco 3 (análise LVJ 2027): texto real do Termo de Autorização de Uso de Imagem
+                (todo atleta) e, quando menor de idade, também da Autorização para Participação de
+                Atletas Menores — não mais o aceite genérico de dados. */}
+            {isMinor && <div className="md:col-span-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">{MINOR_GUARDIAN_TERM}</div>}
+            <div className="md:col-span-2 rounded-md border bg-slate-50 p-3 text-xs text-slate-600">{IMAGE_USE_TERM}</div>
             <label className="flex items-start gap-2 text-xs text-slate-600 md:col-span-2">
               <input type="checkbox" checked={form.consent} onChange={(e) => setForm({ ...form, consent: e.target.checked })} />
-              <span>Confirmo que obtive o consentimento do atleta (ou responsável legal) para tratar seus dados e a foto biométrica, conforme a <Link className="underline" href="/privacidade" target="_blank">Política de Privacidade</Link> e os <Link className="underline" href="/termos-de-uso" target="_blank">Termos de Uso</Link>.</span>
+              <span>Confirmo que obtive o consentimento do atleta (ou responsável legal) para os termos acima e para tratar os dados e a foto biométrica, conforme a <Link className="underline" href="/privacidade" target="_blank">Política de Privacidade</Link> e os <Link className="underline" href="/termos-de-uso" target="_blank">Termos de Uso</Link>.</span>
             </label>
             <Button
               className="text-white border-0"

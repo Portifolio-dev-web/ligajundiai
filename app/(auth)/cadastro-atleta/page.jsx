@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import CameraCapture from '@/components/CameraCapture'
 import { api } from '@/lib/api'
 import { ATHLETE_POSITIONS, formatRg, isValidRg } from '@/lib/athlete'
+import { IMAGE_USE_TERM, MINOR_GUARDIAN_TERM } from '@/lib/legalTerms'
 
 const steps = ['Conta e atleta', 'Equipe e biometria', 'Consentimento']
 
@@ -308,10 +309,15 @@ export default function CadastroAtletaPage() {
                 <p><strong>Foto biométrica:</strong> {biometryKey ? 'Enviada com segurança' : 'Não enviada'}</p>
                 {isMinor && <p><strong>Responsável legal:</strong> {form.guardianName} ({form.guardianRelationship})</p>}
               </div>
+              {/* Risco 3 (análise LVJ 2027): texto real do Termo de Autorização de Uso de Imagem
+                  (todo atleta) e, quando menor de idade, também da Autorização para Participação
+                  de Atletas Menores — não mais o aceite genérico de dados. */}
+              {isMinor && <div className="rounded-md border bg-amber-50 p-4 text-xs text-amber-900">{MINOR_GUARDIAN_TERM}</div>}
+              <div className="rounded-md border bg-muted p-4 text-xs text-muted-foreground">{IMAGE_USE_TERM}</div>
               <label className="flex items-start gap-3 rounded-md border p-4 text-sm">
                 <Checkbox checked={form.consent} onCheckedChange={(checked) => setForm({ ...form, consent: checked === true })} />
                 {/* LGPD (varredura, item L1): agora linka também os Termos de Uso, não só a Política de Privacidade */}
-                <span>Autorizo o tratamento dos dados pessoais e da imagem para gestão esportiva e controle de acesso aos jogos, conforme a <Link className="underline" href="/privacidade" target="_blank">Política de Privacidade</Link> e os <Link className="underline" href="/termos-de-uso" target="_blank">Termos de Uso</Link>. Sei que posso solicitar acesso ou exclusão dos meus dados.</span>
+                <span>Li e aceito {isMinor ? 'os termos acima' : 'o termo acima'}, conforme a <Link className="underline" href="/privacidade" target="_blank">Política de Privacidade</Link> e os <Link className="underline" href="/termos-de-uso" target="_blank">Termos de Uso</Link>. Sei que posso solicitar acesso ou exclusão dos meus dados.</span>
               </label>
             </div>}
 

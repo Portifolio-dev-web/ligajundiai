@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { z } from 'zod'
+import { config } from '../config.js'
 import { query, transaction } from '../db/pool.js'
 import { AppError, notFound } from '../errors.js'
 import { authenticate, authorize } from '../security/auth.js'
@@ -16,6 +17,11 @@ teamsRouter.post('/', asyncRoute(async (req, res) => {
   const input = parse(z.object({
     name: z.string().trim().min(2).max(100),
     category: z.enum(categories),
+    // Risco 3 (análise LVJ 2027): o Termo de Responsabilidade Financeira ("me responsabilizando
+    // pela equipe X, inscrita na categoria Y... aceito o artigo 7º") é específico da equipe, então
+    // o aceite dele é exigido aqui, na criação da equipe — não no cadastro da conta do gestor.
+    consent: z.literal(true),
+    consent_version: z.string().trim().max(40).optional(),
   }).strict(), req.body)
   const team = await transaction(async (client) => {
     await assertRegistrationOpen(input.category, 'team', client)
@@ -24,14 +30,21 @@ teamsRouter.post('/', asyncRoute(async (req, res) => {
     // existir uma equipe. teams_name_category_active_uq ainda impede duas equipes com o mesmo
     // nome na mesma categoria.
     const result = await client.query(
-      `INSERT INTO teams (name, category, manager_user_id)
-       VALUES ($1, $2, $3)
+      `INSERT INTO teams (name, category, manager_user_id, consent_at, consent_version)
+       VALUES ($1, $2, $3, now(), $4)
        RETURNING id, name, category, manager_user_id, status, justification, created_at`,
-      [cleanText(input.name, 100), input.category, req.user.id],
+      [cleanText(input.name, 100), input.category, req.user.id, input.consent_version || config.CONSENT_VERSION],
     )
     const row = result.rows[0]
     await notify(client, 'admin', 'team_pending', 'Nova equipe aguardando aprovação', `A equipe "${row.name}" (${row.category}) foi cadastrada por ${req.user.name}.`)
     await audit(client, req.user, 'team.request', 'team', row.id, { category: row.category })
+    // LGPD (risco 4, análise LVJ 2027): mesma lógica do consentimento do gestor e do atleta — trilha
+    // separada e imutável para o Termo de Responsabilidade Financeira, que sobrevive mesmo se a
+    // equipe for removida/anonimizada depois.
+    await audit(client, req.user, 'consent.recorded', 'team', row.id, {
+      consent_version: input.consent_version || config.CONSENT_VERSION,
+      category: row.category,
+    })
     return row
   })
   res.status(201).json({ team })

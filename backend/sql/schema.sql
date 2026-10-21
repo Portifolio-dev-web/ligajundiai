@@ -72,10 +72,18 @@ CREATE TABLE IF NOT EXISTS teams (
   manager_user_id uuid NOT NULL REFERENCES users(id),
   status team_status NOT NULL DEFAULT 'pending',
   justification text,
+  -- Risco 3 (análise LVJ 2027): o Termo de Responsabilidade Financeira em papel é específico da
+  -- equipe ("me responsabilizando pela equipe X, inscrita na categoria Y"), não da conta do gestor
+  -- — por isso o consentimento mora aqui, não em users. Antes não existia nenhum consentimento
+  -- específico para esse termo, só o aceite genérico de dados feito no cadastro da conta.
+  consent_at timestamptz,
+  consent_version text,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   deleted_at timestamptz
 );
+ALTER TABLE teams ADD COLUMN IF NOT EXISTS consent_at timestamptz;
+ALTER TABLE teams ADD COLUMN IF NOT EXISTS consent_version text;
 CREATE UNIQUE INDEX IF NOT EXISTS teams_name_category_active_uq
   ON teams (lower(name), category) WHERE deleted_at IS NULL;
 -- Risco 1 (varredura, análise LVJ 2027): um gestor pode gerenciar mais de uma equipe, em

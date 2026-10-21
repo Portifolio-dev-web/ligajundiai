@@ -9,8 +9,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Checkbox } from '@/components/ui/checkbox'
 import { api } from '@/lib/api'
 import { CATEGORY_FALLBACK } from '@/lib/lvjApi'
+import { financialResponsibilityTerm } from '@/lib/legalTerms'
 
 export default function GestorDashboardPage() {
   const [teams, setTeams] = useState([])
@@ -19,6 +21,7 @@ export default function GestorDashboardPage() {
   const [saving, setSaving] = useState(false)
   const [name, setName] = useState('')
   const [category, setCategory] = useState('')
+  const [consent, setConsent] = useState(false)
   const [error, setError] = useState('')
 
   const load = useCallback(async () => {
@@ -44,13 +47,18 @@ export default function GestorDashboardPage() {
       setError(teamPeriod?.message || 'Inscrições encerradas, te aguardamos na próxima temporada.')
       return
     }
+    if (!consent) {
+      setError('É necessário aceitar o Termo de Responsabilidade Financeira.')
+      return
+    }
     setSaving(true)
     setError('')
     try {
-      const result = await api('/teams', { method: 'POST', body: { name: name.trim(), category } })
+      const result = await api('/teams', { method: 'POST', body: { name: name.trim(), category, consent: true } })
       setTeams((current) => [...current, result.team])
       setName('')
       setCategory('')
+      setConsent(false)
     } catch (requestError) {
       setError(requestError.message)
     } finally {
@@ -107,7 +115,16 @@ export default function GestorDashboardPage() {
                     ? <Alert><ShieldCheck className="h-4 w-4" /><AlertTitle>Inscrições abertas</AlertTitle><AlertDescription>Período: {new Date(teamPeriod.starts_at).toLocaleString('pt-BR')} até {new Date(teamPeriod.ends_at).toLocaleString('pt-BR')}. Após o envio, a equipe ficará pendente de aprovação pelo administrador.</AlertDescription></Alert>
                     : <Alert variant="destructive"><AlertTitle>{teamPeriod?.status === 'scheduled' ? 'Inscrições ainda não iniciaram' : 'Inscrições encerradas'}</AlertTitle><AlertDescription>{teamPeriod?.message || 'Inscrições encerradas, te aguardamos na próxima temporada.'}</AlertDescription></Alert>}
                 </div>
-                <Button className="sm:col-span-2" type="submit" disabled={saving || !category || !canRegisterTeam}>{saving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null} Enviar equipe</Button>
+                {/* Risco 3 (análise LVJ 2027): texto real do Termo de Responsabilidade Financeira
+                    em papel, não mais o aceite genérico de dados. */}
+                <div className="sm:col-span-2 rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
+                  {financialResponsibilityTerm({ teamName: name, category })}
+                </div>
+                <label className="flex items-start gap-2 text-sm sm:col-span-2">
+                  <Checkbox checked={consent} onCheckedChange={(checked) => setConsent(checked === true)} />
+                  <span>Li e aceito o Termo de Responsabilidade Financeira acima.</span>
+                </label>
+                <Button className="sm:col-span-2" type="submit" disabled={saving || !category || !canRegisterTeam || !consent}>{saving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null} Enviar equipe</Button>
               </form>
             </CardContent>
           </Card>

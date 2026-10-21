@@ -47,6 +47,14 @@ authRouter.post('/register', asyncRoute(async (req, res) => {
     )
     const createdUser = created.rows[0]
     await audit(client, createdUser, 'user.register', 'user', createdUser.id, { role: 'gestor' })
+    // LGPD (risco 4, análise LVJ 2027): consent_at/consent_version na própria linha de "users" não
+    // são uma trilha — um novo consentimento (ou a anonimização em privacy.js) sobrescreve os dois.
+    // Este registro em audit_logs é separado, nunca é apagado pela anonimização, e por isso é a prova
+    // de que o consentimento foi dado, mesmo depois que o titular peça a exclusão da conta.
+    await audit(client, createdUser, 'consent.recorded', 'user', createdUser.id, {
+      consent_version: input.consent_version || config.CONSENT_VERSION,
+      role: 'gestor',
+    })
     return createdUser
   })
   await createSession(user, res)

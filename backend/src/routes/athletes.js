@@ -102,6 +102,13 @@ async function createAthlete(client, { userId, managerId, team, input, actor }) 
   await notify(client, 'admin', 'athlete_pending_manager', 'Novo atleta aguardando análise', `${athlete.name} aguarda a aprovação do gestor.`)
   await notify(client, managerId, 'athlete_pending_manager', 'Novo atleta aguardando análise', `${athlete.name} aguarda a aprovação da equipe.`)
   await audit(client, actor, 'athlete.register', 'athlete', athlete.id, { team_id: team.id })
+  // LGPD (risco 4, análise LVJ 2027): mesma lógica do consentimento do gestor (auth.js) — trilha
+  // separada e imutável, sem dado pessoal no metadata (is_minor é um booleano, não identifica
+  // ninguém), que sobrevive à anonimização do cadastro (privacy.js nunca apaga audit_logs).
+  await audit(client, actor, 'consent.recorded', 'athlete', athlete.id, {
+    consent_version: input.consent_version || config.CONSENT_VERSION,
+    is_minor: isMinor,
+  })
   return athlete
 }
 
@@ -222,6 +229,12 @@ athletesRouter.post('/self-register', authRateLimit, asyncRoute(async (req, res)
       ],
     )
     const user = createdUser.rows[0]
+    // LGPD (risco 4, análise LVJ 2027): a conta de atleta criada aqui tem seu próprio consentimento,
+    // separado do consentimento do cadastro de atleta em si (createAthlete audita o segundo).
+    await audit(client, user, 'consent.recorded', 'user', user.id, {
+      consent_version: input.consent_version || config.CONSENT_VERSION,
+      role: 'atleta',
+    })
     await assertRegistrationOpen(team.category, 'athlete', client)
     const athlete = await createAthlete(client, {
       userId: user.id,

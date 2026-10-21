@@ -91,7 +91,7 @@ describe('team creation constraints', () => {
     const closedAttempt = await request(app)
       .post('/api/teams')
       .set('Cookie', manager.headers['set-cookie'])
-      .send({ name: `${teamName} Fechada`, category })
+      .send({ name: `${teamName} Fechada`, category, consent: true })
     expect(closedAttempt.status).toBe(403)
     expect(closedAttempt.body.error).toBe('Inscrições encerradas, te aguardamos na próxima temporada.')
 
@@ -105,7 +105,7 @@ describe('team creation constraints', () => {
     const endedAttempt = await request(app)
       .post('/api/teams')
       .set('Cookie', manager.headers['set-cookie'])
-      .send({ name: `${teamName} Encerrada`, category })
+      .send({ name: `${teamName} Encerrada`, category, consent: true })
     expect(endedAttempt.status).toBe(403)
     expect(endedAttempt.body.error).toBe('Inscrições encerradas, te aguardamos na próxima temporada.')
 
@@ -113,7 +113,7 @@ describe('team creation constraints', () => {
     const allowed = await request(app)
       .post('/api/teams')
       .set('Cookie', manager.headers['set-cookie'])
-      .send({ name: `${teamName} Aberta`, category })
+      .send({ name: `${teamName} Aberta`, category, consent: true })
     expect(allowed.status).toBe(201)
     createdTeams.push(allowed.body.team.id)
   })
@@ -126,14 +126,14 @@ describe('team creation constraints', () => {
     const first = await request(app)
       .post('/api/teams')
       .set('Cookie', firstManager.headers['set-cookie'])
-      .send({ name: teamName, category: 'Adulto Masculino' })
+      .send({ name: teamName, category: 'Adulto Masculino', consent: true })
     expect(first.status).toBe(201)
     createdTeams.push(first.body.team.id)
 
     const duplicate = await request(app)
       .post('/api/teams')
       .set('Cookie', secondManager.headers['set-cookie'])
-      .send({ name: teamName.toLowerCase(), category: 'Adulto Masculino' })
+      .send({ name: teamName.toLowerCase(), category: 'Adulto Masculino', consent: true })
 
     expect(duplicate.status).toBe(409)
     expect(duplicate.body.code).toBe('CONFLICT')
@@ -153,14 +153,14 @@ describe('team creation constraints', () => {
     const first = await request(app)
       .post('/api/teams')
       .set('Cookie', manager.headers['set-cookie'])
-      .send({ name: `${teamName} Multi A`, category: 'Adulto Masculino' })
+      .send({ name: `${teamName} Multi A`, category: 'Adulto Masculino', consent: true })
     expect(first.status).toBe(201)
     createdTeams.push(first.body.team.id)
 
     const second = await request(app)
       .post('/api/teams')
       .set('Cookie', manager.headers['set-cookie'])
-      .send({ name: `${teamName} Multi B`, category: 'Adulto Feminino' })
+      .send({ name: `${teamName} Multi B`, category: 'Adulto Feminino', consent: true })
     expect(second.status).toBe(201)
     createdTeams.push(second.body.team.id)
 
@@ -188,7 +188,7 @@ describe('team creation constraints', () => {
     const teamResponse = await request(app)
       .post('/api/teams')
       .set('Cookie', manager.headers['set-cookie'])
-      .send({ name: `${teamName} Fluxo`, category: 'Adulto Masculino' })
+      .send({ name: `${teamName} Fluxo`, category: 'Adulto Masculino', consent: true })
     expect(teamResponse.status).toBe(201)
     const teamId = teamResponse.body.team.id
     createdTeams.push(teamId)
@@ -253,7 +253,7 @@ describe('team creation constraints', () => {
     const teamResponse = await request(app)
       .post('/api/teams')
       .set('Cookie', manager.headers['set-cookie'])
-      .send({ name: `${teamName} Cadastro`, category: 'Adulto Feminino' })
+      .send({ name: `${teamName} Cadastro`, category: 'Adulto Feminino', consent: true })
     expect(teamResponse.status).toBe(201)
     const team = teamResponse.body.team
     createdTeams.push(team.id)
