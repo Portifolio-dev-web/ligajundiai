@@ -6,6 +6,7 @@ import request from 'supertest'
 import { afterAll, beforeAll, describe, expect, test } from '@jest/globals'
 import { app } from '../app.js'
 import { pool } from '../db/pool.js'
+import { sweepExpiredRetention } from '../services/retention.js'
 
 const migrationPath = fileURLToPath(new URL('../../sql/schema.sql', import.meta.url))
 const teamName = `Integracao ${randomUUID()}`
@@ -402,5 +403,91 @@ describe('team creation constraints', () => {
       })
     expect(gestorCreatedWithBiometricConsent.status).toBe(201)
     createdAthletes.push(gestorCreatedWithBiometricConsent.body.athlete.id)
+  })
+
+  // SEGURANÇA (varredura, item S13): login com e-mail inexistente e login com senha errada para um
+  // e-mail que existe devem falhar do mesmo jeito (401, mesma mensagem) — este teste cobre o
+  // comportamento funcional; o tempo de resposta constante em si não é verificável de forma
+  // confiável numa suíte de CI.
+  test('rejects login the same way for an unknown e-mail and for a wrong password', async () => {
+    const manager = await createManager('login-seguro')
+    const unknownEmail = await request(app)
+      .post('/api/auth/login-password')
+      .send({ email: `nao-existe-${randomUUID()}@example.test`, password: 'qualquer-coisa-12345' })
+    expect(unknownEmail.status).toBe(401)
+    expect(unknownEmail.body.error).toBe('E-mail ou senha inválidos')
+
+    const wrongPassword = await request(app)
+      .post('/api/auth/login-password')
+      .send({ email: manager.body.user.email, password: 'senha-errada-123456' })
+    expect(wrongPassword.status).toBe(401)
+    expect(wrongPassword.body.error).toBe('E-mail ou senha inválidos')
+
+    const correctPassword = await request(app)
+      .post('/api/auth/login-password')
+      .send({ email: manager.body.user.email, password: 'Senha-Forte-Integracao-2026' })
+    expect(correctPassword.status).toBe(200)
+    expect(correctPassword.body.user.email).toBe(manager.body.user.email)
+  })
+
+  // LGPD (varredura, item L9): cadastro de atleta recusado não tem mais base legal para continuar
+  // identificado — este teste recua artificialmente o updated_at (simulando o prazo de retenção já
+  // vencido) e confirma que a rotina periódica anonimiza o registro, sem pedido de ninguém.
+  test('retention sweep anonymizes a rejected athlete registration past the retention window', async () => {
+    const manager = await createManager('retencao-recusado')
+    const adminCookie = await createAdminSession()
+    await configurePeriod(adminCookie, 'Adulto Masculino', 'team')
+    await configurePeriod(adminCookie, 'Adulto Masculino', 'athlete')
+    const teamResponse = await request(app)
+      .post('/api/teams')
+      .set('Cookie', manager.headers['set-cookie'])
+      .send({ name: `${teamName} Retencao`, category: 'Adulto Masculino', consent: true })
+    expect(teamResponse.status).toBe(201)
+    const teamId = teamResponse.body.team.id
+    createdTeams.push(teamId)
+    const approval = await request(app)
+      .post(`/api/admin/teams/${teamId}/approve`)
+      .set('Cookie', adminCookie)
+      .send({})
+    expect(approval.status).toBe(200)
+
+    const athleteResponse = await request(app)
+      .post('/api/athletes')
+      .set('Cookie', manager.headers['set-cookie'])
+      .send({
+        team_id: teamId,
+        name: 'Atleta para teste de retenção',
+        rg: '222333444',
+        age: 24,
+        position: 'levantador',
+        consent: true,
+      })
+    expect(athleteResponse.status).toBe(201)
+    const athleteId = athleteResponse.body.athlete.id
+    createdAthletes.push(athleteId)
+
+    const rejection = await request(app)
+      .post(`/api/gestor/athletes/${athleteId}/reject`)
+      .set('Cookie', manager.headers['set-cookie'])
+      .send({ justification: 'Teste automatizado' })
+    expect(rejection.status).toBe(200)
+    expect(rejection.body.athlete.status).toBe('rejected')
+
+    await pool.query(
+      "UPDATE athletes SET updated_at = now() - interval '200 days' WHERE id = $1",
+      [athleteId],
+    )
+
+    const anonymizedCount = await sweepExpiredRetention()
+    expect(anonymizedCount).toBeGreaterThanOrEqual(1)
+
+    const after = await pool.query(
+      'SELECT name, rg_ciphertext, rg_hash, deleted_at FROM athletes WHERE id = $1',
+      [athleteId],
+    )
+    expect(after.rows[0].name).toBe('Atleta anonimizado')
+    expect(after.rows[0].rg_ciphertext).toBeNull()
+    expect(after.rows[0].rg_hash).toBeNull()
+    expect(after.rows[0].deleted_at).not.toBeNull()
   })
 })

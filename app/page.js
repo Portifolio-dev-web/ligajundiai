@@ -38,6 +38,13 @@ import {
   PopoverTrigger,
   PopoverContent,
 } from '@/components/ui/popover'
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu'
 import { Toaster } from '@/components/ui/sonner'
 import { toast } from 'sonner'
 import {
@@ -196,7 +203,7 @@ function TopNav({ user, token, onLoginClick, onLogout }) {
               {user.role === 'admin' ? (
                 <>
                   <a href="/admin/aprovacoes" className="hidden text-sm text-white underline sm:inline">Aprovações</a>
-                  <a href="/admin/inscricoes" className="text-xs text-white underline">Períodos</a>
+                  <a href="/admin/inscricoes" className="hidden text-xs text-white underline sm:inline">Períodos</a>
                 </>
               ) : (
                 <>
@@ -206,7 +213,41 @@ function TopNav({ user, token, onLoginClick, onLogout }) {
                 </>
               )}
               <a href="/jogos" className="hidden text-sm text-white underline md:inline">Jogos</a>
-              <Button size="sm" variant="secondary" onClick={onLogout}>
+              {/* ACESSIBILIDADE (varredura, item A5): abaixo de sm, todos os links acima ficam
+                  escondidos e não havia nenhum jeito de alcançá-los — quem acessa pelo celular só
+                  via o botão "Sair". Este menu reúne os mesmos links só nessa faixa de largura. */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button size="icon" variant="secondary" className="sm:hidden" aria-label="Abrir menu de navegação">
+                    <Menu className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="sm:hidden">
+                  <div className="px-2 py-1.5 text-sm font-medium">{user.name}</div>
+                  <div className="px-2 pb-1.5 text-xs text-muted-foreground">
+                    {user.role === 'admin' ? 'Administrador' : 'Gestor de Equipe'}
+                  </div>
+                  <DropdownMenuSeparator />
+                  {user.role === 'admin' ? (
+                    <>
+                      <DropdownMenuItem asChild><a href="/admin/aprovacoes">Aprovações</a></DropdownMenuItem>
+                      <DropdownMenuItem asChild><a href="/admin/inscricoes">Períodos</a></DropdownMenuItem>
+                    </>
+                  ) : (
+                    <>
+                      <DropdownMenuItem asChild><a href="/gestor">Minha equipe</a></DropdownMenuItem>
+                      <DropdownMenuItem asChild><a href="/gestor/aprovar-atletas">Aprovar atletas</a></DropdownMenuItem>
+                      <DropdownMenuItem asChild><a href="/gestor/jogos">Agenda</a></DropdownMenuItem>
+                    </>
+                  )}
+                  <DropdownMenuItem asChild><a href="/jogos">Jogos</a></DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onSelect={onLogout}>
+                    <LogOut className="h-4 w-4 mr-1" /> Sair
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Button size="sm" variant="secondary" className="hidden sm:inline-flex" onClick={onLogout}>
                 <LogOut className="h-4 w-4 mr-1" /> Sair
               </Button>
             </>

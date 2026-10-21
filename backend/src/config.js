@@ -30,6 +30,9 @@ const schema = z.object({
   CONTROL_ID_API_URL: z.string().default(''),
   CONTROL_ID_API_KEY: z.string().default(''),
   WEBHOOK_SECRET: z.string().min(32),
+  // LGPD (varredura, item L9): cadastro de atleta recusado não tem mais base legal para
+  // permanecer identificado (a execução de contrato terminou na recusa) — ver services/retention.js.
+  RETENTION_REJECTED_ATHLETE_DAYS: z.coerce.number().int().min(1).default(180),
 })
 
 export const config = schema.parse(process.env)

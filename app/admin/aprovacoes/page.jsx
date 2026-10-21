@@ -74,7 +74,9 @@ export default function AdminAprovacoesPage() {
   )) : <TableRow><TableCell colSpan={5} className="py-8 text-center text-muted-foreground">Nenhuma aprovação pendente.</TableCell></TableRow>
 
   return (
-    <main className="mx-auto min-h-screen max-w-6xl space-y-6 px-4 py-10">
+    // ACESSIBILIDADE (varredura, item A2): id="main-content" é o alvo do link "Pular para o
+    // conteúdo" em app/layout.js — faltava aqui, então o link não levava a lugar nenhum nesta tela.
+    <main id="main-content" className="mx-auto min-h-screen max-w-6xl space-y-6 px-4 py-10">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Button asChild variant="ghost"><Link href="/"><ArrowLeft className="h-4 w-4" /> Página inicial</Link></Button>
         <div className="flex flex-wrap gap-2">

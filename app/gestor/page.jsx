@@ -73,7 +73,9 @@ export default function GestorDashboardPage() {
   const hasApprovedTeam = teams.some((team) => team.status === 'approved')
 
   return (
-    <main className="mx-auto min-h-screen max-w-5xl space-y-6 px-4 py-10">
+    // ACESSIBILIDADE (varredura, item A2): id="main-content" é o alvo do link "Pular para o
+    // conteúdo" em app/layout.js — faltava aqui, então o link não levava a lugar nenhum nesta tela.
+    <main id="main-content" className="mx-auto min-h-screen max-w-5xl space-y-6 px-4 py-10">
       <header>
         <p className="text-sm font-medium text-muted-foreground">Área do gestor</p>
         <h1 className="text-3xl font-bold">Painel do gestor</h1>

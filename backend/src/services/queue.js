@@ -4,6 +4,7 @@ import { config } from '../config.js'
 import { query } from '../db/pool.js'
 import { sendQueuedEmail, enqueueOutboxEvents } from './email.js'
 import { createBiometryReadUrl, readBiometry } from './storage.js'
+import { sweepExpiredRetention } from './retention.js'
 
 const connection = new IORedis(config.REDIS_URL, { maxRetriesPerRequest: null })
 export const jobsQueue = new Queue('lvj-jobs', { connection })
@@ -53,6 +54,7 @@ export async function startQueueWorkers() {
   const worker = new Worker('lvj-jobs', async (job) => {
     if (job.name === 'email.send') return sendQueuedEmail(job.data.emailId)
     if (job.name === 'biometry.sync') return syncAthleteBiometry(job.data)
+    if (job.name === 'retention.sweep') return sweepExpiredRetention()
     throw new Error(`Unsupported job type: ${job.name}`)
   }, { connection })
 
@@ -69,6 +71,13 @@ export async function startQueueWorkers() {
   await dispatch()
   const timer = setInterval(dispatch, 2_000)
   timer.unref()
+  // LGPD (varredura, item L9): repetível com jobId fixo — BullMQ não duplica o agendamento a cada
+  // reinício da API, só garante que ele exista. Roda uma vez por dia; sweepExpiredRetention() decide
+  // se há algo a anonimizar.
+  await jobsQueue.add('retention.sweep', {}, {
+    repeat: { every: 24 * 60 * 60 * 1000 },
+    jobId: 'retention-sweep',
+  })
 
   return async () => {
     clearInterval(timer)

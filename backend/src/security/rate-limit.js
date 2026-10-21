@@ -1,4 +1,4 @@
-import { rateLimit } from 'express-rate-limit'
+import { rateLimit, ipKeyGenerator } from 'express-rate-limit'
 import { RedisStore } from 'rate-limit-redis'
 import IORedis from 'ioredis'
 import { config } from '../config.js'
@@ -32,6 +32,37 @@ export const authRateLimit = rateLimit({
   skip: () => config.NODE_ENV === 'test',
   store: storeFor('lvj:auth:'),
   message: { error: 'Muitas tentativas de autenticação. Tente novamente mais tarde.' },
+})
+
+// SEGURANÇA (varredura, item S14): authRateLimit acima só limita por IP — quem distribui as
+// tentativas entre vários IPs não tinha limite nenhum contra um e-mail específico. Esta chave pela
+// própria conta, não pelo IP de quem pede.
+export const loginAccountRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  skip: () => config.NODE_ENV === 'test',
+  keyGenerator: (req) => `login:${String(req.body?.email || '').trim().toLowerCase()}`,
+  store: storeFor('lvj:login-account:'),
+  message: { error: 'Muitas tentativas de login para esta conta. Tente novamente mais tarde.' },
+})
+
+// SEGURANÇA (varredura, item S16): a exportação completa dos dados do titular (GET /privacy/export)
+// só exigia sessão válida, sem limite próprio — uma sessão vazada/roubada raspava os dados quantas
+// vezes quisesse. Chave pelo usuário autenticado, não pelo IP (várias contas no mesmo IP não se
+// afetam, e trocar de IP não reseta o limite da própria conta).
+export const exportRateLimit = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 5,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  skip: () => config.NODE_ENV === 'test',
+  // req.user sempre existe aqui (rota atrás de authenticate); o fallback por IP normalizado
+  // (ipKeyGenerator) só evita o aviso de validação do express-rate-limit sobre IPv6.
+  keyGenerator: (req) => req.user?.id || ipKeyGenerator(req.ip),
+  store: storeFor('lvj:export:'),
+  message: { error: 'Limite de exportações de dados excedido. Tente novamente mais tarde.' },
 })
 
 export async function closeRateLimitStore() {

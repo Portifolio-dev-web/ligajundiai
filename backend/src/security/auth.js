@@ -100,6 +100,20 @@ export async function verifyUserPassword(user, password) {
   return verifyPassword(user.password_hash, password)
 }
 
+// SEGURANÇA (varredura, item S13): antes, quando o e-mail não existia, o login pulava direto para
+// "inválido" sem chamar argon2.verify (lento) — só rodava esse cálculo quando o e-mail existia.
+// Alguém medindo o tempo de resposta descobria quais e-mails têm conta. hashPassword() e
+// argon2.verify() custam praticamente o mesmo tempo de CPU, então comparar contra este hash fixo
+// (gerado uma vez, nunca contra uma senha real) deixa as duas respostas com o mesmo tempo.
+let dummyHashPromise
+function dummyHash() {
+  if (!dummyHashPromise) dummyHashPromise = hashPassword(randomBytes(32).toString('hex'))
+  return dummyHashPromise
+}
+export async function verifyUnknownUserPassword(password) {
+  return verifyPassword(await dummyHash(), password)
+}
+
 export function unusablePasswordHash() {
   return `!migrated-otp-only:${randomBytes(24).toString('hex')}`
 }

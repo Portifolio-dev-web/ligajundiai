@@ -39,6 +39,12 @@ encarregado de proteção de dados exigido pelo art. 41 da LGPD nas páginas
 "a definir" em vez de um contato — isso é esperado em desenvolvimento, mas não
 pode ir para produção assim.
 
+O [RIPD.md](RIPD.md) (Relatório de Impacto à Proteção de Dados) e o
+[RESPOSTA-A-INCIDENTES.md](RESPOSTA-A-INCIDENTES.md) descrevem os riscos de dados
+pessoais do sistema e o procedimento de resposta a incidentes; revise os dois antes
+de qualquer implantação com dados reais e mantenha-os atualizados quando a
+arquitetura mudar.
+
 Os e-mails transacionais são enviados ao Mailpit, não a destinatários externos.
 O upload biométrico usa POST pré-assinado para o RustFS, com limite de 5 MB e
 tipos JPEG, PNG e WebP. A integração Control ID inicia em modo de simulação.
@@ -106,6 +112,16 @@ docker compose --profile test run --build --rm backend-test
 
 A API também pode ser executada fora do Compose após configurar as variáveis
 necessárias em `backend/.env`; veja `backend/src/config.js` para a lista validada.
+
+## Retenção automática de dados
+
+A API roda diariamente uma rotina (`backend/src/services/retention.js`, agendada em
+`backend/src/services/queue.js`) que anonimiza RG, foto biométrica e dados do
+responsável legal de cadastros de atleta **recusados** há mais de
+`RETENTION_REJECTED_ATHLETE_DAYS` dias (padrão: 180) — esses cadastros não têm mais
+base legal para continuar identificados. Ajuste a variável antes de operar com
+dados reais se 180 dias não refletir a política de retenção da organização, e
+atualize o mesmo número em `app/privacidade/page.jsx` (`RETENTION_REJECTED_ATHLETE_DAYS`).
 
 ## Importação opcional do MongoDB legado
 

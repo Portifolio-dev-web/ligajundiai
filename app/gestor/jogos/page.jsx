@@ -55,7 +55,9 @@ export default function GestorJogosPage() {
   const teamById = new Map(teams.map((team) => [team.id, team]))
 
   return (
-    <main className="mx-auto min-h-screen max-w-5xl space-y-6 px-4 py-10">
+    // ACESSIBILIDADE (varredura, item A2): id="main-content" é o alvo do link "Pular para o
+    // conteúdo" em app/layout.js — faltava aqui, então o link não levava a lugar nenhum nesta tela.
+    <main id="main-content" className="mx-auto min-h-screen max-w-5xl space-y-6 px-4 py-10">
       <Button asChild variant="ghost"><Link href="/gestor"><ArrowLeft className="h-4 w-4" /> Painel do gestor</Link></Button>
       <Card>
         <CardHeader><CardTitle>Agenda de jogos</CardTitle><CardDescription>{teams.length ? 'Sugestões envolvendo suas equipes. O jogo é confirmado quando os dois gestores aceitam.' : 'As sugestões de jogos das suas equipes aparecerão aqui.'}</CardDescription></CardHeader>

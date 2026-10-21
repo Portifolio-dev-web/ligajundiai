@@ -127,7 +127,9 @@ export default function AdminInscricoesPage() {
   const selectedStatus = currentPeriod?.status ?? 'not_configured'
 
   return (
-    <main className="mx-auto min-h-screen max-w-6xl space-y-6 px-4 py-10">
+    // ACESSIBILIDADE (varredura, item A2): id="main-content" é o alvo do link "Pular para o
+    // conteúdo" em app/layout.js — faltava aqui, então o link não levava a lugar nenhum nesta tela.
+    <main id="main-content" className="mx-auto min-h-screen max-w-6xl space-y-6 px-4 py-10">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Button asChild variant="ghost"><Link href="/admin/aprovacoes"><ArrowLeft className="h-4 w-4" /> Aprovações</Link></Button>
         <Badge variant={selectedStatus === 'open' ? 'default' : 'secondary'}>{statusLabels[selectedStatus]}</Badge>

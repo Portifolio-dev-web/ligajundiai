@@ -9,6 +9,11 @@
 // (backend/src/config.js). Se o texto mudar de forma relevante, suba a versão nas duas pontas.
 const POLICY_VERSION = '2026-01'
 
+// LGPD (varredura, item L9): mesmo valor padrão de RETENTION_REJECTED_ATHLETE_DAYS em
+// backend/src/config.js — o frontend não lê a variável de ambiente do backend, então, se o prazo
+// configurado mudar, atualize aqui também.
+const RETENTION_REJECTED_ATHLETE_DAYS = 180
+
 // LGPD (varredura, item L7): sem cache de página estática, para que DPO_NAME/DPO_ROLE/DPO_EMAIL
 // (lib/legalTerms.js) sejam lidos do ambiente a cada requisição, não congelados no build da imagem.
 export const dynamic = 'force-dynamic'
@@ -86,9 +91,12 @@ export default function PrivacidadePage() {
 
           <Section title="5. Transferência internacional">
             <p>
-              Se algum dos serviços acima estiver hospedado fora do Brasil, aplicamos as garantias exigidas
-              pela LGPD (art. 33) e atualizamos esta seção com o nome do serviço e o país. Hoje a
-              organização ainda precisa confirmar e preencher esse dado aqui.
+              Hoje toda a infraestrutura que trata seus dados (banco de dados, armazenamento da foto
+              biométrica e envio de e-mail) é autogerenciada pela organização, hospedada no Brasil —
+              nenhum dado é enviado a provedor fora do país. Se isso mudar (por exemplo, ao contratar um
+              serviço de e-mail ou armazenamento hospedado no exterior), esta seção será atualizada antes
+              da mudança entrar em vigor, com o nome do serviço, o país e a garantia aplicada (art. 33 da
+              LGPD), e uma nova versão desta política será publicada.
             </p>
           </Section>
 
@@ -98,9 +106,16 @@ export default function PrivacidadePage() {
               <li>RG cifrado no banco de dados (AES-256-GCM), nunca armazenado em texto puro.</li>
               <li>Autenticação em dois fatores obrigatória para contas de administração.</li>
               <li>Sessão de login revogável a qualquer momento (encerrar sessão invalida o acesso imediatamente).</li>
-              <li>Limite de tentativas em login e nos códigos de acesso temporários.</li>
+              <li>Limite de tentativas em login e nos códigos de acesso temporários — por IP e também por conta.</li>
               <li>Trilha de auditoria das ações realizadas sobre cadastros e aprovações.</li>
             </ul>
+            <p>
+              A organização mantém um Relatório de Impacto à Proteção de Dados (RIPD) e um plano de
+              resposta a incidentes de segurança, revisados sempre que o sistema muda de forma relevante.
+              Em caso de incidente com risco relevante aos titulares, a ANPD e as pessoas afetadas são
+              notificadas nos prazos da lei. Para solicitar uma cópia desses documentos, use o contato do
+              encarregado (seção 12).
+            </p>
           </Section>
 
           <Section title="7. Por quanto tempo guardamos os dados">
@@ -110,6 +125,11 @@ export default function PrivacidadePage() {
               anonimizamos imediatamente os dados que identificam você (nome, RG, foto, contatos),
               mantendo apenas o resultado esportivo já despersonalizado, necessário para a integridade da
               classificação da liga.
+            </p>
+            <p>
+              Cadastro de atleta recusado deixa de ter base legal para continuar identificado: uma rotina
+              automática anonimiza RG, foto biométrica e dados do responsável legal desses cadastros depois
+              de {RETENTION_REJECTED_ATHLETE_DAYS} dias sem decisão revertida, sem que seja preciso pedir.
             </p>
           </Section>
 

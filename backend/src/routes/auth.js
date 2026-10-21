@@ -6,12 +6,12 @@ import { z } from 'zod'
 import { config } from '../config.js'
 import { query, transaction } from '../db/pool.js'
 import { AppError, unauthorized } from '../errors.js'
-import { createSession, authenticate, authenticateIfPresent, hashPassword, requireTotp, revokeSession, verifyUserPassword } from '../security/auth.js'
+import { createSession, authenticate, authenticateIfPresent, hashPassword, requireTotp, revokeSession, verifyUserPassword, verifyUnknownUserPassword } from '../security/auth.js'
 import { rgDigest, encryptSensitive, decryptSensitive, safeEqual } from '../security/crypto.js'
 import { emailSchema, parse, requireValidRg, cleanText } from '../security/validation.js'
 import { enqueueEmail, escapeHtml } from '../services/email.js'
 import { asyncRoute, audit } from '../utils.js'
-import { authRateLimit } from '../security/rate-limit.js'
+import { authRateLimit, loginAccountRateLimit } from '../security/rate-limit.js'
 
 export const authRouter = Router()
 authRouter.use(authRateLimit)
@@ -61,7 +61,7 @@ authRouter.post('/register', asyncRoute(async (req, res) => {
   res.status(201).json({ user })
 }))
 
-authRouter.post('/login-password', asyncRoute(async (req, res) => {
+authRouter.post('/login-password', loginAccountRateLimit, asyncRoute(async (req, res) => {
   const input = parse(z.object({
     email: emailSchema,
     password: z.string().min(1).max(128),
@@ -74,7 +74,9 @@ authRouter.post('/login-password', asyncRoute(async (req, res) => {
     [input.email],
   )
   const user = result.rows[0]
-  if (!user || !(await verifyUserPassword(user, input.password))) {
+  // SEGURANÇA (varredura, item S13): mesmo custo de CPU nos dois ramos — ver verifyUnknownUserPassword.
+  const passwordValid = user ? await verifyUserPassword(user, input.password) : await verifyUnknownUserPassword(input.password)
+  if (!user || !passwordValid) {
     throw unauthorized('E-mail ou senha inválidos')
   }
   if (user.role === 'admin') {

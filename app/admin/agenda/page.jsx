@@ -51,7 +51,9 @@ export default function AdminAgendaPage() {
   }
 
   return (
-    <main className="mx-auto min-h-screen max-w-3xl space-y-6 px-4 py-10">
+    // ACESSIBILIDADE (varredura, item A2): id="main-content" é o alvo do link "Pular para o
+    // conteúdo" em app/layout.js — faltava aqui, então o link não levava a lugar nenhum nesta tela.
+    <main id="main-content" className="mx-auto min-h-screen max-w-3xl space-y-6 px-4 py-10">
       <Button asChild variant="ghost"><Link href="/admin/aprovacoes"><ArrowLeft className="h-4 w-4" /> Aprovações</Link></Button>
       <Card>
         <CardHeader><CardTitle>Criar data disponível</CardTitle><CardDescription>Defina uma sugestão de data e local para uma categoria. As equipes poderão aceitá-la ao ser proposta para um jogo.</CardDescription></CardHeader>

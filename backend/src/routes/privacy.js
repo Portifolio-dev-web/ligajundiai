@@ -8,11 +8,15 @@ import { asyncRoute, audit } from '../utils.js'
 import { storageClient } from '../services/storage.js'
 import { DeleteObjectCommand } from '@aws-sdk/client-s3'
 import { config } from '../config.js'
+import { exportRateLimit } from '../security/rate-limit.js'
 
 export const privacyRouter = Router()
 privacyRouter.use(authenticate)
 
-privacyRouter.get('/export', asyncRoute(async (req, res) => {
+// SEGURANÇA (varredura, item S16): antes só exigia sessão válida — uma sessão vazada/roubada
+// raspava os dados pessoais do titular (inclusive do responsável legal de um menor) repetidamente,
+// sem fricção nenhuma.
+privacyRouter.get('/export', exportRateLimit, asyncRoute(async (req, res) => {
   const user = await query(
     `SELECT id, role, name, email, phone, consent_at, consent_version, created_at
      FROM users WHERE id = $1 AND deleted_at IS NULL`,
