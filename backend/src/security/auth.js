@@ -59,8 +59,10 @@ export async function authenticate(req, _res, next) {
     } catch {
       throw unauthorized('Sessão inválida ou expirada')
     }
+    // LGPD (varredura, item L10): consent_version precisa chegar até req.user para o front saber
+    // se a pessoa consentiu com uma versão antiga da Política/Termos (ver GET /auth/me).
     const result = await query(
-      `SELECT u.id, u.role, u.name, u.email, u.status
+      `SELECT u.id, u.role, u.name, u.email, u.status, u.consent_version
        FROM sessions s JOIN users u ON u.id = s.user_id
        WHERE s.jti = $1 AND s.user_id = $2 AND s.revoked_at IS NULL
          AND s.expires_at > now() AND u.status = 'active' AND u.deleted_at IS NULL`,

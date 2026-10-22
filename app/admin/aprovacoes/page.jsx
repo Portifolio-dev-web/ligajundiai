@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import LogoutButton from '@/components/LogoutButton'
 import { api } from '@/lib/api'
 
 export default function AdminAprovacoesPage() {
@@ -87,9 +88,13 @@ export default function AdminAprovacoesPage() {
     <main id="main-content" className="mx-auto min-h-screen max-w-6xl space-y-6 px-4 py-10">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Button asChild variant="ghost"><Link href="/"><ArrowLeft className="h-4 w-4" /> Página inicial</Link></Button>
-        <div className="flex flex-wrap gap-2">
+        {/* ACESSIBILIDADE (varredura, item A10): ver components/LogoutButton.jsx */}
+        <div className="flex flex-wrap items-center gap-2">
           <Button asChild variant="outline"><Link href="/admin/inscricoes">Períodos de inscrição</Link></Button>
           <Button asChild variant="outline"><Link href="/admin/agenda">Criar datas disponíveis</Link></Button>
+          {/* SEGURANÇA (varredura, item S21): ver app/admin/seguranca/page.jsx */}
+          <Button asChild variant="outline"><Link href="/admin/seguranca">Segurança da conta</Link></Button>
+          <LogoutButton />
         </div>
       </div>
       <Card>

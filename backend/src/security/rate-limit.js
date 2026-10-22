@@ -48,6 +48,22 @@ export const loginAccountRateLimit = rateLimit({
   message: { error: 'Muitas tentativas de login para esta conta. Tente novamente mais tarde.' },
 })
 
+// SEGURANÇA (varredura, item S22): POST /auth/otp/request só tinha o limite por IP compartilhado
+// de authRateLimit — quem distribuísse o pedido entre vários IPs mandava quantos códigos quisesse
+// para a caixa de entrada de uma vítima (email bombing), sem teto por e-mail de destino. Limite
+// mais baixo que o de login (5, não 10): cada pedido aqui dispara um e-mail de verdade, custo maior
+// que uma tentativa de senha.
+export const otpRequestAccountRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  skip: () => config.NODE_ENV === 'test',
+  keyGenerator: (req) => `otp:${String(req.body?.email || '').trim().toLowerCase()}`,
+  store: storeFor('lvj:otp-account:'),
+  message: { error: 'Muitos pedidos de código de acesso para esta conta. Tente novamente mais tarde.' },
+})
+
 // SEGURANÇA (varredura, item S16): a exportação completa dos dados do titular (GET /privacy/export)
 // só exigia sessão válida, sem limite próprio — uma sessão vazada/roubada raspava os dados quantas
 // vezes quisesse. Chave pelo usuário autenticado, não pelo IP (várias contas no mesmo IP não se

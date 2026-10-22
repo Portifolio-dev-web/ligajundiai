@@ -38,6 +38,14 @@ CREATE TABLE IF NOT EXISTS users (
   rg_ciphertext text,
   rg_hash text,
   totp_secret_ciphertext text,
+  -- SEGURANÇA (varredura, item S21): antes o segredo TOTP do admin só vinha de ADMIN_TOTP_SECRET
+  -- (variável de ambiente), regravado no banco a cada boot — quem tivesse acesso ao .env tinha o
+  -- segredo para sempre, e o admin não conseguia trocar sozinho sem um redeploy. Estas duas colunas
+  -- guardam um segredo novo PENDENTE enquanto o admin não confirma um código gerado a partir dele —
+  -- só vira o segredo de verdade (totp_secret_ciphertext) depois dessa prova de posse (ver
+  -- backend/src/routes/auth.js, POST /auth/totp/rotate/confirm).
+  totp_pending_secret_ciphertext text,
+  totp_pending_expires_at timestamptz,
   consent_at timestamptz,
   consent_version text NOT NULL DEFAULT 'unrecorded',
   consent_confirmed boolean NOT NULL DEFAULT false,
@@ -55,6 +63,8 @@ DROP INDEX IF EXISTS users_cpf_active_uq;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS rg_ciphertext text;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS rg_hash text;
 CREATE UNIQUE INDEX IF NOT EXISTS users_rg_active_uq ON users (rg_hash) WHERE rg_hash IS NOT NULL AND deleted_at IS NULL;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_pending_secret_ciphertext text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_pending_expires_at timestamptz;
 
 CREATE TABLE IF NOT EXISTS sessions (
   jti uuid PRIMARY KEY,

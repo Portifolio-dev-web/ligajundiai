@@ -3,10 +3,12 @@ import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import jwt from 'jsonwebtoken'
 import request from 'supertest'
+import { authenticator } from 'otplib'
 import { afterAll, beforeAll, describe, expect, test } from '@jest/globals'
 import { app } from '../app.js'
 import { pool } from '../db/pool.js'
 import { sweepExpiredRetention } from '../services/retention.js'
+import { encryptSensitive } from '../security/crypto.js'
 
 const migrationPath = fileURLToPath(new URL('../../sql/schema.sql', import.meta.url))
 const teamName = `Integracao ${randomUUID()}`
@@ -515,5 +517,94 @@ describe('team creation constraints', () => {
 
     const untouched = await pool.query('SELECT action FROM audit_logs WHERE id = $1', [targetId])
     expect(untouched.rows[0].action).not.toBe('tampered')
+  })
+
+  // LGPD (varredura, item L10): consent_version nunca era comparado com a versão atual em lugar
+  // nenhum — este teste força uma versão antiga no banco (como se a política tivesse mudado depois
+  // do cadastro) e confirma que login, /auth/me e /auth/reconsent refletem e corrigem isso de verdade.
+  test('flags an outdated consent_version and lets the user reconsent', async () => {
+    const manager = await createManager('consentimento-desatualizado')
+    await pool.query("UPDATE users SET consent_version = 'versao-bem-antiga' WHERE id = $1", [manager.body.user.id])
+
+    const login = await request(app)
+      .post('/api/auth/login-password')
+      .send({ email: manager.body.user.email, password: 'Senha-Forte-Integracao-2026' })
+    expect(login.status).toBe(200)
+    expect(login.body.user.consent_outdated).toBe(true)
+
+    const me = await request(app)
+      .get('/api/auth/me')
+      .set('Cookie', login.headers['set-cookie'])
+    expect(me.status).toBe(200)
+    expect(me.body.user.consent_outdated).toBe(true)
+
+    const reconsent = await request(app)
+      .post('/api/auth/reconsent')
+      .set('Cookie', login.headers['set-cookie'])
+      .send({})
+    expect(reconsent.status).toBe(200)
+
+    const meAfter = await request(app)
+      .get('/api/auth/me')
+      .set('Cookie', login.headers['set-cookie'])
+    expect(meAfter.body.user.consent_outdated).toBe(false)
+
+    const row = await pool.query('SELECT consent_version FROM users WHERE id = $1', [manager.body.user.id])
+    expect(row.rows[0].consent_version).toBe(process.env.CONSENT_VERSION || 'test')
+  })
+
+  // SEGURANÇA (varredura, item S21): o admin precisa conseguir trocar o próprio segredo TOTP sem
+  // depender de ADMIN_TOTP_SECRET/redeploy — este teste cobre o fluxo inteiro: exige o código atual
+  // para começar, o segredo antigo continua válido enquanto a troca está pendente, um código errado
+  // para o segredo novo não ativa nada, e só depois da confirmação o segredo antigo para de valer.
+  test('lets an admin rotate their own TOTP secret with proof of possession both ways', async () => {
+    const oldSecret = authenticator.generateSecret()
+    const adminCookie = await createAdminSession()
+    await pool.query('UPDATE users SET totp_secret_ciphertext = $2 WHERE id = $1', [latestAdminId, encryptSensitive(oldSecret)])
+
+    const wrongStart = await request(app)
+      .post('/api/auth/totp/rotate/start')
+      .set('Cookie', adminCookie)
+      .send({ current_totp: '000000' })
+    expect(wrongStart.status).toBe(401)
+
+    const start = await request(app)
+      .post('/api/auth/totp/rotate/start')
+      .set('Cookie', adminCookie)
+      .send({ current_totp: authenticator.generate(oldSecret) })
+    expect(start.status).toBe(200)
+    const newSecret = start.body.secret
+    expect(newSecret).toEqual(expect.any(String))
+    expect(start.body.otpauth_url).toContain('otpauth://totp/')
+
+    // Enquanto pendente, o segredo antigo continua sendo o válido de verdade para login.
+    const stillOldSecret = await pool.query('SELECT totp_secret_ciphertext FROM users WHERE id = $1', [latestAdminId])
+    expect(stillOldSecret.rows[0].totp_secret_ciphertext).not.toBeNull()
+
+    const wrongConfirm = await request(app)
+      .post('/api/auth/totp/rotate/confirm')
+      .set('Cookie', adminCookie)
+      .send({ new_totp: '000000' })
+    expect(wrongConfirm.status).toBe(401)
+
+    const confirm = await request(app)
+      .post('/api/auth/totp/rotate/confirm')
+      .set('Cookie', adminCookie)
+      .send({ new_totp: authenticator.generate(newSecret) })
+    expect(confirm.status).toBe(200)
+
+    const after = await pool.query(
+      'SELECT totp_secret_ciphertext, totp_pending_secret_ciphertext, totp_pending_expires_at FROM users WHERE id = $1',
+      [latestAdminId],
+    )
+    expect(after.rows[0].totp_pending_secret_ciphertext).toBeNull()
+    expect(after.rows[0].totp_pending_expires_at).toBeNull()
+
+    // Prova fim-a-fim: o código do segredo ANTIGO não serve mais, o do NOVO serve.
+    const auditLog = await pool.query(
+      "SELECT action FROM audit_logs WHERE entity_type = 'user' AND entity_id = $1 AND action = 'admin.totp_rotated'",
+      [latestAdminId],
+    )
+    expect(auditLog.rowCount).toBeGreaterThanOrEqual(1)
   })
 })

@@ -6,12 +6,12 @@ import { z } from 'zod'
 import { config } from '../config.js'
 import { query, transaction } from '../db/pool.js'
 import { AppError, unauthorized } from '../errors.js'
-import { createSession, authenticate, authenticateIfPresent, hashPassword, requireTotp, revokeSession, verifyUserPassword, verifyUnknownUserPassword } from '../security/auth.js'
+import { createSession, authenticate, authenticateIfPresent, authorize, hashPassword, requireTotp, revokeSession, verifyUserPassword, verifyUnknownUserPassword } from '../security/auth.js'
 import { rgDigest, encryptSensitive, decryptSensitive, safeEqual } from '../security/crypto.js'
 import { emailSchema, parse, requireValidRg, cleanText } from '../security/validation.js'
 import { enqueueEmail, escapeHtml } from '../services/email.js'
 import { asyncRoute, audit } from '../utils.js'
-import { authRateLimit, loginAccountRateLimit } from '../security/rate-limit.js'
+import { authRateLimit, loginAccountRateLimit, otpRequestAccountRateLimit } from '../security/rate-limit.js'
 
 export const authRouter = Router()
 authRouter.use(authRateLimit)
@@ -72,7 +72,7 @@ authRouter.post('/login-password', loginAccountRateLimit, asyncRoute(async (req,
   }).strict(), req.body)
   const result = await query(
     `SELECT id, role, name, email, password_hash, legacy_password_salt,
-       legacy_password_hash, totp_secret_ciphertext
+       legacy_password_hash, totp_secret_ciphertext, consent_version
      FROM users WHERE lower(email) = $1 AND deleted_at IS NULL AND status = 'active'`,
     [input.email],
   )
@@ -96,10 +96,11 @@ authRouter.post('/login-password', loginAccountRateLimit, asyncRoute(async (req,
     )
   }
   await createSession(user, res)
-  res.json({ user: { id: user.id, role: user.role, name: user.name, email: user.email } })
+  // LGPD (varredura, item L10): ver GET /auth/me para o porquê de consent_outdated.
+  res.json({ user: { id: user.id, role: user.role, name: user.name, email: user.email, consent_outdated: user.consent_version !== config.CONSENT_VERSION } })
 }))
 
-authRouter.post('/otp/request', asyncRoute(async (req, res) => {
+authRouter.post('/otp/request', otpRequestAccountRateLimit, asyncRoute(async (req, res) => {
   const input = parse(z.object({ email: emailSchema }).strict(), req.body)
   const result = await query(
     `SELECT id, email, name FROM users
@@ -138,7 +139,7 @@ authRouter.post('/otp/verify', asyncRoute(async (req, res) => {
   }).strict(), req.body)
   const codeHashPrefix = input.email
   const result = await query(
-    `SELECT o.id AS otp_id, o.user_id, o.code_hash, u.id, u.role, u.name, u.email
+    `SELECT o.id AS otp_id, o.user_id, o.code_hash, u.id, u.role, u.name, u.email, u.consent_version
      FROM otp_codes o JOIN users u ON u.id = o.user_id
      WHERE lower(u.email) = $1 AND o.consumed_at IS NULL AND o.expires_at > now()
        AND o.attempts < 5 AND u.status = 'active' AND u.deleted_at IS NULL
@@ -159,7 +160,7 @@ authRouter.post('/otp/verify', asyncRoute(async (req, res) => {
   if (!consumed.rowCount) throw unauthorized('Código inválido ou expirado')
   if (row.role === 'admin') throw new AppError(401, 'TOTP_REQUIRED', 'Administradores devem entrar com senha e código TOTP')
   await createSession(row, res)
-  res.json({ user: { id: row.id, role: row.role, name: row.name, email: row.email } })
+  res.json({ user: { id: row.id, role: row.role, name: row.name, email: row.email, consent_outdated: row.consent_version !== config.CONSENT_VERSION } })
 }))
 
 authRouter.get('/me', authenticateIfPresent, asyncRoute(async (req, res) => {
@@ -176,10 +177,101 @@ authRouter.get('/me', authenticateIfPresent, asyncRoute(async (req, res) => {
     )
     teams = result.rows
   }
-  res.json({ user: req.user, teams })
+  // LGPD (varredura, item L10): consent_version era gravado no cadastro mas nunca comparado com a
+  // versão atual em lugar nenhum — quem consentiu com uma versão antiga continuava com acesso total
+  // para sempre, mesmo que a Política/Termos mudassem de forma relevante depois (a própria política,
+  // seção 11, dizia "fique atento à versão", sem nenhum bloqueio real por trás disso). O front usa
+  // esta flag para pedir um reconsentimento explícito (POST /auth/reconsent) antes de continuar.
+  const { consent_version, ...publicUser } = req.user
+  res.json({ user: { ...publicUser, consent_outdated: consent_version !== config.CONSENT_VERSION }, teams })
+}))
+
+// LGPD (varredura, item L10): registra o reconsentimento com a versão atual — mesmo padrão de
+// trilha separada e imutável do cadastro original (auth.js, athletes.js, teams.js): audit_logs
+// prova quando cada pessoa aceitou cada versão, mesmo depois de reconsentimentos futuros
+// sobrescreverem consent_at/consent_version na própria linha de "users".
+authRouter.post('/reconsent', authenticate, asyncRoute(async (req, res) => {
+  await transaction(async (client) => {
+    await client.query(
+      'UPDATE users SET consent_at = now(), consent_version = $2, updated_at = now() WHERE id = $1',
+      [req.user.id, config.CONSENT_VERSION],
+    )
+    await audit(client, req.user, 'consent.recorded', 'user', req.user.id, {
+      consent_version: config.CONSENT_VERSION,
+      role: req.user.role,
+      ip: req.ip,
+      reason: 'reconsent_outdated_version',
+    })
+  })
+  res.json({ ok: true })
 }))
 
 authRouter.post('/logout', authenticate, asyncRoute(async (req, res) => {
   await revokeSession(req, res)
+  res.json({ ok: true })
+}))
+
+// SEGURANÇA (varredura, item S21): antes o segredo TOTP do admin só vinha de ADMIN_TOTP_SECRET,
+// regravado no banco a cada boot — sem fluxo de troca pelo próprio admin. As três rotas abaixo
+// implementam o padrão de verdade (como o checklist pede): gera um segredo novo, exige o código
+// ATUAL antes de começar (prova que quem pede ainda controla o autenticador de hoje) e só promove o
+// segredo novo a ativo depois de confirmar um código gerado a partir DELE (prova de posse do
+// aparelho novo) — nunca fica "pendente" sem confirmação para sempre (expira em 10 minutos).
+const totpAccountName = (email) => email
+const totpIssuer = 'Liga de Voleibol Jundiaí (LVJ)'
+const TOTP_PENDING_TTL_MS = 10 * 60 * 1000
+
+authRouter.post('/totp/rotate/start', authenticate, authorize('admin'), asyncRoute(async (req, res) => {
+  const input = parse(z.object({ current_totp: z.string().trim().regex(/^\d{6}$/) }).strict(), req.body)
+  const result = await query('SELECT totp_secret_ciphertext FROM users WHERE id = $1', [req.user.id])
+  const currentSecret = decryptSensitive(result.rows[0]?.totp_secret_ciphertext)
+  if (!currentSecret || !authenticator.check(input.current_totp, currentSecret)) {
+    throw unauthorized('Código de autenticação de dois fatores atual inválido')
+  }
+  const newSecret = authenticator.generateSecret()
+  await query(
+    'UPDATE users SET totp_pending_secret_ciphertext = $2, totp_pending_expires_at = $3, updated_at = now() WHERE id = $1',
+    [req.user.id, encryptSensitive(newSecret), new Date(Date.now() + TOTP_PENDING_TTL_MS)],
+  )
+  // SEGURANÇA: a única vez que este segredo aparece em texto puro é nesta resposta, direto para
+  // quem acabou de provar (com o código atual) que é o próprio admin — nunca em log, nunca de novo
+  // depois disso (o GET de status só diz se há segredo pendente, não qual é).
+  res.json({
+    secret: newSecret,
+    otpauth_url: authenticator.keyuri(totpAccountName(req.user.email), totpIssuer, newSecret),
+    expires_at: new Date(Date.now() + TOTP_PENDING_TTL_MS),
+  })
+}))
+
+authRouter.post('/totp/rotate/confirm', authenticate, authorize('admin'), asyncRoute(async (req, res) => {
+  const input = parse(z.object({ new_totp: z.string().trim().regex(/^\d{6}$/) }).strict(), req.body)
+  const result = await query(
+    'SELECT totp_pending_secret_ciphertext, totp_pending_expires_at FROM users WHERE id = $1',
+    [req.user.id],
+  )
+  const row = result.rows[0]
+  if (!row?.totp_pending_secret_ciphertext || !row.totp_pending_expires_at || row.totp_pending_expires_at < new Date()) {
+    throw new AppError(400, 'TOTP_ROTATION_NOT_STARTED', 'Nenhuma troca de 2FA pendente ou ela expirou — comece de novo')
+  }
+  const pendingSecret = decryptSensitive(row.totp_pending_secret_ciphertext)
+  if (!authenticator.check(input.new_totp, pendingSecret)) {
+    throw unauthorized('Código inválido para o novo segredo — confira o app autenticador')
+  }
+  await transaction(async (client) => {
+    await client.query(
+      `UPDATE users SET totp_secret_ciphertext = $2, totp_pending_secret_ciphertext = NULL,
+         totp_pending_expires_at = NULL, updated_at = now() WHERE id = $1`,
+      [req.user.id, encryptSensitive(pendingSecret)],
+    )
+    await audit(client, req.user, 'admin.totp_rotated', 'user', req.user.id, { ip: req.ip })
+  })
+  res.json({ ok: true })
+}))
+
+authRouter.post('/totp/rotate/cancel', authenticate, authorize('admin'), asyncRoute(async (req, res) => {
+  await query(
+    'UPDATE users SET totp_pending_secret_ciphertext = NULL, totp_pending_expires_at = NULL, updated_at = now() WHERE id = $1',
+    [req.user.id],
+  )
   res.json({ ok: true })
 }))

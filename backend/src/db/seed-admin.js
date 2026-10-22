@@ -15,10 +15,11 @@ export async function seedAdmin() {
     )
     if (existing.rowCount) {
       if (existing.rows[0].role !== 'admin') throw new Error('ADMIN_EMAIL is already assigned to a non-admin account')
-      await client.query(
-        'UPDATE users SET totp_secret_ciphertext = $2, updated_at = now() WHERE id = $1',
-        [existing.rows[0].id, encryptSensitive(config.ADMIN_TOTP_SECRET)],
-      )
+      // SEGURANÇA (varredura, item S21): antes este UPDATE regravava totp_secret_ciphertext a
+      // partir de ADMIN_TOTP_SECRET em TODO boot — qualquer troca de segredo feita pelo próprio
+      // admin (POST /auth/totp/rotate/confirm) seria desfeita no próximo deploy/restart, voltando
+      // sempre para o valor fixo do .env. Depois da primeira criação da conta, o 2FA passa a ser
+      // dono exclusivo do admin; ADMIN_TOTP_SECRET só serve para o cadastro inicial.
       return
     }
     await client.query(

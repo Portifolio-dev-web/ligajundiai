@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
+import LogoutButton from '@/components/LogoutButton'
 import { api } from '@/lib/api'
 import { CATEGORY_FALLBACK } from '@/lib/lvjApi'
 import { financialResponsibilityTerm } from '@/lib/legalTerms'
@@ -80,12 +81,16 @@ export default function GestorDashboardPage() {
     // ACESSIBILIDADE (varredura, item A2): id="main-content" é o alvo do link "Pular para o
     // conteúdo" em app/layout.js — faltava aqui, então o link não levava a lugar nenhum nesta tela.
     <main id="main-content" className="mx-auto min-h-screen max-w-5xl space-y-6 px-4 py-10">
-      <header>
-        <p className="text-sm font-medium text-muted-foreground">Área do gestor</p>
-        <h1 className="text-3xl font-bold">Painel do gestor</h1>
-        {/* Risco 1 (varredura, análise LVJ 2027): o questionário confirmou que um gestor pode
-            gerenciar mais de uma equipe, em categorias diferentes, com um único login. */}
-        <p className="text-sm text-muted-foreground">Você pode cadastrar e gerenciar mais de uma equipe, em categorias diferentes.</p>
+      <header className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-sm font-medium text-muted-foreground">Área do gestor</p>
+          <h1 className="text-3xl font-bold">Painel do gestor</h1>
+          {/* Risco 1 (varredura, análise LVJ 2027): o questionário confirmou que um gestor pode
+              gerenciar mais de uma equipe, em categorias diferentes, com um único login. */}
+          <p className="text-sm text-muted-foreground">Você pode cadastrar e gerenciar mais de uma equipe, em categorias diferentes.</p>
+        </div>
+        {/* ACESSIBILIDADE (varredura, item A10): ver components/LogoutButton.jsx */}
+        <LogoutButton />
       </header>
       {error && <Alert variant="destructive"><AlertTitle>Erro</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}
       {loading

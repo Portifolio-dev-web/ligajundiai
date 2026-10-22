@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -77,6 +77,7 @@ import {
   Info,
   Trash2,
   Save,
+  LoaderCircle,
 } from 'lucide-react'
 import { api, CATEGORY_FALLBACK } from '@/lib/lvjApi'
 import { formatRg, getAge, isValidRg } from '@/lib/athlete'
@@ -193,7 +194,53 @@ function App() {
       </main>
       <Footer />
       <LoginDialog open={loginOpen} onOpenChange={setLoginOpen} onAuthed={onAuthed} />
+      {/* LGPD (varredura, item L10): ver ReconsentDialog abaixo. */}
+      {user?.consent_outdated && <ReconsentDialog onAccepted={loadMe} />}
     </div>
+  )
+}
+
+// LGPD (varredura, item L10): a Política/Termos mudaram de versão depois que esta pessoa consentiu
+// (user.consent_outdated, calculado em GET /auth/me) — sem isso, o acesso continuava liberado para
+// sempre com base num consentimento desatualizado. Diálogo sem "Cancelar" nem fechar por fora/Esc:
+// não é uma notificação que dá para adiar, é o próprio consentimento que falta.
+function ReconsentDialog({ onAccepted }) {
+  const [accepting, setAccepting] = useState(false)
+  const accept = async () => {
+    setAccepting(true)
+    try {
+      await api('/auth/reconsent', { method: 'POST' })
+      await onAccepted()
+      toastSuccess('Consentimento atualizado. Obrigado!')
+    } catch (e) {
+      toastError(e.message)
+    } finally {
+      setAccepting(false)
+    }
+  }
+  return (
+    <AlertDialog open>
+      <AlertDialogContent
+        onEscapeKeyDown={(e) => e.preventDefault()}
+        onInteractOutside={(e) => e.preventDefault()}
+      >
+        <AlertDialogHeader>
+          <AlertDialogTitle>A Política de Privacidade e os Termos de Uso mudaram</AlertDialogTitle>
+          <AlertDialogDescription>
+            Você consentiu com uma versão anterior. Leia a{' '}
+            <Link className="underline" href="/privacidade" target="_blank">Política de Privacidade</Link>
+            {' '}e os <Link className="underline" href="/termos-de-uso" target="_blank">Termos de Uso</Link>{' '}
+            atuais antes de continuar.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogAction onClick={accept} disabled={accepting}>
+            {accepting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : null}
+            Li e aceito a versão atual
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   )
 }
 
@@ -664,14 +711,23 @@ function LoginDialog({ open, onOpenChange, onAuthed }) {
   const [reg, setReg] = useState({ name: '', email: '', phone: '', rg: '', password: '', consent: false })
 
   const [loading, setLoading] = useState(false)
+  // ACESSIBILIDADE (varredura, item A12): o erro de login/cadastro só aparecia num toast — quem usa
+  // teclado ou leitor de tela não tinha o foco movido de volta para corrigir, nem o campo marcado
+  // como inválido. pwEmailRef/registerEmailRef abaixo são o alvo do foco quando a chamada falha.
+  const [loginInvalid, setLoginInvalid] = useState(false)
+  const [registerInvalid, setRegisterInvalid] = useState(false)
+  const pwEmailRef = useRef(null)
+  const registerEmailRef = useRef(null)
 
   const loginPw = async () => {
     setLoading(true)
     try {
       const d = await api('/auth/login-password', { method: 'POST', body: { email: pwEmail, password: pw, ...(pwTotp ? { totp: pwTotp } : {}) } })
+      setLoginInvalid(false)
       onAuthed(d.user)
     } catch (e) {
       if (e.code === 'TOTP_REQUIRED') setRequiresTotp(true)
+      else { setLoginInvalid(true); pwEmailRef.current?.focus() }
       toastError(e.message)
     } finally {
       setLoading(false)
@@ -681,8 +737,11 @@ function LoginDialog({ open, onOpenChange, onAuthed }) {
     setLoading(true)
     try {
       const d = await api('/auth/register', { method: 'POST', body: reg })
+      setRegisterInvalid(false)
       onAuthed(d.user)
     } catch (e) {
+      setRegisterInvalid(true)
+      registerEmailRef.current?.focus()
       toastError(e.message)
     } finally {
       setLoading(false)
@@ -713,12 +772,13 @@ function LoginDialog({ open, onOpenChange, onAuthed }) {
           <TabsContent value="senha" className="space-y-3 pt-2">
             <div>
               <Label htmlFor="login-password-email">E-mail</Label>
-              <Input id="login-password-email" type="email" autoComplete="email" value={pwEmail} onChange={(e) => setPwEmail(e.target.value)} />
+              <Input ref={pwEmailRef} id="login-password-email" type="email" autoComplete="email" value={pwEmail} aria-invalid={loginInvalid} aria-describedby={loginInvalid ? 'login-password-error' : undefined} onChange={(e) => { setPwEmail(e.target.value); setLoginInvalid(false) }} />
             </div>
             <div>
               <Label htmlFor="login-password">Senha</Label>
-              <Input id="login-password" type="password" autoComplete="current-password" value={pw} onChange={(e) => setPw(e.target.value)} />
+              <Input id="login-password" type="password" autoComplete="current-password" value={pw} aria-invalid={loginInvalid} aria-describedby={loginInvalid ? 'login-password-error' : undefined} onChange={(e) => { setPw(e.target.value); setLoginInvalid(false) }} />
             </div>
+            {loginInvalid && <p id="login-password-error" role="alert" className="text-xs text-red-600">E-mail ou senha inválidos.</p>}
             {(requiresTotp || pwTotp) && (
               <div>
                 <Label htmlFor="login-password-totp">Código 2FA do administrador</Label>
@@ -737,8 +797,9 @@ function LoginDialog({ open, onOpenChange, onAuthed }) {
             </div>
             <div>
               <Label htmlFor="manager-register-email">E-mail (login)</Label>
-              <Input id="manager-register-email" type="email" autoComplete="email" value={reg.email} onChange={(e) => setReg({ ...reg, email: e.target.value })} />
+              <Input ref={registerEmailRef} id="manager-register-email" type="email" autoComplete="email" value={reg.email} aria-invalid={registerInvalid} aria-describedby={registerInvalid ? 'manager-register-error' : undefined} onChange={(e) => { setReg({ ...reg, email: e.target.value }); setRegisterInvalid(false) }} />
             </div>
+            {registerInvalid && <p id="manager-register-error" role="alert" className="text-xs text-red-600">Não foi possível concluir o cadastro — confira os dados acima.</p>}
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               <div>
                 <Label htmlFor="manager-register-phone">Celular</Label>
@@ -1854,6 +1915,10 @@ function GestorRoster({ token, team }) {
   })
   const [rejectId, setRejectId] = useState(null)
   const [justification, setJustification] = useState('')
+  // ACESSIBILIDADE (varredura, item A12): erro de cadastro de atleta só existia como toast — sem
+  // foco movido nem campo marcado, quem usa teclado/leitor de tela não sabia onde corrigir.
+  const [addError, setAddError] = useState('')
+  const nameInputRef = useRef(null)
 
   // Mesmo corte de idade do backend (createAthlete, MINOR_AGE_LIMIT em backend/src/routes/athletes.js),
   // calculado a partir da data de nascimento, para decidir se mostra os campos do responsável legal.
@@ -1878,6 +1943,7 @@ function GestorRoster({ token, team }) {
   }, [team.category])
 
   const add = async () => {
+    setAddError('')
     try {
       let biometry_key
       if (form.photo) {
@@ -1922,6 +1988,8 @@ function GestorRoster({ token, team }) {
       })
       load()
     } catch (e) {
+      setAddError(e.message)
+      nameInputRef.current?.focus()
       toastError(e.message)
     }
   }
@@ -1951,7 +2019,7 @@ function GestorRoster({ token, team }) {
           <div className="grid gap-3 md:grid-cols-3 items-end rounded-lg border p-4 bg-slate-50">
             <div>
               <Label className="text-xs">Nome do atleta</Label>
-              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              <Input ref={nameInputRef} value={form.name} aria-invalid={!!addError} aria-describedby={addError ? 'add-athlete-error' : undefined} onChange={(e) => { setForm({ ...form, name: e.target.value }); setAddError('') }} />
             </div>
             <div>
               <Label className="text-xs">RG</Label>
@@ -2016,6 +2084,7 @@ function GestorRoster({ token, team }) {
               <input type="checkbox" checked={form.consent} onChange={(e) => setForm({ ...form, consent: e.target.checked })} />
               <span>Confirmo que obtive o consentimento do atleta (ou responsável legal) para os termos acima e para tratar os dados e a foto biométrica, conforme a <Link className="underline" href="/privacidade" target="_blank">Política de Privacidade</Link> e os <Link className="underline" href="/termos-de-uso" target="_blank">Termos de Uso</Link>.</span>
             </label>
+            {addError && <p id="add-athlete-error" role="alert" className="md:col-span-2 text-xs text-red-600">{addError}</p>}
             <Button
               className="text-white border-0"
               style={{ background: BLUE }}
