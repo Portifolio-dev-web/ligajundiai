@@ -134,6 +134,15 @@ export default function PrivacidadePage() {
               automática anonimiza RG, foto biométrica e dados do responsável legal desses cadastros depois
               de {RETENTION_REJECTED_ATHLETE_DAYS} dias sem decisão revertida, sem que seja preciso pedir.
             </p>
+            {/* LGPD (varredura, item L11): nem esta seção nem o RIPD diziam por quanto tempo um backup
+                guarda dado já excluído/anonimizado na base viva — quem pedia exclusão não tinha como saber. */}
+            <p>
+              Sobre cópias de segurança (backup): este sistema, como distribuído neste repositório, não
+              inclui rotina automática de backup — cabe a quem o implanta em produção definir e documentar a
+              própria política de backup. Qualquer rotina adotada deve respeitar os mesmos prazos de
+              anonimização e exclusão descritos nesta seção, para que um dado já apagado da base ativa não
+              continue identificável indefinidamente numa cópia de segurança.
+            </p>
           </Section>
 
           <Section title="8. Seus direitos e como exercê-los">

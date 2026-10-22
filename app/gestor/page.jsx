@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Checkbox } from '@/components/ui/checkbox'
 import LogoutButton from '@/components/LogoutButton'
+import HelpLink from '@/components/HelpLink'
 import { api } from '@/lib/api'
 import { CATEGORY_FALLBACK } from '@/lib/lvjApi'
 import { financialResponsibilityTerm } from '@/lib/legalTerms'
@@ -89,8 +90,11 @@ export default function GestorDashboardPage() {
               gerenciar mais de uma equipe, em categorias diferentes, com um único login. */}
           <p className="text-sm text-muted-foreground">Você pode cadastrar e gerenciar mais de uma equipe, em categorias diferentes.</p>
         </div>
-        {/* ACESSIBILIDADE (varredura, item A10): ver components/LogoutButton.jsx */}
-        <LogoutButton />
+        {/* ACESSIBILIDADE (varredura, item A10): ver components/LogoutButton.jsx. UX (item O1): ver components/HelpLink.jsx */}
+        <div className="flex items-center gap-2">
+          <HelpLink />
+          <LogoutButton />
+        </div>
       </header>
       {error && <Alert variant="destructive"><AlertTitle>Erro</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}
       {loading

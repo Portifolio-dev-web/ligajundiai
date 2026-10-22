@@ -408,7 +408,9 @@ function PublicSite({ categories, currentYear, onLoginClick }) {
       {/* SPONSOR STRIP */}
       <section className="border-y bg-white">
         <div className="container py-6">
-          <p className="text-center text-xs uppercase tracking-widest text-slate-400 mb-4">
+          {/* SEGURANÇA (varredura, item A11): text-slate-600 sobre fundo branco dá ~2,9:1 de contraste,
+              abaixo do mínimo de 4,5:1 (WCAG 1.4.3) — slate-600 cobre esse mínimo com boa margem. */}
+          <p className="text-center text-xs uppercase tracking-widest text-slate-600 mb-4">
             Patrocinadores oficiais
           </p>
           <div className="flex flex-wrap items-center justify-center gap-4">
@@ -496,7 +498,7 @@ function PublicSite({ categories, currentYear, onLoginClick }) {
                 {matches.filter((m) => m.status === 'scheduled').slice(0, 5).map((m) => (
                   <div key={m.id} className="rounded-lg border p-3 text-sm">
                     <div className="font-semibold">
-                      {m.home_name} <span className="text-slate-400">x</span> {m.away_name}
+                      {m.home_name} <span className="text-slate-600">x</span> {m.away_name}
                     </div>
                     <div className="text-xs text-slate-500">
                       {new Date(m.scheduled_at).toLocaleString('pt-BR')} {m.venue ? `• ${m.venue}` : ''}
@@ -504,7 +506,7 @@ function PublicSite({ categories, currentYear, onLoginClick }) {
                   </div>
                 ))}
                 {matches.filter((m) => m.status === 'scheduled').length === 0 && (
-                  <p className="text-sm text-slate-400">Nenhum jogo agendado.</p>
+                  <p className="text-sm text-slate-600">Nenhum jogo agendado.</p>
                 )}
               </CardContent>
             </Card>
@@ -523,7 +525,7 @@ function PublicSite({ categories, currentYear, onLoginClick }) {
               <MatchResultCard key={m.id} m={m} />
             ))}
             {matches.filter((m) => m.status === 'finished').length === 0 && (
-              <p className="text-sm text-slate-400">Ainda não há resultados registrados.</p>
+              <p className="text-sm text-slate-600">Ainda não há resultados registrados.</p>
             )}
           </div>
         </div>
@@ -580,7 +582,7 @@ function StandingsLegend({ category, abbr }) {
         <button
           type="button"
           aria-label="Ver legenda das siglas da tabela"
-          className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600"
+          className="inline-flex items-center gap-1 text-xs text-slate-600 hover:text-slate-600"
         >
           <Info className="h-3.5 w-3.5" /> Legenda
         </button>
@@ -656,7 +658,7 @@ function StandingsTable({ standings, category }) {
           ))}
           {standings.length === 0 && (
             <TableRow>
-              <TableCell colSpan={12} className="text-center text-slate-400 py-8">
+              <TableCell colSpan={12} className="text-center text-slate-600 py-8">
                 Nenhuma equipe aprovada nesta categoria ainda.
               </TableCell>
             </TableRow>
@@ -672,15 +674,15 @@ function MatchResultCard({ m }) {
   const as = (m.sets || []).filter((s) => s.away > s.home).length
   return (
     <div className="rounded-xl border p-4">
-      <div className="text-xs text-slate-400 mb-2">
+      <div className="text-xs text-slate-600 mb-2">
         {m.category} {m.round ? `• ${m.round}` : ''}
       </div>
       <div className="flex items-center justify-between">
-        <span className={`font-semibold ${hs > as ? 'text-slate-900' : 'text-slate-400'}`}>{m.home_name}</span>
+        <span className={`font-semibold ${hs > as ? 'text-slate-900' : 'text-slate-600'}`}>{m.home_name}</span>
         <span className="mx-2 font-extrabold text-lg" style={{ color: BLUE }}>
           {hs} - {as}
         </span>
-        <span className={`font-semibold text-right ${as > hs ? 'text-slate-900' : 'text-slate-400'}`}>{m.away_name}</span>
+        <span className={`font-semibold text-right ${as > hs ? 'text-slate-900' : 'text-slate-600'}`}>{m.away_name}</span>
       </div>
       <div className="mt-2 flex gap-1 flex-wrap">
         {(m.sets || []).map((s, i) => (
@@ -969,11 +971,11 @@ function NotificationBell({ notif, token, reload }) {
             <div key={i.id} className={`p-3 text-sm ${i.read ? 'opacity-60' : ''}`}>
               <div className="font-semibold text-slate-800">{i.title}</div>
               <div className="text-slate-500 text-xs">{i.body}</div>
-              <div className="text-[10px] text-slate-400 mt-1">{new Date(i.created_at).toLocaleString('pt-BR')}</div>
+              <div className="text-[10px] text-slate-600 mt-1">{new Date(i.created_at).toLocaleString('pt-BR')}</div>
             </div>
           ))}
           {(!notif.items || notif.items.length === 0) && (
-            <div className="p-4 text-sm text-slate-400 text-center">Sem notificações.</div>
+            <div className="p-4 text-sm text-slate-600 text-center">Sem notificações.</div>
           )}
         </div>
       </PopoverContent>
@@ -1037,7 +1039,7 @@ function AdminTeams({ token, reload }) {
             </div>
           </div>
         ))}
-        {teams.length === 0 && <p className="text-sm text-slate-400">Nenhuma equipe cadastrada.</p>}
+        {teams.length === 0 && <p className="text-sm text-slate-600">Nenhuma equipe cadastrada.</p>}
       </CardContent>
 
       <Dialog open={!!rejectId} onOpenChange={(o) => !o && setRejectId(null)}>
@@ -1109,7 +1111,7 @@ function AdminAthletes({ token, reload }) {
             </div>
           </div>
         ))}
-        {athletes.length === 0 && <p className="text-sm text-slate-400">Nenhum atleta cadastrado.</p>}
+        {athletes.length === 0 && <p className="text-sm text-slate-600">Nenhum atleta cadastrado.</p>}
       </CardContent>
 
       <Dialog open={!!rejectId} onOpenChange={(o) => !o && setRejectId(null)}>
@@ -1158,7 +1160,7 @@ function RulesEngine({ token }) {
     api('/rules', { token }).then((d) => setRules(d.rules)).catch(() => {})
   }, [token])
 
-  if (!rules) return <p className="mt-4 text-slate-400">Carregando...</p>
+  if (!rules) return <p className="mt-4 text-slate-600">Carregando...</p>
 
   const setPoint = (k, v) => setRules({ ...rules, points: { ...rules.points, [k]: Number(v) } })
 
@@ -1354,7 +1356,7 @@ function AdminMatches({ token, categories }) {
               <div key={m.id} className="flex items-center justify-between rounded-lg border p-3">
                 <div className="text-sm">
                   <div className="font-semibold">
-                    {m.home_name} <span className="text-slate-400">x</span> {m.away_name}
+                    {m.home_name} <span className="text-slate-600">x</span> {m.away_name}
                     {m.status === 'finished' && <span className="ml-2 font-bold" style={{ color: BLUE }}>({hs}-{as})</span>}
                   </div>
                   <div className="text-xs text-slate-500">{new Date(m.scheduled_at).toLocaleString('pt-BR')} {m.venue ? `• ${m.venue}` : ''}</div>
@@ -1368,7 +1370,7 @@ function AdminMatches({ token, categories }) {
               </div>
             )
           })}
-          {matches.length === 0 && <p className="text-sm text-slate-400">Nenhum jogo nesta categoria.</p>}
+          {matches.length === 0 && <p className="text-sm text-slate-600">Nenhum jogo nesta categoria.</p>}
         </div>
       </CardContent>
 
@@ -1474,11 +1476,11 @@ function AdminAttendance({ token, categories }) {
             <div className="rounded-lg border divide-y">
               {athletes.map((a) => (
                 <label key={a.id} className="flex items-center justify-between p-3 cursor-pointer">
-                  <span className="text-sm">{a.name} <span className="text-xs text-slate-400">RG {a.rg}</span></span>
+                  <span className="text-sm">{a.name} <span className="text-xs text-slate-600">RG {a.rg}</span></span>
                   <input type="checkbox" className="h-5 w-5" checked={!!present[a.id]} onChange={(e) => setPresent({ ...present, [a.id]: e.target.checked })} />
                 </label>
               ))}
-              {athletes.length === 0 && <p className="p-3 text-sm text-slate-400">Nenhum atleta aprovado nesta equipe.</p>}
+              {athletes.length === 0 && <p className="p-3 text-sm text-slate-600">Nenhum atleta aprovado nesta equipe.</p>}
             </div>
             <div className="flex gap-2">
               <Button className="text-white border-0" style={{ background: BLUE }} onClick={save} disabled={athletes.length === 0}>Registrar presença</Button>
@@ -1708,7 +1710,7 @@ function AdminCategories({ token, onCategoriesChanged }) {
             })}
             {categories.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-slate-400 py-8">Nenhuma categoria cadastrada.</TableCell>
+                <TableCell colSpan={5} className="text-center text-slate-600 py-8">Nenhuma categoria cadastrada.</TableCell>
               </TableRow>
             )}
           </TableBody>
@@ -1756,7 +1758,7 @@ function AdminEmails({ token }) {
             <div className="text-xs text-slate-600 mt-1" dangerouslySetInnerHTML={{ __html: e.html }} />
           </div>
         ))}
-        {emails.length === 0 && <p className="text-sm text-slate-400">Nenhum e-mail enviado ainda.</p>}
+        {emails.length === 0 && <p className="text-sm text-slate-600">Nenhum e-mail enviado ainda.</p>}
       </CardContent>
     </Card>
   )
@@ -2126,7 +2128,7 @@ function GestorRoster({ token, team }) {
               </div>
             </div>
           ))}
-          {athletes.length === 0 && <p className="text-sm text-slate-400">Nenhum atleta no elenco.</p>}
+          {athletes.length === 0 && <p className="text-sm text-slate-600">Nenhum atleta no elenco.</p>}
         </div>
       </CardContent>
       <Dialog open={!!rejectId} onOpenChange={(open) => !open && setRejectId(null)}>
@@ -2174,7 +2176,7 @@ function GestorFrequency({ token, teamId }) {
             <div className="text-xs text-slate-500 mt-1">{f.present}/{f.total_sessions} presenças • {f.percent}%</div>
           </div>
         ))}
-        {rows.length === 0 && <p className="text-sm text-slate-400">Ainda não há registros de presença.</p>}
+        {rows.length === 0 && <p className="text-sm text-slate-600">Ainda não há registros de presença.</p>}
       </CardContent>
     </Card>
   )
@@ -2235,7 +2237,7 @@ function GestorAgenda({ category, token, team }) {
             <div key={m.id} className="flex items-center justify-between rounded-lg border p-3 text-sm">
               <div>
                 <div className="font-semibold">
-                  {m.home_name} <span className="text-slate-400">x</span> {m.away_name}
+                  {m.home_name} <span className="text-slate-600">x</span> {m.away_name}
                   {m.status === 'finished' && <span className="ml-2 font-bold" style={{ color: BLUE }}>({hs}-{as})</span>}
                 </div>
                 <div className="text-xs text-slate-500">{new Date(m.scheduled_at).toLocaleString('pt-BR')} {m.venue ? `• ${m.venue}` : ''}</div>
@@ -2249,7 +2251,7 @@ function GestorAgenda({ category, token, team }) {
             </div>
           )
         })}
-        {filtered.length === 0 && <p className="text-sm text-slate-400">Nenhum jogo.</p>}
+        {filtered.length === 0 && <p className="text-sm text-slate-600">Nenhum jogo.</p>}
       </CardContent>
     </Card>
   )
@@ -2270,6 +2272,9 @@ function Footer() {
               </div>
               <span className="font-extrabold">Liga de Voleibol Jundiaí</span>
             </div>
+            {/* SEGURANÇA (varredura, item A11, achado ao aplicar a troca em massa): aqui o fundo é escuro
+                (NAVY), não branco — text-slate-400 já tinha ~6,2:1 de contraste; trocar por slate-600
+                (que passa no item A11 só sobre fundo BRANCO) derrubaria para ~2,1:1. Mantido slate-400. */}
             <p className="text-sm text-slate-400">O ponto de encontro do vôlei jundiaiense. Temporada {new Date().getFullYear()}.</p>
           </div>
           <div>
@@ -2289,6 +2294,8 @@ function Footer() {
             fluxo de cadastro; agora ficam acessíveis em qualquer página, mesmo sem estar logado. */}
         <div className="mt-8 border-t border-slate-700 pt-4 text-center text-xs text-slate-500">
           <div className="mb-2 flex items-center justify-center gap-4">
+            {/* UX (varredura, item O1): ver app/ajuda/page.jsx */}
+            <Link className="underline hover:text-slate-300" href="/ajuda">Ajuda</Link>
             <Link className="underline hover:text-slate-300" href="/privacidade">Política de Privacidade</Link>
             <Link className="underline hover:text-slate-300" href="/termos-de-uso">Termos de Uso</Link>
           </div>

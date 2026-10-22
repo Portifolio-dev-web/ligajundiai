@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import LogoutButton from '@/components/LogoutButton'
+import HelpLink from '@/components/HelpLink'
 import { api } from '@/lib/api'
 import { CATEGORY_FALLBACK } from '@/lib/lvjApi'
 
@@ -58,10 +59,13 @@ export default function AdminAgendaPage() {
     // ACESSIBILIDADE (varredura, item A2): id="main-content" é o alvo do link "Pular para o
     // conteúdo" em app/layout.js — faltava aqui, então o link não levava a lugar nenhum nesta tela.
     <main id="main-content" className="mx-auto min-h-screen max-w-3xl space-y-6 px-4 py-10">
-      {/* ACESSIBILIDADE (varredura, item A10): ver components/LogoutButton.jsx */}
+      {/* ACESSIBILIDADE (varredura, item A10): ver components/LogoutButton.jsx. UX (item O1): ver components/HelpLink.jsx */}
       <div className="flex items-center justify-between gap-4">
         <Button asChild variant="ghost"><Link href="/admin/aprovacoes"><ArrowLeft className="h-4 w-4" /> Aprovações</Link></Button>
-        <LogoutButton />
+        <div className="flex items-center gap-2">
+          <HelpLink />
+          <LogoutButton />
+        </div>
       </div>
       <Card>
         <CardHeader><CardTitle>Criar data disponível</CardTitle><CardDescription>Defina uma sugestão de data e local para uma categoria. As equipes poderão aceitá-la ao ser proposta para um jogo.</CardDescription></CardHeader>

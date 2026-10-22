@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import LogoutButton from '@/components/LogoutButton'
+import HelpLink from '@/components/HelpLink'
 import { api } from '@/lib/api'
 import { CATEGORY_FALLBACK } from '@/lib/lvjApi'
 
@@ -136,9 +137,10 @@ export default function AdminInscricoesPage() {
     <main id="main-content" className="mx-auto min-h-screen max-w-6xl space-y-6 px-4 py-10">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Button asChild variant="ghost"><Link href="/admin/aprovacoes"><ArrowLeft className="h-4 w-4" /> Aprovações</Link></Button>
-        {/* ACESSIBILIDADE (varredura, item A10): ver components/LogoutButton.jsx */}
+        {/* ACESSIBILIDADE (varredura, item A10): ver components/LogoutButton.jsx. UX (item O1): ver components/HelpLink.jsx */}
         <div className="flex items-center gap-2">
           <Badge variant={selectedStatus === 'open' ? 'default' : 'secondary'}>{statusLabels[selectedStatus]}</Badge>
+          <HelpLink />
           <LogoutButton />
         </div>
       </div>

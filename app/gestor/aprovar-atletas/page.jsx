@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import LogoutButton from '@/components/LogoutButton'
+import HelpLink from '@/components/HelpLink'
 import { api } from '@/lib/api'
 
 export default function AprovarAtletasPage() {
@@ -66,10 +67,13 @@ export default function AprovarAtletasPage() {
     // ACESSIBILIDADE (varredura, item A2): id="main-content" é o alvo do link "Pular para o
     // conteúdo" em app/layout.js — faltava aqui, então o link não levava a lugar nenhum nesta tela.
     <main id="main-content" className="mx-auto min-h-screen max-w-6xl space-y-6 px-4 py-10">
-      {/* ACESSIBILIDADE (varredura, item A10): ver components/LogoutButton.jsx */}
+      {/* ACESSIBILIDADE (varredura, item A10): ver components/LogoutButton.jsx. UX (item O1): ver components/HelpLink.jsx */}
       <div className="flex items-center justify-between gap-4">
         <Button asChild variant="ghost"><Link href="/gestor"><ArrowLeft className="h-4 w-4" /> Painel do gestor</Link></Button>
-        <LogoutButton />
+        <div className="flex items-center gap-2">
+          <HelpLink />
+          <LogoutButton />
+        </div>
       </div>
       <Card>
         <CardHeader>

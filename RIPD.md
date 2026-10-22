@@ -8,7 +8,7 @@ genérico). Revise e suba a versão sempre que uma finalidade, base legal ou cat
 -->
 
 **Versão:** 2026-01 · **Controladora:** Liga de Voleibol Jundiaí (LVJ) · **Sistema:** LVJ (este
-repositório) · **Última revisão:** 2026-10-21
+repositório) · **Última revisão:** 2026-10-22
 
 ## 1. Descrição do tratamento
 
@@ -46,6 +46,16 @@ nos riscos e nas medidas de mitigação.
 - Transferência internacional: hoje nenhum provedor está hospedado fora do Brasil (ver Política de
   Privacidade, seção 5); se isso mudar, este RIPD e a política devem ser atualizados antes da
   mudança entrar em vigor.
+- Backup (item L11 da varredura): este repositório não implementa rotina de backup automática (ver
+  Política de Privacidade, seção 7) — quem implanta o sistema em produção deve definir e documentar
+  a própria política de backup/retenção de cópias de segurança, garantindo que elas respeitem os
+  mesmos prazos de anonimização/exclusão da política.
+- Cláusula de operador com o fornecedor de controle de acesso (item L12 da varredura, art. 39 da
+  LGPD): a integração com a Control ID (`backend/src/services/queue.js`) já transmite, em modo
+  `CONTROL_ID_MODE=live`, uma URL de leitura temporária da foto biométrica de verdade — mas não há
+  nenhum acordo de tratamento de dados (DPA) documentado com esse fornecedor, diferente do e-mail e
+  do S3, que são autogerenciados. Antes de operar em modo `live` com dados reais, firmar o DPA com a
+  Control ID e referenciá-lo aqui.
 - Dependências do frontend: `tailwindcss` 3.x ainda arrasta duas vulnerabilidades sem correção
   disponível nessa major version (`braces`, DoS por padrão de glob profundamente aninhado, via
   `chokidar`/`fast-glob`; `postcss-selector-parser`, CPU em seletor CSS malicioso). Risco aceito:
