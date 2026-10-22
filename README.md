@@ -127,6 +127,15 @@ docker build --target production --build-arg API_INTERNAL_URL=https://api.seu-do
 Next.js resolve o destino de `rewrites()` durante o `next build`, não a cada requisição — passá-lo
 só em tempo de execução não tem efeito nenhum no build de produção.
 
+As duas imagens de produção (`Dockerfile` e `backend/Dockerfile`) já têm `HEALTHCHECK` embutido.
+Sistema de arquivos somente leitura é uma flag de execução, não dá para embutir no Dockerfile —
+rode com `--read-only --tmpfs /tmp` em produção (o Next.js escreve cache temporário em `/tmp`; o
+backend não precisa de `/tmp` gravável, mas o `--tmpfs` não atrapalha):
+
+```powershell
+docker run --read-only --tmpfs /tmp ... <imagem>
+```
+
 ## Retenção automática de dados
 
 A API roda diariamente uma rotina (`backend/src/services/retention.js`, agendada em

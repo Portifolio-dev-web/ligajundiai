@@ -1,6 +1,5 @@
 import { randomBytes, randomInt, createHash } from 'node:crypto'
 import { Router } from 'express'
-import argon2 from 'argon2'
 import { authenticator } from 'otplib'
 import { z } from 'zod'
 import { config } from '../config.js'

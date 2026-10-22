@@ -1719,7 +1719,7 @@ function AdminCategories({ token, onCategoriesChanged }) {
           <AlertDialogHeader>
             <AlertDialogTitle>Remover categoria</AlertDialogTitle>
             <AlertDialogDescription>
-              Remover a categoria "{removeTarget?.name}"? Essa ação não pode ser desfeita.
+              Remover a categoria &ldquo;{removeTarget?.name}&rdquo;? Essa ação não pode ser desfeita.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

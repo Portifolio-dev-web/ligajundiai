@@ -11,7 +11,8 @@
     "test:integration": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --runInBand --testPathPatterns=integration.test.js",
     "migrate": "node src/db/migrate.js",
     "migrate:legacy": "node src/db/migrate-legacy.js",
-    "seed:admin": "node src/db/seed-admin.js"
+    "seed:admin": "node src/db/seed-admin.js",
+    "lint": "eslint ."
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.850.0",
@@ -36,6 +37,9 @@
     "zod": "^4.0.5"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.0",
+    "eslint": "^9.39.5",
+    "globals": "^16.2.0",
     "jest": "^30.0.5",
     "supertest": "^7.1.4"
   },

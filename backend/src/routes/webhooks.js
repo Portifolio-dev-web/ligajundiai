@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { Router } from 'express'
 import { z } from 'zod'
-import { query, transaction } from '../db/pool.js'
+import { transaction } from '../db/pool.js'
 import { AppError, notFound } from '../errors.js'
 import { config } from '../config.js'
 import { parse, uuidSchema } from '../security/validation.js'
