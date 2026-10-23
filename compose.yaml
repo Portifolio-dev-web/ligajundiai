@@ -41,6 +41,9 @@ services:
       NODE_ENV: development
       NODE_OPTIONS: --max-old-space-size=512
       API_INTERNAL_URL: http://api:4000
+      # SEO (varredura, item E1): usada em app/layout.js (metadataBase/openGraph), app/sitemap.js
+      # e app/robots.js para montar URL absoluta — troque pelo domínio real antes do deploy.
+      NEXT_PUBLIC_SITE_URL: http://localhost:3000
       JWT_SECRET: local-development-only-replace-before-deployment-2026
       # SEGURANÇA (varredura, item S18): precisa ser o mesmo valor do serviço "api" abaixo —
       # middleware.js usa para saber se procura o cookie "lvj_session" ou "__Host-lvj_session".

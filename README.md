@@ -39,6 +39,11 @@ encarregado de proteção de dados exigido pelo art. 41 da LGPD nas páginas
 "a definir" em vez de um contato — isso é esperado em desenvolvimento, mas não
 pode ir para produção assim.
 
+Defina também `NEXT_PUBLIC_SITE_URL` com o domínio real (ex.: `https://ligajundiai.com.br`)
+no serviço `frontend` antes do deploy: é usada em `app/layout.js` (Open Graph/Twitter Card),
+`app/sitemap.js` e `app/robots.js` para montar URLs absolutas. Deixada no valor de
+desenvolvimento, o sitemap e os cartões de compartilhamento apontam para `localhost`.
+
 O [RIPD.md](RIPD.md) (Relatório de Impacto à Proteção de Dados) e o
 [RESPOSTA-A-INCIDENTES.md](RESPOSTA-A-INCIDENTES.md) descrevem os riscos de dados
 pessoais do sistema e o procedimento de resposta a incidentes; revise os dois antes
