@@ -13,7 +13,13 @@ import { asyncRoute, audit } from '../utils.js'
 import { authRateLimit, loginAccountRateLimit, otpRequestAccountRateLimit } from '../security/rate-limit.js'
 
 export const authRouter = Router()
-authRouter.use(authRateLimit)
+// SEGURANÇA (achado do usuário, 2026-10-23): authRateLimit antes valia para o roteador inteiro,
+// inclusive GET /me — chamada a cada navegação dentro do painel (middleware.js checa a sessão a
+// cada página protegida) e pelo front ao carregar. Isso consumia o orçamento de 10 req/15min só de
+// navegar, e a tentativa de login seguinte (mesmo sendo a única "tentativa" de verdade) já caía
+// bloqueada. Agora o limitador só vale nas rotas que são tentativas de autenticação de fato
+// (registro, login, pedido/confirmação de código) — /me, /logout, /reconsent e /totp/rotate/* exigem
+// sessão já autenticada e não são o alvo deste limite.
 
 const registerSchema = z.object({
   name: z.string().trim().min(2).max(120),
@@ -25,7 +31,7 @@ const registerSchema = z.object({
   consent_version: z.string().trim().max(40).optional(),
 }).strict()
 
-authRouter.post('/register', asyncRoute(async (req, res) => {
+authRouter.post('/register', authRateLimit, asyncRoute(async (req, res) => {
   const input = parse(registerSchema, req.body)
   const rg = input.rg ? requireValidRg(input.rg) : null
   const user = await transaction(async (client) => {
@@ -63,7 +69,7 @@ authRouter.post('/register', asyncRoute(async (req, res) => {
   res.status(201).json({ user })
 }))
 
-authRouter.post('/login-password', loginAccountRateLimit, asyncRoute(async (req, res) => {
+authRouter.post('/login-password', authRateLimit, loginAccountRateLimit, asyncRoute(async (req, res) => {
   const input = parse(z.object({
     email: emailSchema,
     password: z.string().min(1).max(128),
@@ -99,7 +105,7 @@ authRouter.post('/login-password', loginAccountRateLimit, asyncRoute(async (req,
   res.json({ user: { id: user.id, role: user.role, name: user.name, email: user.email, consent_outdated: user.consent_version !== config.CONSENT_VERSION } })
 }))
 
-authRouter.post('/otp/request', otpRequestAccountRateLimit, asyncRoute(async (req, res) => {
+authRouter.post('/otp/request', authRateLimit, otpRequestAccountRateLimit, asyncRoute(async (req, res) => {
   const input = parse(z.object({ email: emailSchema }).strict(), req.body)
   const result = await query(
     `SELECT id, email, name FROM users
@@ -131,7 +137,7 @@ authRouter.post('/otp/request', otpRequestAccountRateLimit, asyncRoute(async (re
   res.json({ ok: true, message: 'Se a conta existir, um código será enviado por e-mail.' })
 }))
 
-authRouter.post('/otp/verify', asyncRoute(async (req, res) => {
+authRouter.post('/otp/verify', authRateLimit, asyncRoute(async (req, res) => {
   const input = parse(z.object({
     email: emailSchema,
     code: z.string().trim().regex(/^\d{6}$/),

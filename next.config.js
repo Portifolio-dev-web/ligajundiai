@@ -1,10 +1,13 @@
 const nextConfig = {
   output: 'standalone',
-  // SEGURANÇA/LIMPEZA (varredura, item S12): remotePatterns liberava avatars.githubusercontent.com
-  // sem nenhuma referência no código (next/image nem é usado no projeto) — resquício de boilerplate.
-  images: {
-    unoptimized: true,
-  },
+  // PERFORMANCE (varredura, item I3): antes "unoptimized: true" desligava a otimização de imagem
+  // do Next inteira (nenhum resize/WebP automático) — era herdada de quando o site usava <img> cru
+  // com fotos hotlinked (ver item S12, histórico). Agora app/page.js usa next/image com as fotos
+  // locais em public/images; sem remotePatterns porque não há mais nenhuma imagem de domínio
+  // externo. O otimizador usa o pacote "sharp" (já presente em node_modules como dependência
+  // opcional do Next) e roda dentro do próprio container de build/produção — sem dependência de
+  // serviço externo.
+  images: {},
   webpack(config, { dev }) {
     if (dev) {
       // Reduce CPU/memory from file watching

@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowLeft, Check, LoaderCircle, X } from 'lucide-react'
+import { Check, LoaderCircle, X } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -87,10 +87,15 @@ export default function AdminAprovacoesPage() {
     // ACESSIBILIDADE (varredura, item A2): id="main-content" é o alvo do link "Pular para o
     // conteúdo" em app/layout.js — faltava aqui, então o link não levava a lugar nenhum nesta tela.
     <main id="main-content" className="mx-auto min-h-screen max-w-6xl space-y-6 px-4 py-10">
+      {/* Esta é a home da Gestão da Liga Jundiaí — as sub-páginas (inscrições, agenda, segurança)
+          voltam para cá. "/" continua autenticado como admin (renderiza o Painel Administrativo de
+          app/page.js), então o link abaixo não sai da sessão protegida; só Sair
+          (components/LogoutButton.jsx) leva de fato ao site público, deslogando antes. */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Button asChild variant="ghost"><Link href="/"><ArrowLeft className="h-4 w-4" /> Página inicial</Link></Button>
+        <h1 className="text-2xl font-bold">Gestão da Liga Jundiaí</h1>
         {/* ACESSIBILIDADE (varredura, item A10): ver components/LogoutButton.jsx. UX (item O1): ver components/HelpLink.jsx */}
         <div className="flex flex-wrap items-center gap-2">
+          <Button asChild variant="outline"><Link href="/">Painel administrativo</Link></Button>
           <Button asChild variant="outline"><Link href="/admin/inscricoes">Períodos de inscrição</Link></Button>
           <Button asChild variant="outline"><Link href="/admin/agenda">Criar datas disponíveis</Link></Button>
           {/* SEGURANÇA (varredura, item S21): ver app/admin/seguranca/page.jsx */}

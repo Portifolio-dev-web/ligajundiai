@@ -136,7 +136,7 @@ export default function AdminInscricoesPage() {
     // conteúdo" em app/layout.js — faltava aqui, então o link não levava a lugar nenhum nesta tela.
     <main id="main-content" className="mx-auto min-h-screen max-w-6xl space-y-6 px-4 py-10">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Button asChild variant="ghost"><Link href="/admin/aprovacoes"><ArrowLeft className="h-4 w-4" /> Aprovações</Link></Button>
+        <Button asChild variant="ghost"><Link href="/admin/aprovacoes"><ArrowLeft className="h-4 w-4" /> Gestão da Liga Jundiaí</Link></Button>
         {/* ACESSIBILIDADE (varredura, item A10): ver components/LogoutButton.jsx. UX (item O1): ver components/HelpLink.jsx */}
         <div className="flex items-center gap-2">
           <Badge variant={selectedStatus === 'open' ? 'default' : 'secondary'}>{statusLabels[selectedStatus]}</Badge>

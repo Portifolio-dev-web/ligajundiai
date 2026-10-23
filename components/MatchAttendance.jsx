@@ -5,6 +5,8 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import LogoutButton from '@/components/LogoutButton'
+import HelpLink from '@/components/HelpLink'
 import { api } from '@/lib/api'
 
 function escapeHtml(value) {
@@ -70,7 +72,14 @@ export default function MatchAttendance({ expectedRole }) {
   const attendanceByMatch = new Map(attendance.filter((item) => item.match_id).map((item) => [item.match_id, item]))
 
   return (
-    <main className="mx-auto min-h-screen max-w-6xl px-4 py-10">
+    <main className="mx-auto min-h-screen max-w-6xl space-y-6 px-4 py-10">
+      {/* Esta é a home do painel do atleta (e a tela de jogos do gestor) — sem link para "/":
+          Sair (components/LogoutButton.jsx) é o único caminho de volta ao site público, para
+          manter a sessão protegida enquanto dentro do painel. */}
+      <div className="flex items-center justify-end gap-2">
+        <HelpLink />
+        <LogoutButton />
+      </div>
       <Card>
         <CardHeader><CardTitle>Jogos e frequência</CardTitle><CardDescription>Confira a agenda da sua equipe e os registros de presença. Declarações ficam disponíveis após a confirmação de presença no jogo.</CardDescription></CardHeader>
         <CardContent className="space-y-4">

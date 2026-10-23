@@ -82,7 +82,7 @@ export default function AdminSegurancaPage() {
     // conteúdo" em app/layout.js.
     <main id="main-content" className="mx-auto min-h-screen max-w-2xl space-y-6 px-4 py-10">
       <div className="flex items-center justify-between gap-4">
-        <Button asChild variant="ghost"><Link href="/admin/aprovacoes"><ArrowLeft className="h-4 w-4" /> Aprovações</Link></Button>
+        <Button asChild variant="ghost"><Link href="/admin/aprovacoes"><ArrowLeft className="h-4 w-4" /> Gestão da Liga Jundiaí</Link></Button>
         {/* ACESSIBILIDADE (varredura, item A10): ver components/LogoutButton.jsx. UX (item O1): ver components/HelpLink.jsx */}
         <div className="flex items-center gap-2">
           <HelpLink />

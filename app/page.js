@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -276,7 +277,7 @@ function TopNav({ user, token, onLoginClick, onLogout }) {
               <span className="hidden sm:block text-sm text-slate-200">{user.name}</span>
               {user.role === 'admin' ? (
                 <>
-                  <a href="/admin/aprovacoes" className="hidden text-sm text-white underline sm:inline">Aprovações</a>
+                  <a href="/admin/aprovacoes" className="hidden text-sm text-white underline sm:inline">Gestão da Liga Jundiaí</a>
                   <a href="/admin/inscricoes" className="hidden text-xs text-white underline sm:inline">Períodos</a>
                 </>
               ) : (
@@ -304,7 +305,7 @@ function TopNav({ user, token, onLoginClick, onLogout }) {
                   <DropdownMenuSeparator />
                   {user.role === 'admin' ? (
                     <>
-                      <DropdownMenuItem asChild><a href="/admin/aprovacoes">Aprovações</a></DropdownMenuItem>
+                      <DropdownMenuItem asChild><a href="/admin/aprovacoes">Gestão da Liga Jundiaí</a></DropdownMenuItem>
                       <DropdownMenuItem asChild><a href="/admin/inscricoes">Períodos</a></DropdownMenuItem>
                     </>
                   ) : (
@@ -371,7 +372,10 @@ function PublicSite({ categories, currentYear, onLoginClick }) {
     <div>
       {/* HERO */}
       <section className="relative overflow-hidden" style={{ background: NAVY }}>
-        <img src={HERO} alt="Vôlei" className="absolute inset-0 h-full w-full object-cover opacity-25" />
+        {/* PERFORMANCE (varredura, item I3): "priority" porque esta é a imagem de maior destaque
+            visual na primeira tela (LCP) — sem ela, next/image carregaria a hero com o mesmo
+            atraso ("lazy") das imagens abaixo da dobra (court/arena, mais adiante nesta página). */}
+        <Image src={HERO} alt="Vôlei" fill priority sizes="100vw" className="object-cover opacity-25" />
         <div
           className="absolute inset-0"
           style={{ background: `linear-gradient(120deg, ${NAVY}ee, ${BLUE}aa)` }}
@@ -478,7 +482,7 @@ function PublicSite({ categories, currentYear, onLoginClick }) {
             {/* Sponsor highlight box next to standings */}
             <Card className="overflow-hidden border-2" style={{ borderColor: RED }}>
               <div className="relative h-28">
-                <img src={IMG_COURT} alt="" className="h-full w-full object-cover" />
+                <Image src={IMG_COURT} alt="" fill sizes="(min-width: 1024px) 33vw, 100vw" className="object-cover" />
                 <div className="absolute inset-0 flex items-center justify-center" style={{ background: `${BLUE}bb` }}>
                   <span className="text-white font-bold text-lg">Espaço Patrocinador</span>
                 </div>
@@ -532,8 +536,11 @@ function PublicSite({ categories, currentYear, onLoginClick }) {
       </section>
 
       {/* Community / sponsor banner */}
-      <section className="relative">
-        <img src={IMG_ARENA} alt="" className="h-64 w-full object-cover" />
+      {/* PERFORMANCE (varredura, item I3): a altura (h-64) precisou subir para a <section> — antes
+          vinha do próprio <img> no fluxo normal; o next/image com "fill" tira a imagem do fluxo
+          (position: absolute), então sem essa altura na section o bloco colapsaria para 0px. */}
+      <section className="relative h-64">
+        <Image src={IMG_ARENA} alt="" fill sizes="100vw" className="object-cover" />
         <div className="absolute inset-0 flex items-center" style={{ background: `${NAVY}cc` }}>
           <div className="container text-white">
             <h3 className="text-3xl font-extrabold max-w-lg">Faça parte da maior liga de vôlei da região</h3>
