@@ -55,6 +55,7 @@ import {
 } from 'lucide-react'
 import { api, CATEGORY_FALLBACK } from '@/lib/lvjApi'
 import { formatRg } from '@/lib/athlete'
+import ForgotPasswordDialog from '@/components/ForgotPasswordDialog'
 // Paleta alinhada ao logo oficial da LVJ (marinho + vermelho + azul da bola) — compartilhada com
 // components/standings.jsx e components/admin/AdminDashboard.jsx, por isso vive em lib/theme.js.
 import { BLUE, RED, NAVY } from '@/lib/theme'
@@ -89,6 +90,7 @@ function App() {
   const [myTeams, setMyTeams] = useState([])
   const [categories, setCategories] = useState(CATEGORY_FALLBACK)
   const [loginOpen, setLoginOpen] = useState(false)
+  const [forgotPasswordOpen, setForgotPasswordOpen] = useState(false)
   const [booting, setBooting] = useState(true)
   const currentYear = new Date().getFullYear()
 
@@ -185,7 +187,17 @@ function App() {
         )}
       </main>
       <Footer />
-      <LoginDialog open={loginOpen} onOpenChange={setLoginOpen} onAuthed={onAuthed} />
+      <LoginDialog
+        open={loginOpen}
+        onOpenChange={setLoginOpen}
+        onAuthed={onAuthed}
+        onForgotPassword={() => { setLoginOpen(false); setForgotPasswordOpen(true) }}
+      />
+      <ForgotPasswordDialog
+        open={forgotPasswordOpen}
+        onOpenChange={setForgotPasswordOpen}
+        onBackToLogin={() => setLoginOpen(true)}
+      />
       {/* LGPD (varredura, item L10): ver ReconsentDialog abaixo. */}
       {user?.consent_outdated && <ReconsentDialog onAccepted={loadMe} />}
     </div>
@@ -565,7 +577,7 @@ function MatchResultCard({ m }) {
 // ============================================================================
 // LOGIN DIALOG
 // ============================================================================
-function LoginDialog({ open, onOpenChange, onAuthed }) {
+function LoginDialog({ open, onOpenChange, onAuthed, onForgotPassword }) {
   const [tab, setTab] = useState('senha')
 
   // Password
@@ -648,6 +660,11 @@ function LoginDialog({ open, onOpenChange, onAuthed }) {
               <Input id="login-password" type="password" autoComplete="current-password" value={pw} aria-invalid={loginInvalid} aria-describedby={loginInvalid ? 'login-password-error' : undefined} onChange={(e) => { setPw(e.target.value); setLoginInvalid(false) }} />
             </div>
             {loginInvalid && <p id="login-password-error" role="alert" className="text-xs text-red-600">E-mail ou senha inválidos.</p>}
+            <div className="flex justify-end">
+              <button type="button" onClick={onForgotPassword} className="text-sm font-medium underline underline-offset-4" style={{ color: BLUE }}>
+                Esqueci minha senha?
+              </button>
+            </div>
             {(requiresTotp || pwTotp) && (
               <div>
                 <Label htmlFor="login-password-totp">Código 2FA do administrador</Label>
