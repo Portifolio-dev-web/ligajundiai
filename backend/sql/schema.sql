@@ -415,6 +415,37 @@ CREATE TABLE IF NOT EXISTS otp_codes (
   attempts integer NOT NULL DEFAULT 0,
   created_at timestamptz NOT NULL DEFAULT now()
 );
+-- SEGURANÇA: otp_codes passou a servir dois fluxos (login por e-mail e recuperação de senha por
+-- SMS de atleta/gestor) — "purpose" evita que um código gerado para um fluxo seja aceito no outro
+-- (ver backend/src/routes/auth.js, POST /auth/forgot-password/verify).
+ALTER TABLE otp_codes ADD COLUMN IF NOT EXISTS purpose text NOT NULL DEFAULT 'login';
+
+CREATE TABLE IF NOT EXISTS sms_outbox (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  event_id text NOT NULL UNIQUE,
+  phone text NOT NULL,
+  body text NOT NULL,
+  -- SEGURANÇA (mesmo padrão de email_outbox.admin_preview_html): cópia sem o código de uso único,
+  -- é o que um eventual painel administrativo poderia mostrar; "body" (com o código) só é lido
+  -- para o envio real.
+  admin_preview_body text NOT NULL DEFAULT '',
+  sent_at timestamptz,
+  attempts integer NOT NULL DEFAULT 0,
+  last_error text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+-- O token de uso único emitido depois que a identidade é verificada (TOTP do admin ou SMS do
+-- atleta/gestor) — só ele autoriza POST /auth/forgot-password/reset a trocar a senha, nunca o
+-- código OTP/TOTP diretamente. Mesmo padrão de prova-depois-ação de totp_pending_secret_ciphertext.
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash text NOT NULL UNIQUE,
+  expires_at timestamptz NOT NULL,
+  consumed_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
 
 CREATE TABLE IF NOT EXISTS sponsors (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

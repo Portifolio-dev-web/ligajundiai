@@ -9,8 +9,12 @@ import { createSession, authenticate, authenticateIfPresent, authorize, hashPass
 import { rgDigest, encryptSensitive, decryptSensitive, safeEqual } from '../security/crypto.js'
 import { emailSchema, parse, requireValidRg, cleanText } from '../security/validation.js'
 import { enqueueEmail, escapeHtml } from '../services/email.js'
+import { enqueueSms } from '../services/sms.js'
 import { asyncRoute, audit } from '../utils.js'
-import { authRateLimit, loginAccountRateLimit, otpRequestAccountRateLimit } from '../security/rate-limit.js'
+import {
+  authRateLimit, loginAccountRateLimit, otpRequestAccountRateLimit,
+  forgotPasswordRequestRateLimit, forgotPasswordVerifyRateLimit,
+} from '../security/rate-limit.js'
 
 export const authRouter = Router()
 // SEGURANÇA (achado do usuário, 2026-10-23): authRateLimit antes valia para o roteador inteiro,
@@ -166,6 +170,149 @@ authRouter.post('/otp/verify', authRateLimit, asyncRoute(async (req, res) => {
   if (row.role === 'admin') throw new AppError(401, 'TOTP_REQUIRED', 'Administradores devem entrar com senha e código TOTP')
   await createSession(row, res)
   res.json({ user: { id: row.id, role: row.role, name: row.name, email: row.email, consent_outdated: row.consent_version !== config.CONSENT_VERSION } })
+}))
+
+// ESQUECI MINHA SENHA: três passos — request (identifica a conta e dispara a verificação),
+// verify (confirma TOTP de admin ou código SMS de atleta/gestor e troca a prova por um token de
+// uso único) e reset (só o token decide, nunca o código em si — mesmo motivo de
+// totp_pending_secret_ciphertext: a prova de posse e a ação final são passos separados).
+const forgotPasswordRequestSchema = z.object({ email: emailSchema }).strict()
+
+const forgotPasswordVerifySchema = z.object({
+  email: emailSchema,
+  code: z.string().trim().regex(/^\d{6}$/).optional(),
+  totp: z.string().trim().regex(/^\d{6}$/).optional(),
+}).strict()
+
+const forgotPasswordResetSchema = z.object({
+  reset_token: z.string().trim().min(32).max(256),
+  password: z.string().min(12).max(128),
+}).strict()
+
+authRouter.post('/forgot-password/request', authRateLimit, forgotPasswordRequestRateLimit, asyncRoute(async (req, res) => {
+  const input = parse(forgotPasswordRequestSchema, req.body)
+  const result = await query(
+    `SELECT id, name, email, role, phone FROM users
+     WHERE lower(email) = $1 AND status = 'active' AND deleted_at IS NULL`,
+    [input.email],
+  )
+  const user = result.rows[0]
+  // SEGURANÇA: e-mail desconhecido e conta de atleta/gestor respondem exatamente igual (mesma
+  // mensagem, mesmo "method": "sms") — só uma conta de administrador revela "totp", porque é
+  // disso que a tela seguinte precisa para pedir o código certo. Nunca confirma se o e-mail existe.
+  if (user?.role === 'admin') {
+    return res.json({ ok: true, method: 'totp' })
+  }
+  if (user?.phone) {
+    const code = randomInt(0, 1_000_000).toString().padStart(6, '0')
+    const codeHash = createHash('sha256').update(`${user.id}:${code}`).digest('hex')
+    const expiry = new Date(Date.now() + 10 * 60 * 1000)
+    await transaction(async (client) => {
+      await client.query(
+        `INSERT INTO otp_codes (user_id, code_hash, expires_at, purpose)
+         VALUES ($1, $2, $3, 'password_reset_sms')`,
+        [user.id, codeHash, expiry],
+      )
+      const eventId = `pwreset-sms:${user.id}:${randomBytes(16).toString('hex')}`
+      await enqueueSms(client, {
+        to: user.phone,
+        body: `LVJ: seu código de recuperação de senha é ${code}. Ele expira em 10 minutos.`,
+        adminPreviewBody: 'Código de recuperação de senha enviado por SMS. Por segurança, o código não é exibido aqui.',
+        eventId,
+      })
+      await audit(client, user, 'password_reset.sms_requested', 'user', user.id, { ip: req.ip })
+    })
+  }
+  res.json({ ok: true, method: 'sms' })
+}))
+
+authRouter.post('/forgot-password/verify', authRateLimit, forgotPasswordVerifyRateLimit, asyncRoute(async (req, res) => {
+  const input = parse(forgotPasswordVerifySchema, req.body)
+  const result = await query(
+    `SELECT id, role, name, email, totp_secret_ciphertext FROM users
+     WHERE lower(email) = $1 AND status = 'active' AND deleted_at IS NULL`,
+    [input.email],
+  )
+  const user = result.rows[0]
+  if (!user) throw unauthorized('Código inválido ou expirado')
+
+  if (user.role === 'admin') {
+    requireTotp(input.totp)
+    const secret = decryptSensitive(user.totp_secret_ciphertext)
+    if (!secret || !authenticator.check(input.totp, secret)) {
+      throw unauthorized('Código de autenticação de dois fatores inválido')
+    }
+  } else {
+    if (!input.code) throw unauthorized('Código inválido ou expirado')
+    const otpResult = await query(
+      `SELECT id, code_hash FROM otp_codes
+       WHERE user_id = $1 AND purpose = 'password_reset_sms' AND consumed_at IS NULL
+         AND expires_at > now() AND attempts < 5
+       ORDER BY created_at DESC LIMIT 1`,
+      [user.id],
+    )
+    const otp = otpResult.rows[0]
+    if (!otp) throw unauthorized('Código inválido ou expirado')
+    const submitted = createHash('sha256').update(`${user.id}:${input.code}`).digest('hex')
+    if (!safeEqual(submitted, otp.code_hash)) {
+      await query('UPDATE otp_codes SET attempts = attempts + 1 WHERE id = $1', [otp.id])
+      throw unauthorized('Código inválido ou expirado')
+    }
+    const consumed = await query(
+      'UPDATE otp_codes SET consumed_at = now() WHERE id = $1 AND consumed_at IS NULL AND expires_at > now() RETURNING id',
+      [otp.id],
+    )
+    if (!consumed.rowCount) throw unauthorized('Código inválido ou expirado')
+  }
+
+  const resetToken = randomBytes(32).toString('hex')
+  const resetTokenHash = createHash('sha256').update(resetToken).digest('hex')
+  const expiry = new Date(Date.now() + 10 * 60 * 1000)
+  await transaction(async (client) => {
+    await client.query(
+      'INSERT INTO password_reset_tokens (user_id, token_hash, expires_at) VALUES ($1, $2, $3)',
+      [user.id, resetTokenHash, expiry],
+    )
+    await audit(client, user, 'password_reset.verified', 'user', user.id, {
+      ip: req.ip,
+      method: user.role === 'admin' ? 'totp' : 'sms',
+    })
+  })
+  // SEGURANÇA: mesmo padrão de /totp/rotate/start — este token só aparece aqui, direto para quem
+  // acabou de provar a identidade, e nunca de novo depois disso.
+  res.json({ ok: true, reset_token: resetToken, expires_at: expiry })
+}))
+
+authRouter.post('/forgot-password/reset', authRateLimit, asyncRoute(async (req, res) => {
+  const input = parse(forgotPasswordResetSchema, req.body)
+  const tokenHash = createHash('sha256').update(input.reset_token).digest('hex')
+  const result = await query(
+    `SELECT prt.id AS token_id, u.id, u.role, u.name, u.email
+     FROM password_reset_tokens prt JOIN users u ON u.id = prt.user_id
+     WHERE prt.token_hash = $1 AND prt.consumed_at IS NULL AND prt.expires_at > now()
+       AND u.status = 'active' AND u.deleted_at IS NULL`,
+    [tokenHash],
+  )
+  const row = result.rows[0]
+  if (!row) throw new AppError(401, 'RESET_TOKEN_INVALID', 'Token de redefinição inválido ou expirado')
+
+  await transaction(async (client) => {
+    const consumed = await client.query(
+      'UPDATE password_reset_tokens SET consumed_at = now() WHERE id = $1 AND consumed_at IS NULL RETURNING id',
+      [row.token_id],
+    )
+    if (!consumed.rowCount) throw new AppError(401, 'RESET_TOKEN_INVALID', 'Token de redefinição inválido ou expirado')
+    await client.query(
+      `UPDATE users SET password_hash = $2, legacy_password_salt = NULL, legacy_password_hash = NULL,
+         updated_at = now() WHERE id = $1`,
+      [row.id, await hashPassword(input.password)],
+    )
+    // SEGURANÇA: redefinir a senha revoga toda sessão ativa da conta — inclusive uma sessão que um
+    // invasor tenha aberto antes do titular recuperar o acesso.
+    await client.query('UPDATE sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL', [row.id])
+    await audit(client, row, 'password_reset.completed', 'user', row.id, { ip: req.ip })
+  })
+  res.json({ ok: true })
 }))
 
 authRouter.get('/me', authenticateIfPresent, asyncRoute(async (req, res) => {

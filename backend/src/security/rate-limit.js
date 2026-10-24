@@ -64,6 +64,35 @@ export const otpRequestAccountRateLimit = rateLimit({
   message: { error: 'Muitos pedidos de código de acesso para esta conta. Tente novamente mais tarde.' },
 })
 
+// SEGURANÇA: POST /auth/forgot-password/request dispara um SMS de verdade (ou, para admin, só
+// confirma o método) — mesmo risco de email bombing do item S22 acima, agora por SMS. Limite igual
+// ao de otpRequestAccountRateLimit, pela mesma razão (custo maior que uma tentativa de senha).
+export const forgotPasswordRequestRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  skip: () => config.NODE_ENV === 'test',
+  keyGenerator: (req) => `forgot-password-request:${String(req.body?.email || '').trim().toLowerCase()}`,
+  store: storeFor('lvj:forgot-password-request:'),
+  message: { error: 'Muitos pedidos de recuperação de senha para esta conta. Tente novamente mais tarde.' },
+})
+
+// SEGURANÇA: POST /auth/forgot-password/verify aceita um código TOTP ou SMS de 6 dígitos — sem
+// limite por conta, alguém distribuindo tentativas entre IPs tinha, na prática, tentativas
+// ilimitadas para adivinhar o código (o limite de 5 tentativas em otp_codes.attempts só vale para
+// o código SMS, não para o TOTP do admin, que não expira por uso).
+export const forgotPasswordVerifyRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  skip: () => config.NODE_ENV === 'test',
+  keyGenerator: (req) => `forgot-password-verify:${String(req.body?.email || '').trim().toLowerCase()}`,
+  store: storeFor('lvj:forgot-password-verify:'),
+  message: { error: 'Muitas tentativas de verificação. Tente novamente mais tarde.' },
+})
+
 // SEGURANÇA (varredura, item S16): a exportação completa dos dados do titular (GET /privacy/export)
 // só exigia sessão válida, sem limite próprio — uma sessão vazada/roubada raspava os dados quantas
 // vezes quisesse. Chave pelo usuário autenticado, não pelo IP (várias contas no mesmo IP não se

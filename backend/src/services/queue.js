@@ -3,6 +3,7 @@ import { Queue, Worker } from 'bullmq'
 import { config } from '../config.js'
 import { query } from '../db/pool.js'
 import { sendQueuedEmail, enqueueOutboxEvents } from './email.js'
+import { sendQueuedSms } from './sms.js'
 import { createBiometryReadUrl, readBiometry } from './storage.js'
 import { sweepExpiredRetention } from './retention.js'
 
@@ -53,6 +54,7 @@ async function syncAthleteBiometry({ athleteId }) {
 export async function startQueueWorkers() {
   const worker = new Worker('lvj-jobs', async (job) => {
     if (job.name === 'email.send') return sendQueuedEmail(job.data.emailId)
+    if (job.name === 'sms.send') return sendQueuedSms(job.data.smsId)
     if (job.name === 'biometry.sync') return syncAthleteBiometry(job.data)
     if (job.name === 'retention.sweep') return sweepExpiredRetention()
     throw new Error(`Unsupported job type: ${job.name}`)
