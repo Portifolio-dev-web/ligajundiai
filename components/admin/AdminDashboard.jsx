@@ -112,18 +112,22 @@ export default function AdminDashboard() {
       </div>
 
       <Tabs defaultValue="equipes">
-        <TabsList className="flex flex-wrap h-auto">
-          <TabsTrigger value="equipes">Equipes</TabsTrigger>
-          <TabsTrigger value="atletas">Atletas</TabsTrigger>
-          <TabsTrigger value="jogos">Jogos & Resultados</TabsTrigger>
-          <TabsTrigger value="datas">Datas disponíveis</TabsTrigger>
-          <TabsTrigger value="presenca">Presença</TabsTrigger>
-          <TabsTrigger value="inscricoes">Inscrições</TabsTrigger>
-          <TabsTrigger value="regulamento">Regulamento</TabsTrigger>
-          <TabsTrigger value="classificacao">Classificação</TabsTrigger>
-          <TabsTrigger value="categorias">Categorias</TabsTrigger>
-          <TabsTrigger value="emails">E-mails</TabsTrigger>
-          <TabsTrigger value="seguranca">Segurança</TabsTrigger>
+        {/* UX (varredura, item U-Baixa-3): com 11 abas, "flex flex-wrap" quebrava em até 4 linhas
+            de pills no mobile (375px) — denso e difícil de escanear. Uma faixa com rolagem
+            horizontal (igual ao padrão já usado em app/gestor/aprovar-atletas e
+            components/MatchAttendance.jsx para tabelas largas) cabe numa linha só. */}
+        <TabsList className="flex w-full flex-nowrap justify-start gap-1 overflow-x-auto">
+          <TabsTrigger value="equipes" className="shrink-0">Equipes</TabsTrigger>
+          <TabsTrigger value="atletas" className="shrink-0">Atletas</TabsTrigger>
+          <TabsTrigger value="jogos" className="shrink-0">Jogos & Resultados</TabsTrigger>
+          <TabsTrigger value="datas" className="shrink-0">Datas disponíveis</TabsTrigger>
+          <TabsTrigger value="presenca" className="shrink-0">Presença</TabsTrigger>
+          <TabsTrigger value="inscricoes" className="shrink-0">Inscrições</TabsTrigger>
+          <TabsTrigger value="regulamento" className="shrink-0">Regulamento</TabsTrigger>
+          <TabsTrigger value="classificacao" className="shrink-0">Classificação</TabsTrigger>
+          <TabsTrigger value="categorias" className="shrink-0">Categorias</TabsTrigger>
+          <TabsTrigger value="emails" className="shrink-0">E-mails</TabsTrigger>
+          <TabsTrigger value="seguranca" className="shrink-0">Segurança</TabsTrigger>
         </TabsList>
 
         <TabsContent value="equipes"><AdminTeams reload={loadNotif} /></TabsContent>
