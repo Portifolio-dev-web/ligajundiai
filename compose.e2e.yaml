@@ -1,0 +1,15 @@
+
+# Override usado só para rodar a suíte Playwright (npm run test:e2e) contra o stack de
+# desenvolvimento já no ar. NODE_ENV=test é o mesmo valor que backend/test-env.cjs usa para os
+# testes de integração do Jest — é o que já desarma os rate limiters por conta/IP em
+# backend/src/security/rate-limit.js (skip: () => config.NODE_ENV === 'test'), sem o qual a
+# própria suíte (registro de usuários de teste + várias tentativas de verificação) estouraria o
+# limite de autenticação real em poucos segundos.
+#
+# Uso:
+#   docker compose -f compose.yaml -f compose.e2e.yaml up -d api   # antes de rodar os testes
+#   docker compose up -d api                                      # depois, para voltar ao normal
+services:
+  api:
+    environment:
+      NODE_ENV: test
