@@ -388,7 +388,13 @@ function PublicSite({ categories, currentYear, onLoginClick }) {
           <p className="text-center text-xs uppercase tracking-widest text-slate-600 mb-4">
             Patrocinadores oficiais
           </p>
-          <div className="flex flex-wrap items-center justify-center gap-4">
+          {/* PERFORMANCE (varredura, item I-Média-2): min-h reserva o espaço da faixa de
+              patrocinadores antes do fetch de /sponsors responder — sem isso, a seção nascia com
+              altura zero e "empurrava" todo o conteúdo abaixo quando os logos apareciam (CLS).
+              Os três valores batem com a altura real medida com os 4 patrocinadores atuais quebrando
+              em 3 linhas no mobile (<640px), 2 no tablet (≥768px) e 1 no desktop (≥1024px) — se o
+              número de patrocinadores mudar bastante, vale remedir e ajustar. */}
+          <div className="flex flex-wrap items-center justify-center gap-4 min-h-[280px] md:min-h-[132px] lg:min-h-[60px]">
             {sponsors.map((s) => (
               <div
                 key={s.id}
@@ -444,7 +450,9 @@ function PublicSite({ categories, currentYear, onLoginClick }) {
                 <Trophy className="h-5 w-5" style={{ color: RED }} /> {category}
               </CardTitle>
             </CardHeader>
-            <CardContent className="p-0">
+            {/* PERFORMANCE (varredura, item I-Média-2): min-h amortece o salto entre a linha única
+                de "nenhuma equipe ainda" (StandingsTable, standings=[]) e a tabela populada. */}
+            <CardContent className="p-0 min-h-[280px]">
               <StandingsTable standings={standings} category={category} />
             </CardContent>
           </Card>
@@ -469,7 +477,9 @@ function PublicSite({ categories, currentYear, onLoginClick }) {
                   <CalendarDays className="h-4 w-4" style={{ color: BLUE }} /> Próximos jogos
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
+              {/* PERFORMANCE (varredura, item I-Média-2): min-h reserva espaço para a lista de
+                  próximos jogos antes do fetch de /matches responder (ver mesmo motivo acima). */}
+              <CardContent className="space-y-3 min-h-[200px]">
                 {matches.filter((m) => m.status === 'scheduled').slice(0, 5).map((m) => (
                   <div key={m.id} className="rounded-lg border p-3 text-sm">
                     <div className="font-semibold">
@@ -495,7 +505,8 @@ function PublicSite({ categories, currentYear, onLoginClick }) {
           <h2 className="text-2xl font-extrabold mb-6" style={{ color: NAVY }}>
             Últimos resultados
           </h2>
-          <div className="grid gap-4 md:grid-cols-3">
+          {/* PERFORMANCE (varredura, item I-Média-2): mesmo motivo acima, para os resultados. */}
+          <div className="grid gap-4 md:grid-cols-3 min-h-[150px]">
             {matches.filter((m) => m.status === 'finished').slice(0, 6).map((m) => (
               <MatchResultCard key={m.id} m={m} />
             ))}

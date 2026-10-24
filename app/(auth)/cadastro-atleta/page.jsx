@@ -210,15 +210,22 @@ export default function CadastroAtletaPage() {
                     : 'O período de cadastro de atletas está encerrado.'
                   : 'Preencha os dados em etapas. RG e imagem são tratados com segurança.'}
           </CardDescription>
-          {teams.length > 0 && <div className="flex flex-wrap gap-2 pt-2" aria-label="Etapas do formulário">
+          {/* PERFORMANCE (varredura, item I-Média-2): esta linha de etapas só aparecia depois que
+              /approved-teams respondia, empurrando o CardContent abaixo para baixo nesse instante
+              (CLS). "invisible" mantém a altura reservada desde o primeiro paint, sem mostrar nada
+              enquanto loadingTeams/teams ainda não chegaram. */}
+          <div className={`flex flex-wrap gap-2 pt-2 ${teams.length > 0 ? '' : 'invisible'}`} aria-hidden={teams.length === 0} aria-label={teams.length > 0 ? 'Etapas do formulário' : undefined}>
             {steps.map((title, index) => (
               <span key={title} className={`rounded-full px-3 py-1 text-xs ${index === step ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
                 {index + 1}. {title}
               </span>
             ))}
-          </div>}
+          </div>
         </CardHeader>
-        <CardContent>
+        {/* PERFORMANCE (varredura, item I-Média-2): min-h amortece o salto entre o indicador de
+            carregamento (uma linha) e o formulário completo (bem mais alto) quando /approved-teams
+            responde — sem isso, o card "pulava" de altura logo após o primeiro paint. */}
+        <CardContent className="min-h-[560px]">
           {loadingTeams
             ? <div role="status" className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="h-4 w-4 animate-spin" /> Carregando equipes aprovadas…</div>
             : teams.length === 0
