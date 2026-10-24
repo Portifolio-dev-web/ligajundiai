@@ -2,13 +2,13 @@
 
 import Link from 'next/link'
 import Image from 'next/image'
+import { useRouter } from 'next/navigation'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Switch } from '@/components/ui/switch'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
@@ -27,7 +27,6 @@ import {
   AlertDialogTitle,
   AlertDialogDescription,
   AlertDialogAction,
-  AlertDialogCancel,
 } from '@/components/ui/alert-dialog'
 import {
   Select,
@@ -36,19 +35,6 @@ import {
   SelectContent,
   SelectItem,
 } from '@/components/ui/select'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import {
-  Popover,
-  PopoverTrigger,
-  PopoverContent,
-} from '@/components/ui/popover'
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -60,35 +46,22 @@ import { Toaster } from '@/components/ui/sonner'
 import { toast } from 'sonner'
 import { toastSuccess, toastError } from '@/lib/toast'
 import {
-  Bell,
   Volleyball,
   Trophy,
   Users,
   CalendarDays,
-  Settings,
   LogOut,
-  CheckCircle2,
-  XCircle,
-  Mail,
-  ClipboardList,
-  ShieldCheck,
   Menu,
   UserPlus,
-  Plus,
-  Info,
-  Trash2,
-  Save,
   LoaderCircle,
 } from 'lucide-react'
 import { api, CATEGORY_FALLBACK } from '@/lib/lvjApi'
 import { formatRg, getAge, isValidRg } from '@/lib/athlete'
 import { financialResponsibilityTerm, IMAGE_USE_TERM, MINOR_GUARDIAN_TERM } from '@/lib/legalTerms'
-
-// Paleta alinhada ao logo oficial da LVJ (marinho + vermelho + azul da bola), substituindo o
-// roxo/laranja genérico usado antes de o logo real entrar no projeto.
-const BLUE = '#2458A6'
-const RED = '#E4242A'
-const NAVY = '#1E1B4B'
+// Paleta alinhada ao logo oficial da LVJ (marinho + vermelho + azul da bola) — compartilhada com
+// components/standings.jsx e components/admin/AdminDashboard.jsx, por isso vive em lib/theme.js.
+import { BLUE, RED, NAVY } from '@/lib/theme'
+import { StandingsTable, StatusBadge } from '@/components/standings'
 
 // SEGURANÇA (varredura, item S11): antes essas imagens vinham direto de images.unsplash.com — cada
 // visita à home entregava o IP de quem acessa à Unsplash (hotlink). Agora são arquivos locais em
@@ -101,6 +74,7 @@ const IMG_ARENA = '/images/arena.jpg'
 // Root App
 // ============================================================================
 function App() {
+  const router = useRouter()
   const [token, setToken] = useState(null)
   const [user, setUser] = useState(null)
   const [myTeams, setMyTeams] = useState([])
@@ -108,6 +82,16 @@ function App() {
   const [loginOpen, setLoginOpen] = useState(false)
   const [booting, setBooting] = useState(true)
   const currentYear = new Date().getFullYear()
+
+  // SEGURANÇA/ARQUITETURA (refatoração 2026-10-23): o Painel Administrativo morou aqui, embutido em
+  // "/" por checagem só client-side (user.role === 'admin'); agora vive em /admin, atrás do
+  // middleware.js (verifica o JWT antes de renderizar, no Edge — não só depois que o React montou).
+  // Quem loga como admin pelo diálogo (sem navegação de página) é redirecionado aqui; quem chega
+  // direto em "/" já logado como admin é redirecionado antes mesmo deste componente montar (ver
+  // middleware.js). As duas camadas cobrem os dois jeitos de "chegar" nesta rota.
+  useEffect(() => {
+    if (user?.role === 'admin') router.replace('/admin')
+  }, [user, router])
 
   // ACESSIBILIDADE (varredura, item A4): a home vira o painel do admin/gestor dependendo de quem
   // está logado, sem navegar para outra rota — sem isso, a aba sempre mostrava o título genérico
@@ -162,7 +146,7 @@ function App() {
     toast('Sessão encerrada')
   }
 
-  if (booting) {
+  if (booting || user?.role === 'admin') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#1E1B4B] text-white">
         <Volleyball className="h-8 w-8 animate-spin" style={{ color: RED }} />
@@ -185,9 +169,7 @@ function App() {
       {/* ACESSIBILIDADE (varredura, item A1): id="main-content" é o alvo do link "Pular para o
           conteúdo" em app/layout.js — fica depois do TopNav, então o link realmente pula a navegação. */}
       <main id="main-content">
-        {user?.role === 'admin' ? (
-          <AdminPanel token={token} categories={categories} onCategoriesChanged={loadCategories} />
-        ) : user?.role === 'gestor' ? (
+        {user?.role === 'gestor' ? (
           <GestorPanel token={token} categories={categories} user={user} myTeams={myTeams} refreshMe={() => loadMe(token)} />
         ) : (
           <PublicSite categories={categories} currentYear={currentYear} onLoginClick={() => setLoginOpen(true)} />
@@ -266,27 +248,18 @@ function TopNav({ user, token, onLoginClick, onLogout }) {
         </div>
 
         <div className="flex items-center gap-3">
+          {/* SEGURANÇA/ARQUITETURA (refatoração 2026-10-23): TopNav só renderiza com "user" preenchido
+              para quem fica autenticado em "/" — hoje só o gestor; admin é redirecionado para /admin
+              antes deste componente montar (ver App(), acima), então os links daqui são só do gestor. */}
           {user ? (
             <>
-              <Badge
-                className="hidden sm:inline-flex text-white border-0"
-                style={{ background: user.role === 'admin' ? BLUE : RED }}
-              >
-                {user.role === 'admin' ? 'Administrador' : 'Gestor de Equipe'}
+              <Badge className="hidden sm:inline-flex text-white border-0" style={{ background: RED }}>
+                Gestor de Equipe
               </Badge>
               <span className="hidden sm:block text-sm text-slate-200">{user.name}</span>
-              {user.role === 'admin' ? (
-                <>
-                  <a href="/admin/aprovacoes" className="hidden text-sm text-white underline sm:inline">Gestão da Liga Jundiaí</a>
-                  <a href="/admin/inscricoes" className="hidden text-xs text-white underline sm:inline">Períodos</a>
-                </>
-              ) : (
-                <>
-                  <a href="/gestor" className="hidden text-sm text-white underline sm:inline">Minha equipe</a>
-                  <a href="/gestor/aprovar-atletas" className="hidden text-sm text-white underline sm:inline">Aprovar atletas</a>
-                  <a href="/gestor/jogos" className="hidden text-sm text-white underline sm:inline">Agenda</a>
-                </>
-              )}
+              <a href="/gestor" className="hidden text-sm text-white underline sm:inline">Minha equipe</a>
+              <a href="/gestor/aprovar-atletas" className="hidden text-sm text-white underline sm:inline">Aprovar atletas</a>
+              <a href="/gestor/jogos" className="hidden text-sm text-white underline sm:inline">Agenda</a>
               <a href="/jogos" className="hidden text-sm text-white underline md:inline">Jogos</a>
               {/* ACESSIBILIDADE (varredura, item A5): abaixo de sm, todos os links acima ficam
                   escondidos e não havia nenhum jeito de alcançá-los — quem acessa pelo celular só
@@ -299,22 +272,11 @@ function TopNav({ user, token, onLoginClick, onLogout }) {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="sm:hidden">
                   <div className="px-2 py-1.5 text-sm font-medium">{user.name}</div>
-                  <div className="px-2 pb-1.5 text-xs text-muted-foreground">
-                    {user.role === 'admin' ? 'Administrador' : 'Gestor de Equipe'}
-                  </div>
+                  <div className="px-2 pb-1.5 text-xs text-muted-foreground">Gestor de Equipe</div>
                   <DropdownMenuSeparator />
-                  {user.role === 'admin' ? (
-                    <>
-                      <DropdownMenuItem asChild><a href="/admin/aprovacoes">Gestão da Liga Jundiaí</a></DropdownMenuItem>
-                      <DropdownMenuItem asChild><a href="/admin/inscricoes">Períodos</a></DropdownMenuItem>
-                    </>
-                  ) : (
-                    <>
-                      <DropdownMenuItem asChild><a href="/gestor">Minha equipe</a></DropdownMenuItem>
-                      <DropdownMenuItem asChild><a href="/gestor/aprovar-atletas">Aprovar atletas</a></DropdownMenuItem>
-                      <DropdownMenuItem asChild><a href="/gestor/jogos">Agenda</a></DropdownMenuItem>
-                    </>
-                  )}
+                  <DropdownMenuItem asChild><a href="/gestor">Minha equipe</a></DropdownMenuItem>
+                  <DropdownMenuItem asChild><a href="/gestor/aprovar-atletas">Aprovar atletas</a></DropdownMenuItem>
+                  <DropdownMenuItem asChild><a href="/gestor/jogos">Agenda</a></DropdownMenuItem>
                   <DropdownMenuItem asChild><a href="/jogos">Jogos</a></DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onSelect={onLogout}>
@@ -554,128 +516,6 @@ function PublicSite({ categories, currentYear, onLoginClick }) {
   )
 }
 
-function categoryAbbrev(category) {
-  if (!category) return '#'
-  const letters = category
-    .split(/[\s-]+/)
-    .filter((word) => /^[A-Za-zÀ-ÿ]/.test(word))
-    .map((word) => word[0].toUpperCase())
-    .join('')
-  return letters || '#'
-}
-
-function formatAverage(value) {
-  const n = Number(value) || 0
-  return n.toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 })
-}
-
-const STANDINGS_LEGEND = [
-  { abbr: 'PTS', label: 'Pontos' },
-  { abbr: 'J', label: 'Jogos' },
-  { abbr: 'V', label: 'Vitórias' },
-  { abbr: 'D', label: 'Derrotas' },
-  { abbr: 'SP', label: 'Sets pró' },
-  { abbr: 'SC', label: 'Sets contra' },
-  { abbr: 'S.A', label: 'Sets average (SP ÷ SC)' },
-  { abbr: 'PP', label: 'Pontos pró' },
-  { abbr: 'PC', label: 'Pontos contra' },
-  { abbr: 'PA', label: 'Pontos average (PP ÷ PC)' },
-]
-
-function StandingsLegend({ category, abbr }) {
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          aria-label="Ver legenda das siglas da tabela"
-          className="inline-flex items-center gap-1 text-xs text-slate-600 hover:text-slate-600"
-        >
-          <Info className="h-3.5 w-3.5" /> Legenda
-        </button>
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-72 text-xs text-slate-600">
-        <p className="mb-2 font-semibold text-slate-700">
-          {abbr} — {category}
-        </p>
-        <ul className="space-y-1">
-          {STANDINGS_LEGEND.map((item) => (
-            <li key={item.abbr} className="flex gap-2">
-              <span className="w-10 shrink-0 font-bold" style={{ color: BLUE }}>
-                {item.abbr}
-              </span>
-              <span>{item.label}</span>
-            </li>
-          ))}
-        </ul>
-      </PopoverContent>
-    </Popover>
-  )
-}
-
-function StandingsTable({ standings, category }) {
-  const abbr = categoryAbbrev(category)
-  return (
-    <div>
-      <div className="flex items-center justify-end px-3 pt-3">
-        <StandingsLegend category={category} abbr={abbr} />
-      </div>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="w-10">{abbr}</TableHead>
-            <TableHead>Equipe</TableHead>
-            <TableHead className="text-center">Pts</TableHead>
-            <TableHead className="text-center">J</TableHead>
-            <TableHead className="text-center">V</TableHead>
-            <TableHead className="text-center">D</TableHead>
-            <TableHead className="text-center hidden sm:table-cell">SP</TableHead>
-            <TableHead className="text-center hidden sm:table-cell">SC</TableHead>
-            <TableHead className="text-center hidden md:table-cell">S.A</TableHead>
-            <TableHead className="text-center hidden lg:table-cell">PP</TableHead>
-            <TableHead className="text-center hidden lg:table-cell">PC</TableHead>
-            <TableHead className="text-center hidden lg:table-cell">PA</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {standings.map((s) => (
-            <TableRow key={s.team_id}>
-              <TableCell>
-                <span
-                  className="inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold text-white"
-                  style={{ background: s.position <= 4 ? RED : '#94a3b8' }}
-                >
-                  {s.position}
-                </span>
-              </TableCell>
-              <TableCell className="font-semibold">{s.name}</TableCell>
-              <TableCell className="text-center font-bold" style={{ color: BLUE }}>
-                {s.points}
-              </TableCell>
-              <TableCell className="text-center">{s.played}</TableCell>
-              <TableCell className="text-center">{s.wins}</TableCell>
-              <TableCell className="text-center">{s.losses}</TableCell>
-              <TableCell className="text-center hidden sm:table-cell text-slate-500">{s.sets_won}</TableCell>
-              <TableCell className="text-center hidden sm:table-cell text-slate-500">{s.sets_lost}</TableCell>
-              <TableCell className="text-center hidden md:table-cell text-slate-500">{formatAverage(s.sets_ratio)}</TableCell>
-              <TableCell className="text-center hidden lg:table-cell text-slate-500">{s.rally_for}</TableCell>
-              <TableCell className="text-center hidden lg:table-cell text-slate-500">{s.rally_against}</TableCell>
-              <TableCell className="text-center hidden lg:table-cell text-slate-500">{formatAverage(s.points_ratio)}</TableCell>
-            </TableRow>
-          ))}
-          {standings.length === 0 && (
-            <TableRow>
-              <TableCell colSpan={12} className="text-center text-slate-600 py-8">
-                Nenhuma equipe aprovada nesta categoria ainda.
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
-    </div>
-  )
-}
-
 function MatchResultCard({ m }) {
   const hs = (m.sets || []).filter((s) => s.home > s.away).length
   const as = (m.sets || []).filter((s) => s.away > s.home).length
@@ -840,938 +680,6 @@ function LoginDialog({ open, onOpenChange, onAuthed }) {
 }
 
 // ============================================================================
-// ADMIN PANEL
-// ============================================================================
-function AdminPanel({ token, categories, onCategoriesChanged }) {
-  const [notif, setNotif] = useState({ pending_teams: 0, pending_athletes: 0, unread: 0, items: [] })
-  const [stats, setStats] = useState({})
-
-  const loadNotif = useCallback(() => {
-    api('/admin/notifications', { token }).then(setNotif).catch(() => {})
-    api('/admin/stats', { token }).then(setStats).catch(() => {})
-  }, [token])
-
-  useEffect(() => {
-    loadNotif()
-    const t = setInterval(loadNotif, 15000)
-    return () => clearInterval(t)
-  }, [loadNotif])
-
-  return (
-    // ACESSIBILIDADE (varredura, item A3): mesmo motivo do PublicSite acima — este <main> também
-    // ficava aninhado dentro do <main id="main-content"> de TopNav/page.js.
-    <div className="container py-8">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-extrabold flex items-center gap-2" style={{ color: NAVY }}>
-            <ShieldCheck className="h-6 w-6" style={{ color: BLUE }} /> Painel Administrativo
-          </h1>
-          <p className="text-slate-500 text-sm">Gestão completa da Liga de Voleibol Jundiaí</p>
-        </div>
-        <NotificationBell notif={notif} token={token} reload={loadNotif} />
-      </div>
-
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
-        <StatCard label="Equipes" value={stats.teams || 0} icon={Users} color={BLUE} />
-        <StatCard label="Atletas" value={stats.athletes || 0} icon={Volleyball} color={RED} />
-        <StatCard label="Jogos" value={stats.matches || 0} icon={CalendarDays} color={NAVY} />
-        <StatCard label="Equipes pend." value={stats.pending_teams || 0} icon={ClipboardList} color="#dc2626" />
-        <StatCard label="Atletas pend." value={stats.pending_athletes || 0} icon={ClipboardList} color="#dc2626" />
-      </div>
-
-      <Tabs defaultValue="equipes">
-        <TabsList className="flex flex-wrap h-auto">
-          <TabsTrigger value="equipes">Equipes</TabsTrigger>
-          <TabsTrigger value="atletas">Atletas</TabsTrigger>
-          <TabsTrigger value="jogos">Jogos & Resultados</TabsTrigger>
-          <TabsTrigger value="presenca">Presença</TabsTrigger>
-          <TabsTrigger value="regulamento">Regulamento</TabsTrigger>
-          <TabsTrigger value="classificacao">Classificação</TabsTrigger>
-          <TabsTrigger value="categorias">Categorias</TabsTrigger>
-          <TabsTrigger value="emails">E-mails</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="equipes"><AdminTeams token={token} reload={loadNotif} /></TabsContent>
-        <TabsContent value="atletas"><AdminAthletes token={token} reload={loadNotif} /></TabsContent>
-        <TabsContent value="jogos"><AdminMatches token={token} categories={categories} /></TabsContent>
-        <TabsContent value="presenca"><AdminAttendance token={token} categories={categories} /></TabsContent>
-        <TabsContent value="categorias"><AdminCategories token={token} onCategoriesChanged={onCategoriesChanged} /></TabsContent>
-        <TabsContent value="regulamento"><RulesEngine token={token} /></TabsContent>
-        <TabsContent value="classificacao"><AdminStandings token={token} categories={categories} /></TabsContent>
-        <TabsContent value="emails"><AdminEmails token={token} /></TabsContent>
-      </Tabs>
-    </div>
-  )
-}
-
-function StatCard({ label, value, icon: Icon, color }) {
-  return (
-    <Card>
-      <CardContent className="p-4 flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg text-white" style={{ background: color }}>
-          <Icon className="h-5 w-5" />
-        </div>
-        <div>
-          <div className="text-2xl font-extrabold leading-none">{value}</div>
-          <div className="text-xs text-slate-500">{label}</div>
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
-function NotificationBell({ notif, token, reload }) {
-  const total = (notif.pending_teams || 0) + (notif.pending_athletes || 0)
-  const markAll = async () => {
-    await api('/admin/notifications/read-all', { method: 'POST', token })
-    reload()
-  }
-  return (
-    <Popover>
-      {/* ACESSIBILIDADE (varredura, item A8): sem total, o botão não tinha texto nenhum (leitor de
-          tela anunciava só "botão"); com total, só o número solto, sem dizer do que é. O
-          aria-label carrega o contexto; o número visual fica aria-hidden para não duplicar. */}
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          className="relative"
-          aria-label={total > 0 ? `Notificações: ${total} pendente${total > 1 ? 's' : ''}` : 'Notificações'}
-        >
-          <Bell className="h-5 w-5" />
-          {total > 0 && (
-            <span
-              aria-hidden="true"
-              className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold text-white"
-              style={{ background: RED }}
-            >
-              {total}
-            </span>
-          )}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-80 p-0" align="end">
-        <div className="p-3 border-b flex items-center justify-between" style={{ background: NAVY }}>
-          <span className="text-white font-semibold text-sm flex items-center gap-2">
-            <Bell className="h-4 w-4" style={{ color: RED }} /> Central de Notificações
-          </span>
-          <button className="text-xs text-slate-300 hover:text-white" onClick={markAll}>
-            marcar lidas
-          </button>
-        </div>
-        <div className="p-3 space-y-2 border-b bg-red-50">
-          {notif.pending_teams > 0 && (
-            <div className="text-sm text-slate-700">
-              <strong>{notif.pending_teams}</strong> equipe(s) aguardando aprovação
-            </div>
-          )}
-          {notif.pending_athletes > 0 && (
-            <div className="text-sm text-slate-700">
-              <strong>{notif.pending_athletes}</strong> atleta(s) aguardando liberação
-            </div>
-          )}
-          {notif.pending_teams === 0 && notif.pending_athletes === 0 && (
-            <div className="text-sm text-slate-500">Nenhuma ação pendente. Tudo em dia!</div>
-          )}
-        </div>
-        <div className="max-h-72 overflow-auto divide-y">
-          {(notif.items || []).map((i) => (
-            <div key={i.id} className={`p-3 text-sm ${i.read ? 'opacity-60' : ''}`}>
-              <div className="font-semibold text-slate-800">{i.title}</div>
-              <div className="text-slate-500 text-xs">{i.body}</div>
-              <div className="text-[10px] text-slate-600 mt-1">{new Date(i.created_at).toLocaleString('pt-BR')}</div>
-            </div>
-          ))}
-          {(!notif.items || notif.items.length === 0) && (
-            <div className="p-4 text-sm text-slate-600 text-center">Sem notificações.</div>
-          )}
-        </div>
-      </PopoverContent>
-    </Popover>
-  )
-}
-
-function AdminTeams({ token, reload }) {
-  const [teams, setTeams] = useState([])
-  const [rejectId, setRejectId] = useState(null)
-  const [justif, setJustif] = useState('')
-
-  const load = useCallback(() => {
-    api('/admin/teams', { token }).then((d) => setTeams(d.teams || [])).catch(() => {})
-  }, [token])
-  useEffect(load, [load])
-
-  const act = async (id, action, justification) => {
-    try {
-      await api(`/admin/teams/${id}/${action}`, { method: 'POST', token, body: { justification } })
-      toastSuccess(action === 'approve' ? 'Equipe aprovada; e-mail colocado na fila' : 'Equipe recusada; e-mail colocado na fila')
-      setRejectId(null)
-      setJustif('')
-      load()
-      reload()
-    } catch (e) {
-      toastError(e.message)
-    }
-  }
-
-  return (
-    <Card className="mt-4">
-      <CardHeader>
-        <CardTitle>Aprovação de Equipes</CardTitle>
-        <CardDescription>Aprove ou recuse. O e-mail de confirmação é enviado ao gestor pelo serviço local de e-mail.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {teams.map((t) => (
-          <div key={t.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border p-3">
-            <div>
-              <div className="font-semibold">{t.name}</div>
-              <div className="text-xs text-slate-500">
-                {t.category} • Gestor: {t.manager_name} ({t.manager_email})
-              </div>
-              {t.status === 'rejected' && t.justification && (
-                <div className="text-xs text-red-500 mt-1">Motivo: {t.justification}</div>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              <StatusBadge status={t.status} />
-              {t.status === 'pending' && (
-                <>
-                  <Button size="sm" className="text-white border-0" style={{ background: '#16a34a' }} onClick={() => act(t.id, 'approve')}>
-                    <CheckCircle2 className="h-4 w-4 mr-1" /> Aprovar
-                  </Button>
-                  <Button size="sm" variant="destructive" onClick={() => setRejectId(t.id)}>
-                    <XCircle className="h-4 w-4 mr-1" /> Recusar
-                  </Button>
-                </>
-              )}
-            </div>
-          </div>
-        ))}
-        {teams.length === 0 && <p className="text-sm text-slate-600">Nenhuma equipe cadastrada.</p>}
-      </CardContent>
-
-      <Dialog open={!!rejectId} onOpenChange={(o) => !o && setRejectId(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Recusar equipe</DialogTitle>
-            <DialogDescription>Informe a justificativa que será enviada ao gestor por e-mail.</DialogDescription>
-          </DialogHeader>
-          <Textarea value={justif} onChange={(e) => setJustif(e.target.value)} placeholder="Ex: documentação incompleta..." />
-          <Button variant="destructive" onClick={() => act(rejectId, 'reject', justif)} disabled={!justif.trim()}>
-            Confirmar recusa
-          </Button>
-        </DialogContent>
-      </Dialog>
-    </Card>
-  )
-}
-
-function AdminAthletes({ token, reload }) {
-  const [athletes, setAthletes] = useState([])
-  const [rejectId, setRejectId] = useState(null)
-  const [justif, setJustif] = useState('')
-
-  const load = useCallback(() => {
-    api('/admin/athletes', { token }).then((d) => setAthletes(d.athletes || [])).catch(() => {})
-  }, [token])
-  useEffect(load, [load])
-
-  const act = async (id, action, justification) => {
-    try {
-      await api(`/admin/athletes/${id}/${action}`, { method: 'POST', token, body: { justification } })
-      toastSuccess(action === 'approve' ? 'Atleta liberado; e-mail colocado na fila' : 'Atleta recusado; e-mail colocado na fila')
-      setRejectId(null)
-      setJustif('')
-      load()
-      reload()
-    } catch (e) {
-      toastError(e.message)
-    }
-  }
-
-  return (
-    <Card className="mt-4">
-      <CardHeader>
-        <CardTitle>Liberação de Atletas</CardTitle>
-        <CardDescription>Atletas cadastrados pelos gestores. Mesmo RG pode existir em várias categorias.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {athletes.map((a) => (
-          <div key={a.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border p-3">
-            <div>
-              <div className="font-semibold">{a.name}</div>
-              <div className="text-xs text-slate-500">
-                RG {a.rg} • {a.team_name} • {a.category} {a.position ? `• ${a.position}` : ''}
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <StatusBadge status={a.status} />
-              {a.status === 'awaiting_admin' && (
-                <>
-                  <Button size="sm" className="text-white border-0" style={{ background: '#16a34a' }} onClick={() => act(a.id, 'approve')}>
-                    <CheckCircle2 className="h-4 w-4 mr-1" /> Liberar
-                  </Button>
-                  <Button size="sm" variant="destructive" onClick={() => setRejectId(a.id)}>
-                    <XCircle className="h-4 w-4 mr-1" /> Recusar
-                  </Button>
-                </>
-              )}
-            </div>
-          </div>
-        ))}
-        {athletes.length === 0 && <p className="text-sm text-slate-600">Nenhum atleta cadastrado.</p>}
-      </CardContent>
-
-      <Dialog open={!!rejectId} onOpenChange={(o) => !o && setRejectId(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Recusar atleta</DialogTitle>
-            <DialogDescription>A justificativa será enviada ao gestor por e-mail.</DialogDescription>
-          </DialogHeader>
-          <Textarea value={justif} onChange={(e) => setJustif(e.target.value)} placeholder="Motivo da recusa..." />
-          <Button variant="destructive" onClick={() => act(rejectId, 'reject', justif)} disabled={!justif.trim()}>
-            Confirmar recusa
-          </Button>
-        </DialogContent>
-      </Dialog>
-    </Card>
-  )
-}
-
-function StatusBadge({ status }) {
-  const map = {
-    pending: { label: 'Pendente', bg: '#f59e0b' },
-    awaiting_manager: { label: 'Aguardando gestor', bg: '#f59e0b' },
-    awaiting_admin: { label: 'Aguardando administrador', bg: '#f97316' },
-    approved: { label: 'Aprovado', bg: '#16a34a' },
-    rejected: { label: 'Recusado', bg: '#dc2626' },
-    proposed: { label: 'Aguardando aceite', bg: '#f59e0b' },
-    confirmed: { label: 'Confirmado', bg: '#16a34a' },
-    scheduled: { label: 'Agendado', bg: '#16a34a' },
-    cancelled: { label: 'Cancelado', bg: '#64748b' },
-    finished: { label: 'Finalizado', bg: '#64748b' },
-  }
-  const s = map[status] || map.pending
-  return (
-    <Badge className="text-white border-0" style={{ background: s.bg }}>
-      {s.label}
-    </Badge>
-  )
-}
-
-// ---------------- RULES ENGINE ----------------
-function RulesEngine({ token }) {
-  const [rules, setRules] = useState(null)
-  const [saving, setSaving] = useState(false)
-
-  useEffect(() => {
-    api('/rules', { token }).then((d) => setRules(d.rules)).catch(() => {})
-  }, [token])
-
-  if (!rules) return <p className="mt-4 text-slate-600">Carregando...</p>
-
-  const setPoint = (k, v) => setRules({ ...rules, points: { ...rules.points, [k]: Number(v) } })
-
-  const tiebreakerOptions = [
-    { key: 'points', label: 'Pontos' },
-    { key: 'wins', label: 'Vitórias' },
-    { key: 'sets_ratio', label: 'Razão de Sets (Set Average)' },
-    { key: 'points_ratio', label: 'Razão de Pontos (Point Average)' },
-  ]
-
-  const moveTiebreaker = (idx, dir) => {
-    const arr = [...rules.tiebreakers]
-    const ni = idx + dir
-    if (ni < 0 || ni >= arr.length) return
-    ;[arr[idx], arr[ni]] = [arr[ni], arr[idx]]
-    setRules({ ...rules, tiebreakers: arr })
-  }
-
-  const save = async () => {
-    setSaving(true)
-    try {
-      const d = await api('/rules', { method: 'PUT', token, body: rules })
-      setRules(d.rules)
-      toastSuccess('Regulamento salvo! A classificação será recalculada.')
-    } catch (e) {
-      toastError(e.message)
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const pointFields = [
-    ['win_3_0', 'Vitória 3x0'],
-    ['win_3_1', 'Vitória 3x1'],
-    ['win_3_2', 'Vitória 3x2'],
-    ['loss_3_2', 'Derrota 2x3'],
-    ['loss_3_1', 'Derrota 1x3'],
-    ['loss_3_0', 'Derrota 0x3'],
-  ]
-
-  return (
-    <Card className="mt-4">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Settings className="h-5 w-5" style={{ color: BLUE }} /> Motor de Regras Configuráveis
-        </CardTitle>
-        <CardDescription>Defina a pontuação, critérios de desempate e presença mínima. A tabela é recalculada automaticamente.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <div>
-          <h4 className="font-semibold mb-3" style={{ color: NAVY }}>Pontuação por resultado</h4>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            {pointFields.map(([k, label]) => (
-              <div key={k}>
-                <Label className="text-xs">{label}</Label>
-                <Input type="number" value={rules.points[k]} onChange={(e) => setPoint(k, e.target.value)} />
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <h4 className="font-semibold mb-3" style={{ color: NAVY }}>Critérios de desempate (ordem de prioridade)</h4>
-          <div className="space-y-2">
-            {rules.tiebreakers.map((tb, idx) => {
-              const opt = tiebreakerOptions.find((o) => o.key === tb)
-              return (
-                <div key={tb} className="flex items-center gap-2 rounded-lg border p-2">
-                  <span className="flex h-6 w-6 items-center justify-center rounded-full text-white text-xs font-bold" style={{ background: BLUE }}>
-                    {idx + 1}
-                  </span>
-                  <span className="flex-1 text-sm">{opt?.label || tb}</span>
-                  <Button size="sm" variant="outline" onClick={() => moveTiebreaker(idx, -1)} disabled={idx === 0}>↑</Button>
-                  <Button size="sm" variant="outline" onClick={() => moveTiebreaker(idx, 1)} disabled={idx === rules.tiebreakers.length - 1}>↓</Button>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-
-        <div className="max-w-xs">
-          <h4 className="font-semibold mb-3" style={{ color: NAVY }}>Presença mínima para finais/mata-mata</h4>
-          <div className="flex items-center gap-2">
-            <Input
-              type="number"
-              value={rules.min_attendance_percent}
-              onChange={(e) => setRules({ ...rules, min_attendance_percent: Number(e.target.value) })}
-            />
-            <span className="text-slate-500">%</span>
-          </div>
-        </div>
-
-        <Button className="text-white border-0" style={{ background: RED }} onClick={save} disabled={saving}>
-          Salvar Regulamento
-        </Button>
-      </CardContent>
-    </Card>
-  )
-}
-
-// ---------------- MATCHES ----------------
-function AdminMatches({ token, categories }) {
-  const [category, setCategory] = useState(categories[0])
-  const [teams, setTeams] = useState([])
-  const [matches, setMatches] = useState([])
-  const [form, setForm] = useState({ home_team_id: '', away_team_id: '', scheduled_at: '', venue: '', round: '' })
-  const [resultMatch, setResultMatch] = useState(null)
-  const [sets, setSets] = useState([{ home: '', away: '' }, { home: '', away: '' }, { home: '', away: '' }, { home: '', away: '' }, { home: '', away: '' }])
-
-  const load = useCallback(() => {
-    api(`/admin/teams-approved?category=${encodeURIComponent(category)}`, { token }).then((d) => setTeams(d.teams || [])).catch(() => {})
-    api(`/matches?category=${encodeURIComponent(category)}`).then((d) => setMatches(d.matches || [])).catch(() => {})
-  }, [token, category])
-  useEffect(load, [load])
-
-  const create = async () => {
-    if (!form.home_team_id || !form.away_team_id || form.home_team_id === form.away_team_id) {
-      toastError('Selecione duas equipes diferentes')
-      return
-    }
-    try {
-      await api('/admin/matches', { method: 'POST', token, body: form })
-      toastSuccess('Jogo agendado')
-      setForm({ home_team_id: '', away_team_id: '', scheduled_at: '', venue: '', round: '' })
-      load()
-    } catch (e) {
-      toastError(e.message)
-    }
-  }
-
-  const saveResult = async () => {
-    const clean = sets.filter((s) => s.home !== '' && s.away !== '')
-    try {
-      await api(`/admin/matches/${resultMatch.id}/result`, { method: 'PUT', token, body: { sets: clean.map((s) => ({ home: Number(s.home), away: Number(s.away) })) } })
-      toastSuccess('Resultado salvo! Classificação atualizada.')
-      setResultMatch(null)
-      load()
-    } catch (e) {
-      toastError(e.message)
-    }
-  }
-
-  return (
-    <Card className="mt-4">
-      <CardHeader>
-        <CardTitle>Agenda & Resultados</CardTitle>
-        <CardDescription>Agende jogos e insira placares (sets). A classificação é gerada automaticamente.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-5">
-        <div className="w-full md:w-72">
-          <Label className="text-xs">Categoria</Label>
-          <Select value={category} onValueChange={setCategory}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {categories.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="rounded-lg border p-4 grid gap-3 md:grid-cols-5 items-end bg-slate-50">
-          <div className="md:col-span-1">
-            <Label className="text-xs">Mandante</Label>
-            <Select value={form.home_team_id} onValueChange={(v) => setForm({ ...form, home_team_id: v })}>
-              <SelectTrigger><SelectValue placeholder="Equipe" /></SelectTrigger>
-              <SelectContent>{teams.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label className="text-xs">Visitante</Label>
-            <Select value={form.away_team_id} onValueChange={(v) => setForm({ ...form, away_team_id: v })}>
-              <SelectTrigger><SelectValue placeholder="Equipe" /></SelectTrigger>
-              <SelectContent>{teams.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label className="text-xs">Data/Hora</Label>
-            <Input type="datetime-local" value={form.scheduled_at} onChange={(e) => setForm({ ...form, scheduled_at: e.target.value })} />
-          </div>
-          <div>
-            <Label className="text-xs">Local / Rodada</Label>
-            <Input placeholder="Ginásio / Rodada 1" value={form.venue} onChange={(e) => setForm({ ...form, venue: e.target.value })} />
-          </div>
-          <Button className="text-white border-0" style={{ background: BLUE }} onClick={create}>
-            <Plus className="h-4 w-4 mr-1" /> Agendar
-          </Button>
-        </div>
-
-        <div className="space-y-2">
-          {matches.map((m) => {
-            const hs = (m.sets || []).filter((s) => s.home > s.away).length
-            const as = (m.sets || []).filter((s) => s.away > s.home).length
-            return (
-              <div key={m.id} className="flex items-center justify-between rounded-lg border p-3">
-                <div className="text-sm">
-                  <div className="font-semibold">
-                    {m.home_name} <span className="text-slate-600">x</span> {m.away_name}
-                    {m.status === 'finished' && <span className="ml-2 font-bold" style={{ color: BLUE }}>({hs}-{as})</span>}
-                  </div>
-                  <div className="text-xs text-slate-500">{new Date(m.scheduled_at).toLocaleString('pt-BR')} {m.venue ? `• ${m.venue}` : ''}</div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <StatusBadge status={m.status} />
-                  <Button size="sm" variant="outline" disabled={!['confirmed', 'scheduled', 'finished'].includes(m.status)} onClick={() => { setResultMatch(m); setSets([{ home: '', away: '' }, { home: '', away: '' }, { home: '', away: '' }, { home: '', away: '' }, { home: '', away: '' }].map((s, i) => (m.sets && m.sets[i]) ? { home: String(m.sets[i].home), away: String(m.sets[i].away) } : s)) }}>
-                    Placar
-                  </Button>
-                </div>
-              </div>
-            )
-          })}
-          {matches.length === 0 && <p className="text-sm text-slate-600">Nenhum jogo nesta categoria.</p>}
-        </div>
-      </CardContent>
-
-      <Dialog open={!!resultMatch} onOpenChange={(o) => !o && setResultMatch(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Placar por set</DialogTitle>
-            <DialogDescription>{resultMatch?.home_name} x {resultMatch?.away_name}</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2">
-            {sets.map((s, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <span className="w-14 text-sm text-slate-500">Set {i + 1}</span>
-                <Input type="number" value={s.home} onChange={(e) => { const n = [...sets]; n[i] = { ...n[i], home: e.target.value }; setSets(n) }} placeholder="0" />
-                <span>x</span>
-                <Input type="number" value={s.away} onChange={(e) => { const n = [...sets]; n[i] = { ...n[i], away: e.target.value }; setSets(n) }} placeholder="0" />
-              </div>
-            ))}
-          </div>
-          <Button className="text-white border-0" style={{ background: RED }} onClick={saveResult}>Salvar resultado</Button>
-        </DialogContent>
-      </Dialog>
-    </Card>
-  )
-}
-
-// ---------------- ATTENDANCE ----------------
-function AdminAttendance({ token, categories }) {
-  const [category, setCategory] = useState(categories[0])
-  const [teams, setTeams] = useState([])
-  const [teamId, setTeamId] = useState('')
-  const [athletes, setAthletes] = useState([])
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
-  const [present, setPresent] = useState({})
-  const [freq, setFreq] = useState([])
-
-  useEffect(() => {
-    api(`/admin/teams-approved?category=${encodeURIComponent(category)}`, { token }).then((d) => setTeams(d.teams || [])).catch(() => {})
-  }, [token, category])
-
-  const loadTeam = useCallback((tid) => {
-    setTeamId(tid)
-    api('/admin/athletes?status=approved', { token }).then((d) => {
-      const list = (d.athletes || []).filter((a) => a.team_id === tid)
-      setAthletes(list)
-      const init = {}
-      list.forEach((a) => (init[a.id] = true))
-      setPresent(init)
-    })
-    api(`/admin/attendance?team_id=${tid}`, { token }).then((d) => setFreq(d.attendance || [])).catch(() => {})
-  }, [token])
-
-  const save = async () => {
-    const records = athletes.map((a) => ({ athlete_id: a.id, present: !!present[a.id] }))
-    try {
-      await api('/admin/attendance', { method: 'POST', token, body: { team_id: teamId, date, records } })
-      toastSuccess('Presença registrada')
-      loadTeam(teamId)
-    } catch (e) {
-      toastError(e.message)
-    }
-  }
-
-  const uploadSumula = async () => {
-    try {
-      await api('/admin/sumula', { method: 'POST', token, body: { team_id: teamId, category, date, filename: 'sumula_digitalizada.jpg' } })
-      toastSuccess('Súmula importada (MOCKED - sem OCR real)')
-    } catch (e) {
-      toastError(e.message)
-    }
-  }
-
-  return (
-    <Card className="mt-4">
-      <CardHeader>
-        <CardTitle>Gestão de Presença</CardTitle>
-        <CardDescription>Registro manual (nome a nome) e importação de súmula (MOCKED).</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid gap-3 md:grid-cols-3">
-          <div>
-            <Label className="text-xs">Categoria</Label>
-            <Select value={category} onValueChange={(v) => { setCategory(v); setTeamId(''); setAthletes([]) }}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>{categories.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label className="text-xs">Equipe</Label>
-            <Select value={teamId} onValueChange={loadTeam}>
-              <SelectTrigger><SelectValue placeholder="Equipe" /></SelectTrigger>
-              <SelectContent>{teams.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label className="text-xs">Data</Label>
-            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-          </div>
-        </div>
-
-        {teamId && (
-          <>
-            <div className="rounded-lg border divide-y">
-              {athletes.map((a) => (
-                <label key={a.id} className="flex items-center justify-between p-3 cursor-pointer">
-                  <span className="text-sm">{a.name} <span className="text-xs text-slate-600">RG {a.rg}</span></span>
-                  <input type="checkbox" className="h-5 w-5" checked={!!present[a.id]} onChange={(e) => setPresent({ ...present, [a.id]: e.target.checked })} />
-                </label>
-              ))}
-              {athletes.length === 0 && <p className="p-3 text-sm text-slate-600">Nenhum atleta aprovado nesta equipe.</p>}
-            </div>
-            <div className="flex gap-2">
-              <Button className="text-white border-0" style={{ background: BLUE }} onClick={save} disabled={athletes.length === 0}>Registrar presença</Button>
-              <Button variant="outline" onClick={uploadSumula}><ClipboardList className="h-4 w-4 mr-1" /> Importar súmula (MOCKED)</Button>
-            </div>
-
-            {freq.length > 0 && (
-              <div>
-                <h4 className="font-semibold mt-4 mb-2" style={{ color: NAVY }}>Frequência da equipe</h4>
-                <div className="space-y-1">
-                  {freq.map((f) => (
-                    <div key={f.athlete_id} className="flex items-center justify-between text-sm rounded border p-2">
-                      <span>{f.name}</span>
-                      <span className="flex items-center gap-2">
-                        <span className="text-slate-500">{f.present}/{f.total_sessions} ({f.percent}%)</span>
-                        <Badge className="border-0 text-white" style={{ background: f.eligible ? '#16a34a' : '#dc2626' }}>
-                          {f.eligible ? 'Apto' : 'Inapto'}
-                        </Badge>
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </>
-        )}
-      </CardContent>
-    </Card>
-  )
-}
-
-function AdminStandings({ token, categories }) {
-  const [category, setCategory] = useState(categories[0])
-  const [standings, setStandings] = useState([])
-  useEffect(() => {
-    api(`/standings?category=${encodeURIComponent(category)}`).then((d) => setStandings(d.standings || [])).catch(() => {})
-  }, [category])
-  return (
-    <Card className="mt-4">
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle>Classificação (automática)</CardTitle>
-          <div className="w-56">
-            <Select value={category} onValueChange={setCategory}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>{categories.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
-            </Select>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="p-0"><StandingsTable standings={standings} category={category} /></CardContent>
-    </Card>
-  )
-}
-
-function AdminCategories({ token, onCategoriesChanged }) {
-  const [categories, setCategories] = useState([])
-  const [drafts, setDrafts] = useState({})
-  const [savingId, setSavingId] = useState(null)
-  const [newForm, setNewForm] = useState({ name: '', abbreviation: '', sort_order: '' })
-  const [creating, setCreating] = useState(false)
-  // ACESSIBILIDADE (varredura, item A6): window.confirm nativo era a única ação irreversível do
-  // app fora do padrão de diálogo real (AlertDialog já existia em components/ui, só não era usado
-  // em lugar nenhum) — inconsistente, sem foco gerenciado nem leitura por leitor de tela como os
-  // outros diálogos da aplicação.
-  const [removeTarget, setRemoveTarget] = useState(null)
-
-  const load = useCallback(() => {
-    api('/admin/categories', { token }).then((d) => {
-      const list = d.categories || []
-      setCategories(list)
-      setDrafts(Object.fromEntries(list.map((c) => [c.id, { name: c.name, abbreviation: c.abbreviation, sort_order: String(c.sort_order) }])))
-    }).catch(() => {})
-  }, [token])
-  useEffect(load, [load])
-
-  const setDraft = (id, field, value) => {
-    setDrafts((prev) => ({ ...prev, [id]: { ...prev[id], [field]: value } }))
-  }
-
-  const isDirty = (cat) => {
-    const d = drafts[cat.id]
-    if (!d) return false
-    return d.name !== cat.name || d.abbreviation !== cat.abbreviation || Number(d.sort_order) !== cat.sort_order
-  }
-
-  const saveCategory = async (cat) => {
-    const d = drafts[cat.id]
-    setSavingId(cat.id)
-    try {
-      const { category } = await api(`/admin/categories/${cat.id}`, {
-        method: 'PUT',
-        token,
-        body: { name: d.name.trim(), abbreviation: d.abbreviation.trim(), sort_order: Number(d.sort_order) || 0 },
-      })
-      setCategories((prev) => prev.map((c) => (c.id === category.id ? category : c)))
-      setDrafts((prev) => ({ ...prev, [category.id]: { name: category.name, abbreviation: category.abbreviation, sort_order: String(category.sort_order) } }))
-      toastSuccess('Categoria atualizada')
-      onCategoriesChanged?.()
-    } catch (e) {
-      toastError(e.message)
-    } finally {
-      setSavingId(null)
-    }
-  }
-
-  const toggleActive = async (cat) => {
-    try {
-      const { category } = await api(`/admin/categories/${cat.id}`, { method: 'PUT', token, body: { active: !cat.active } })
-      setCategories((prev) => prev.map((c) => (c.id === category.id ? category : c)))
-      toastSuccess(category.active ? 'Categoria ativada' : 'Categoria desativada')
-      onCategoriesChanged?.()
-    } catch (e) {
-      toastError(e.message)
-    }
-  }
-
-  const removeCategory = async (cat) => {
-    try {
-      await api(`/admin/categories/${cat.id}`, { method: 'DELETE', token })
-      setCategories((prev) => prev.filter((c) => c.id !== cat.id))
-      toastSuccess('Categoria removida')
-      onCategoriesChanged?.()
-    } catch (e) {
-      toastError(e.message)
-    } finally {
-      setRemoveTarget(null)
-    }
-  }
-
-  const createCategory = async () => {
-    if (!newForm.name.trim() || !newForm.abbreviation.trim()) {
-      toastError('Informe nome e sigla da categoria')
-      return
-    }
-    setCreating(true)
-    try {
-      const { category } = await api('/admin/categories', {
-        method: 'POST',
-        token,
-        body: {
-          name: newForm.name.trim(),
-          abbreviation: newForm.abbreviation.trim(),
-          sort_order: Number(newForm.sort_order) || (categories.length + 1),
-        },
-      })
-      setCategories((prev) => [...prev, category].sort((a, b) => a.sort_order - b.sort_order))
-      setDrafts((prev) => ({ ...prev, [category.id]: { name: category.name, abbreviation: category.abbreviation, sort_order: String(category.sort_order) } }))
-      setNewForm({ name: '', abbreviation: '', sort_order: '' })
-      toastSuccess('Categoria criada')
-      onCategoriesChanged?.()
-    } catch (e) {
-      toastError(e.message)
-    } finally {
-      setCreating(false)
-    }
-  }
-
-  return (
-    <Card className="mt-4">
-      <CardHeader>
-        <CardTitle>Categorias</CardTitle>
-        <CardDescription>
-          Gerencie as categorias do campeonato (nome, sigla e ordem de exibição). Renomear ou remover uma categoria
-          com equipes ou jogos cadastrados é bloqueado — nesse caso, desative-a e crie uma nova.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="rounded-lg border p-3 grid grid-cols-1 sm:grid-cols-[1fr_120px_100px_auto] gap-2 items-end bg-slate-50">
-          <div>
-            <Label className="text-xs text-slate-500">Nova categoria</Label>
-            <Input placeholder="Ex: Sub-21 Masculino" value={newForm.name} onChange={(e) => setNewForm((f) => ({ ...f, name: e.target.value }))} />
-          </div>
-          <div>
-            <Label className="text-xs text-slate-500">Sigla</Label>
-            <Input placeholder="Ex: S21" maxLength={6} value={newForm.abbreviation} onChange={(e) => setNewForm((f) => ({ ...f, abbreviation: e.target.value.toUpperCase() }))} />
-          </div>
-          <div>
-            <Label className="text-xs text-slate-500">Ordem</Label>
-            <Input type="number" placeholder="Auto" value={newForm.sort_order} onChange={(e) => setNewForm((f) => ({ ...f, sort_order: e.target.value }))} />
-          </div>
-          <Button onClick={createCategory} disabled={creating} className="text-white border-0" style={{ background: BLUE }}>
-            <Plus className="h-4 w-4 mr-1" /> Adicionar
-          </Button>
-        </div>
-
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Nome</TableHead>
-              <TableHead className="w-28">Sigla</TableHead>
-              <TableHead className="w-24 text-center">Ordem</TableHead>
-              <TableHead className="w-20 text-center">Ativa</TableHead>
-              <TableHead className="w-28 text-center">Ações</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {categories.map((cat) => {
-              const d = drafts[cat.id] || { name: cat.name, abbreviation: cat.abbreviation, sort_order: String(cat.sort_order) }
-              const dirty = isDirty(cat)
-              return (
-                <TableRow key={cat.id} className={!cat.active ? 'opacity-50' : ''}>
-                  <TableCell>
-                    <Input value={d.name} onChange={(e) => setDraft(cat.id, 'name', e.target.value)} />
-                  </TableCell>
-                  <TableCell>
-                    <Input maxLength={6} value={d.abbreviation} onChange={(e) => setDraft(cat.id, 'abbreviation', e.target.value.toUpperCase())} />
-                  </TableCell>
-                  <TableCell>
-                    <Input type="number" className="text-center" value={d.sort_order} onChange={(e) => setDraft(cat.id, 'sort_order', e.target.value)} />
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <Switch checked={cat.active} onCheckedChange={() => toggleActive(cat)} />
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center justify-center gap-1">
-                      <Button size="sm" variant="outline" disabled={!dirty || savingId === cat.id} onClick={() => saveCategory(cat)} title="Salvar alterações">
-                        <Save className="h-4 w-4" />
-                      </Button>
-                      <Button size="sm" variant="outline" className="text-red-600 hover:text-red-700" onClick={() => setRemoveTarget(cat)} title="Remover categoria">
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              )
-            })}
-            {categories.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={5} className="text-center text-slate-600 py-8">Nenhuma categoria cadastrada.</TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </CardContent>
-      <AlertDialog open={!!removeTarget} onOpenChange={(open) => !open && setRemoveTarget(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Remover categoria</AlertDialogTitle>
-            <AlertDialogDescription>
-              Remover a categoria &ldquo;{removeTarget?.name}&rdquo;? Essa ação não pode ser desfeita.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction className="bg-red-600 hover:bg-red-700" onClick={() => removeCategory(removeTarget)}>
-              Remover
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </Card>
-  )
-}
-
-function AdminEmails({ token }) {
-  const [emails, setEmails] = useState([])
-  useEffect(() => {
-    api('/admin/emails', { token }).then((d) => setEmails(d.emails || [])).catch(() => {})
-  }, [token])
-  return (
-    <Card className="mt-4">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2"><Mail className="h-5 w-5" style={{ color: RED }} /> E-mails transacionais (MOCKED)</CardTitle>
-        <CardDescription>Registro dos e-mails que seriam enviados via Resend. Plugue a chave para envio real.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        {emails.map((e) => (
-          <div key={e.id} className="rounded-lg border p-3">
-            <div className="flex items-center justify-between">
-              <span className="font-semibold text-sm">{e.subject}</span>
-              <Badge variant="outline" className="text-[10px]">{e.status}</Badge>
-            </div>
-            <div className="text-xs text-slate-500">Para: {e.to} • {new Date(e.created_at).toLocaleString('pt-BR')}</div>
-            <div className="text-xs text-slate-600 mt-1" dangerouslySetInnerHTML={{ __html: e.html }} />
-          </div>
-        ))}
-        {emails.length === 0 && <p className="text-sm text-slate-600">Nenhum e-mail enviado ainda.</p>}
-      </CardContent>
-    </Card>
-  )
-}
-
-// ============================================================================
 // GESTOR PANEL
 // ============================================================================
 function GestorPanel({ token, categories, user, myTeams, refreshMe }) {
@@ -1821,7 +729,7 @@ function GestorPanel({ token, categories, user, myTeams, refreshMe }) {
   }
 
   return (
-    // ACESSIBILIDADE (varredura, item A3): mesmo motivo do PublicSite/AdminPanel acima.
+    // ACESSIBILIDADE (varredura, item A3): mesmo motivo do PublicSite acima.
     <div className="container py-8">
       <h1 className="text-2xl font-extrabold flex items-center gap-2 mb-1" style={{ color: NAVY }}>
         <Users className="h-6 w-6" style={{ color: BLUE }} /> Painel do Gestor

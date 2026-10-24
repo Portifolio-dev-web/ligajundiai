@@ -159,6 +159,20 @@ export async function middleware(request) {
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set('x-nonce', nonce)
 
+  // SEGURANÇA/ARQUITETURA (refatoração 2026-10-23): o Painel Administrativo morava embutido em "/"
+  // (app/page.js), atrás só de uma checagem client-side — o HTML/JS da tela baixava no navegador de
+  // qualquer visitante antes mesmo de existir uma sessão para checar. Agora vive em /admin, protegido
+  // como qualquer rota de papel (bloco abaixo). Esta checagem evita a volta visual a "/" para quem já
+  // está autenticado como admin: o Edge redireciona antes do React montar. Só roda quando existe
+  // cookie de sessão — quem nunca logou não paga o custo extra de verificar o JWT.
+  if (request.nextUrl.pathname === '/') {
+    const homeSession = request.cookies.get(sessionCookieName())?.value
+    const homePayload = homeSession ? await verifySession(homeSession) : null
+    if (homePayload?.role === 'admin') {
+      return applyCsp(NextResponse.redirect(new URL('/admin', request.url)), nonce)
+    }
+  }
+
   const requiredRole = roleForPath(request.nextUrl.pathname)
   if (requiredRole) {
     const session = request.cookies.get(sessionCookieName())?.value
@@ -171,7 +185,7 @@ export async function middleware(request) {
 
     const allowedRoles = Array.isArray(requiredRole) ? requiredRole : [requiredRole]
     if (!allowedRoles.includes(payload.role)) {
-      const destination = new URL(payload.role === 'admin' ? '/admin/aprovacoes' : `/${payload.role}`, request.url)
+      const destination = new URL(payload.role === 'admin' ? '/admin' : `/${payload.role}`, request.url)
       return applyCsp(NextResponse.redirect(destination), nonce)
     }
 
