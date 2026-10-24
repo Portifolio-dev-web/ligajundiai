@@ -94,7 +94,7 @@ export function createApp() {
   app.use('/api', scheduleRouter)
   app.use('/api/rules', adminRulesRouter)
   app.use('/api/admin', adminRulesRouter)
-  app.use('/api', attendanceRouter)
+  app.use('/api/attendance', attendanceRouter)
   app.use('/api/privacy', privacyRouter)
   app.use('/api/webhooks', webhooksRouter)
 
