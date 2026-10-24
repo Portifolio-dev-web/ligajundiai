@@ -1,6 +1,7 @@
 import './globals.css'
 import { headers } from 'next/headers'
 import { Providers } from './providers'
+import { Toaster } from '@/components/ui/sonner'
 
 // ACESSIBILIDADE (varredura, item A4): o título da aba nunca mudava de tela — com várias abas
 // abertas (/gestor, /gestor/aprovar-atletas, /jogos...) não dava para distinguir uma da outra.
@@ -74,6 +75,12 @@ export default async function RootLayout({ children }) {
           Pular para o conteúdo
         </a>
         <Providers>{children}</Providers>
+        {/* CORREÇÃO (achado ao escrever a suíte Playwright, 2026-10-24): toastSuccess/toastError
+            (AdminDashboard.jsx e suas abas) nunca apareciam na tela — não havia nenhum <Toaster/>
+            montado em /admin nem no layout raiz, só em app/page.js. Centralizado aqui (removido de
+            page.js) para valer no site inteiro com uma única instância — dois <Toaster/> ao mesmo
+            tempo duplicariam cada toast na tela, já que ambos escutam a mesma fila global do Sonner. */}
+        <Toaster position="bottom-right" richColors />
       </body>
     </html>
   )

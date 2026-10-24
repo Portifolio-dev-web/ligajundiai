@@ -67,22 +67,22 @@ export default function AdminAttendance({ categories }) {
       <CardContent className="space-y-4">
         <div className="grid gap-3 md:grid-cols-3">
           <div>
-            <Label className="text-xs">Categoria</Label>
+            <Label className="text-xs" htmlFor="admin-attendance-category">Categoria</Label>
             <Select value={category} onValueChange={(v) => { setCategory(v); setTeamId(''); setAthletes([]) }}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger id="admin-attendance-category"><SelectValue /></SelectTrigger>
               <SelectContent>{categories.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div>
-            <Label className="text-xs">Equipe</Label>
+            <Label className="text-xs" htmlFor="admin-attendance-team">Equipe</Label>
             <Select value={teamId} onValueChange={loadTeam}>
-              <SelectTrigger><SelectValue placeholder="Equipe" /></SelectTrigger>
+              <SelectTrigger id="admin-attendance-team"><SelectValue placeholder="Equipe" /></SelectTrigger>
               <SelectContent>{teams.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div>
-            <Label className="text-xs">Data</Label>
-            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            <Label className="text-xs" htmlFor="admin-attendance-date">Data</Label>
+            <Input id="admin-attendance-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
         </div>
 

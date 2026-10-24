@@ -68,7 +68,7 @@ export default function AdminGameDates({ categories }) {
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2"><Label htmlFor="game-time">Horário</Label><Input id="game-time" type="time" value={time} onChange={(event) => setTime(event.target.value)} required /></div>
-            <div className="space-y-2"><Label>Categoria</Label><Select value={category} onValueChange={setCategory}><SelectTrigger><SelectValue placeholder="Selecione a categoria" /></SelectTrigger><SelectContent>{categories.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-2"><Label htmlFor="game-category">Categoria</Label><Select value={category} onValueChange={setCategory}><SelectTrigger id="game-category"><SelectValue placeholder="Selecione a categoria" /></SelectTrigger><SelectContent>{categories.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select></div>
           </div>
           <div className="space-y-2"><Label htmlFor="game-venue">Local (opcional)</Label><Input id="game-venue" value={venue} maxLength={200} onChange={(event) => setVenue(event.target.value)} placeholder="Ginásio" /></div>
           <Button type="submit" disabled={saving || !date || !category}>{saving ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <CalendarDays className="h-4 w-4" />} Criar data disponível</Button>

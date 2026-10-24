@@ -14,7 +14,13 @@ export const apiRateLimit = rateLimit({
   limit: 300,
   standardHeaders: 'draft-8',
   legacyHeaders: false,
-  skip: (req) => req.path === '/health',
+  // TESTES (achado ao escrever a suíte Playwright, 2026-10-24): este era o único limitador do
+  // arquivo sem o "skip" por NODE_ENV=test — uma suíte E2E cobrindo o app inteiro (cada navegação
+  // de página já dispara várias chamadas de API) passa de 300 requisições/15min rapidinho, e
+  // qualquer rerun durante o desenvolvimento dos testes caía bloqueado pelo limite da rodada
+  // anterior. Mesmo padrão dos demais limitadores abaixo: continua valendo de verdade em
+  // desenvolvimento/produção, só não em NODE_ENV=test.
+  skip: (req) => req.path === '/health' || config.NODE_ENV === 'test',
   store: storeFor('lvj:api:'),
   message: { error: 'Limite de requisições excedido. Tente novamente mais tarde.' },
 })

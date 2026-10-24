@@ -12,12 +12,23 @@ export default defineConfig({
   // teste tente logar como admin no meio dessa janela.
   fullyParallel: false,
   workers: 1,
-  retries: process.env.CI ? 1 : 0,
+  // A suíte roda contra "next dev" (não um build de produção) no stack de desenvolvimento — uma
+  // recompilação de rota sob carga (vários testes em sequência) ocasionalmente atrasa a primeira
+  // navegação a uma página além do timeout padrão. 1 retry absorve esse tipo de flake sem mascarar
+  // uma falha real (que falha de novo no retry).
+  retries: 1,
   reporter: 'list',
   use: {
     baseURL,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
+    // O cadastro público de atleta (e2e/cadastro-atleta.spec.js) usa a câmera de verdade
+    // (getUserMedia) — estas duas flags do Chromium trocam por um dispositivo de vídeo sintético
+    // e aprovam a permissão automaticamente, sem precisar mockar nada em JS. Inofensivo para os
+    // demais testes, que nunca chamam getUserMedia.
+    launchOptions: {
+      args: ['--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'],
+    },
   },
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },

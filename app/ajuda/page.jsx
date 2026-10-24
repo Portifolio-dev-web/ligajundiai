@@ -1,9 +1,7 @@
 // UX (varredura, item O1): não existia "primeiros passos" nem página de ajuda — uma conta nova caía
 // direto no painel sem guia nenhum, e não havia onde consultar dúvidas comuns fora da Política de
 // Privacidade. O conteúdo abaixo descreve o que o sistema realmente faz hoje (ver
-// backend/src/routes/*): nenhum passo ou limite citado aqui foi inventado — em especial, HOJE NÃO
-// EXISTE recuperação automática de senha (ver pergunta correspondente), então esta página não finge
-// que existe.
+// backend/src/routes/*): nenhum passo ou limite citado aqui foi inventado.
 //
 // ACESSIBILIDADE (varredura, item A4): ver o comentário em app/layout.js.
 export const metadata = { title: 'Ajuda' }
@@ -68,9 +66,10 @@ export default function AjudaPage() {
 
           <Section title="Esqueci minha senha — e agora?">
             <p>
-              Hoje o sistema não tem recuperação automática de senha (nenhum "esqueci minha senha" por
-              e-mail). Se você ficou sem acesso à conta, fale com a organização da liga pelo contato
-              abaixo para que o problema seja resolvido manualmente.
+              Na tela de login, abra "Entrar" e use o link "Esqueci minha senha?". Informe o e-mail da
+              conta: administradores confirmam a identidade com o código do próprio app autenticador
+              (2FA); atletas e gestores recebem um código de 6 dígitos por SMS no celular cadastrado.
+              Depois de confirmado o código, basta definir a nova senha.
             </p>
           </Section>
 

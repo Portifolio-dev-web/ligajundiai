@@ -122,7 +122,7 @@ export default function GestorDashboardPage() {
             <CardContent>
               <form onSubmit={createTeam} className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2"><Label htmlFor="team-name">Nome da equipe</Label><Input id="team-name" required minLength={2} maxLength={100} value={name} onChange={(event) => setName(event.target.value)} /></div>
-                <div className="space-y-2"><Label>Categoria</Label><Select value={category} onValueChange={setCategory} required><SelectTrigger><SelectValue placeholder="Selecione a categoria" /></SelectTrigger><SelectContent>{CATEGORY_FALLBACK.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select></div>
+                <div className="space-y-2"><Label htmlFor="team-category">Categoria</Label><Select value={category} onValueChange={setCategory} required><SelectTrigger id="team-category"><SelectValue placeholder="Selecione a categoria" /></SelectTrigger><SelectContent>{CATEGORY_FALLBACK.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select></div>
                 <div className="sm:col-span-2">
                   {!category
                     ? <Alert><AlertTitle>Selecione uma categoria</AlertTitle><AlertDescription>O período de inscrição é configurado separadamente para cada categoria.</AlertDescription></Alert>

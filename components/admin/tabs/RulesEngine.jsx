@@ -74,8 +74,8 @@ export default function RulesEngine() {
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
             {pointFields.map(([k, label]) => (
               <div key={k}>
-                <Label className="text-xs">{label}</Label>
-                <Input type="number" value={rules.points[k]} onChange={(e) => setPoint(k, e.target.value)} />
+                <Label className="text-xs" htmlFor={`rules-point-${k}`}>{label}</Label>
+                <Input id={`rules-point-${k}`} type="number" value={rules.points[k]} onChange={(e) => setPoint(k, e.target.value)} />
               </div>
             ))}
           </div>
@@ -101,9 +101,10 @@ export default function RulesEngine() {
         </div>
 
         <div className="max-w-xs">
-          <h4 className="font-semibold mb-3" style={{ color: NAVY }}>Presença mínima para finais/mata-mata</h4>
+          <h4 className="font-semibold mb-3" style={{ color: NAVY }} id="rules-min-attendance-label">Presença mínima para finais/mata-mata</h4>
           <div className="flex items-center gap-2">
             <Input
+              aria-labelledby="rules-min-attendance-label"
               type="number"
               value={rules.min_attendance_percent}
               onChange={(e) => setRules({ ...rules, min_attendance_percent: Number(e.target.value) })}

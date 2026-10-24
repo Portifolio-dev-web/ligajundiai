@@ -41,8 +41,6 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
-import { Toaster } from '@/components/ui/sonner'
-import { toast } from 'sonner'
 import { toastSuccess, toastError } from '@/lib/toast'
 import {
   Volleyball,
@@ -167,10 +165,6 @@ function App() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* UX (achado lateral, varredura do Lote 2): em "top-right" o toast ficava por cima do
-          cabeçalho fixo por alguns segundos em telas estreitas, bloqueando o clique no menu mobile
-          (item A5) até desaparecer. "bottom-right" nunca sobrepõe o cabeçalho. */}
-      <Toaster position="bottom-right" richColors />
       <TopNav
         user={user}
         token={token}

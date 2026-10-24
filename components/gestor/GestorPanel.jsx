@@ -137,13 +137,13 @@ export default function GestorPanel({ token, categories, user, myTeams, refreshM
         </CardHeader>
         <CardContent className="space-y-3">
           <div>
-            <Label>Nome da equipe</Label>
-            <Input value={teamForm.name} onChange={(e) => setTeamForm({ ...teamForm, name: e.target.value })} />
+            <Label htmlFor="gestor-team-name">Nome da equipe</Label>
+            <Input id="gestor-team-name" value={teamForm.name} onChange={(e) => setTeamForm({ ...teamForm, name: e.target.value })} />
           </div>
           <div>
-            <Label>Categoria</Label>
+            <Label htmlFor="gestor-team-category">Categoria</Label>
             <Select value={teamForm.category} onValueChange={(v) => setTeamForm({ ...teamForm, category: v })}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger id="gestor-team-category"><SelectValue /></SelectTrigger>
               <SelectContent>{categories.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
             </Select>
           </div>

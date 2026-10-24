@@ -40,7 +40,17 @@ export default function AdminMatches({ categories }) {
       return
     }
     try {
-      await api('/admin/matches', { method: 'POST', body: form })
+      // CORREÇÃO (achado ao escrever a suíte Playwright, 2026-10-24): "Data/Hora" é um
+      // <input type="datetime-local">, que nunca inclui fuso/segundos ("2026-10-25T21:45") — enviar
+      // esse valor direto sempre caía em 400 "Invalid ISO datetime" (o backend exige ISO-8601 com
+      // "Z", ver backend/src/routes/games.js). Em produção isso quebrava "Agendar" por completo
+      // sempre que uma data era informada. new Date(...).toISOString() interpreta o valor como
+      // horário local do navegador (o que o admin realmente escolheu) e gera o formato aceito —
+      // mesma conversão que AdminGameDates.jsx já fazia para a mesma situação.
+      await api('/admin/matches', {
+        method: 'POST',
+        body: { ...form, scheduled_at: form.scheduled_at ? new Date(form.scheduled_at).toISOString() : undefined },
+      })
       toastSuccess('Jogo agendado')
       setForm({ home_team_id: '', away_team_id: '', scheduled_at: '', venue: '', round: '' })
       load()
@@ -69,9 +79,9 @@ export default function AdminMatches({ categories }) {
       </CardHeader>
       <CardContent className="space-y-5">
         <div className="w-full md:w-72">
-          <Label className="text-xs">Categoria</Label>
+          <Label className="text-xs" htmlFor="admin-matches-category">Categoria</Label>
           <Select value={category} onValueChange={setCategory}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectTrigger id="admin-matches-category"><SelectValue /></SelectTrigger>
             <SelectContent>
               {categories.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
             </SelectContent>
@@ -80,26 +90,26 @@ export default function AdminMatches({ categories }) {
 
         <div className="rounded-lg border p-4 grid gap-3 md:grid-cols-5 items-end bg-slate-50">
           <div className="md:col-span-1">
-            <Label className="text-xs">Mandante</Label>
+            <Label className="text-xs" htmlFor="admin-matches-home">Mandante</Label>
             <Select value={form.home_team_id} onValueChange={(v) => setForm({ ...form, home_team_id: v })}>
-              <SelectTrigger><SelectValue placeholder="Equipe" /></SelectTrigger>
+              <SelectTrigger id="admin-matches-home"><SelectValue placeholder="Equipe" /></SelectTrigger>
               <SelectContent>{teams.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div>
-            <Label className="text-xs">Visitante</Label>
+            <Label className="text-xs" htmlFor="admin-matches-away">Visitante</Label>
             <Select value={form.away_team_id} onValueChange={(v) => setForm({ ...form, away_team_id: v })}>
-              <SelectTrigger><SelectValue placeholder="Equipe" /></SelectTrigger>
+              <SelectTrigger id="admin-matches-away"><SelectValue placeholder="Equipe" /></SelectTrigger>
               <SelectContent>{teams.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div>
-            <Label className="text-xs">Data/Hora</Label>
-            <Input type="datetime-local" value={form.scheduled_at} onChange={(e) => setForm({ ...form, scheduled_at: e.target.value })} />
+            <Label className="text-xs" htmlFor="admin-matches-datetime">Data/Hora</Label>
+            <Input id="admin-matches-datetime" type="datetime-local" value={form.scheduled_at} onChange={(e) => setForm({ ...form, scheduled_at: e.target.value })} />
           </div>
           <div>
-            <Label className="text-xs">Local / Rodada</Label>
-            <Input placeholder="Ginásio / Rodada 1" value={form.venue} onChange={(e) => setForm({ ...form, venue: e.target.value })} />
+            <Label className="text-xs" htmlFor="admin-matches-venue">Local / Rodada</Label>
+            <Input id="admin-matches-venue" placeholder="Ginásio / Rodada 1" value={form.venue} onChange={(e) => setForm({ ...form, venue: e.target.value })} />
           </div>
           <Button className="text-white border-0" style={{ background: BLUE }} onClick={create}>
             <Plus className="h-4 w-4 mr-1" /> Agendar
