@@ -92,11 +92,18 @@ module.exports = {
             to: {
               height: '0'
             }
+          },
+          'sponsor-scroll-v': {
+            // -50% porque SponsorVerticalTicker duplica a lista de patrocinadores — andar só a
+            // metade fecha o laço exatamente onde a cópia duplicada começa.
+            from: { transform: 'translateY(0)' },
+            to: { transform: 'translateY(-50%)' }
           }
         },
         animation: {
           'accordion-down': 'accordion-down 0.2s ease-out',
-          'accordion-up': 'accordion-up 0.2s ease-out'
+          'accordion-up': 'accordion-up 0.2s ease-out',
+          'sponsor-scroll-v': 'sponsor-scroll-v 24s linear infinite'
         }
       }
     },

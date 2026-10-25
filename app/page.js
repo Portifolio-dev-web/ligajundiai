@@ -54,6 +54,9 @@ import {
 import { api, CATEGORY_FALLBACK } from '@/lib/lvjApi'
 import { formatRg } from '@/lib/athlete'
 import ForgotPasswordDialog from '@/components/ForgotPasswordDialog'
+import { SponsorFlipCards } from '@/components/SponsorFlipCards'
+import { SponsorVerticalTicker } from '@/components/SponsorVerticalTicker'
+import { SponsorCoverFlow } from '@/components/SponsorCoverFlow'
 // Paleta alinhada ao logo oficial da LVJ (marinho + vermelho + azul da bola) — compartilhada com
 // components/standings.jsx e components/admin/AdminDashboard.jsx, por isso vive em lib/theme.js.
 import { BLUE, RED, NAVY } from '@/lib/theme'
@@ -75,7 +78,6 @@ const GestorPanel = dynamic(() => import('@/components/gestor/GestorPanel'), {
 // visita à home entregava o IP de quem acessa à Unsplash (hotlink). Agora são arquivos locais em
 // public/images, as mesmas fotos, baixadas uma vez. IMG_ACTION1 nunca era usada — removida.
 const HERO = '/images/hero.jpg'
-const IMG_COURT = '/images/court.jpg'
 const IMG_ARENA = '/images/arena.jpg'
 
 // ============================================================================
@@ -394,31 +396,12 @@ function PublicSite({ categories, currentYear, onLoginClick }) {
           <p className="text-center text-xs uppercase tracking-widest text-slate-600 mb-4">
             Patrocinadores oficiais
           </p>
-          {/* PERFORMANCE (varredura, item I-Média-2): min-h reserva o espaço da faixa de
-              patrocinadores antes do fetch de /sponsors responder — sem isso, a seção nascia com
-              altura zero e "empurrava" todo o conteúdo abaixo quando os logos apareciam (CLS).
-              Os três valores batem com a altura real medida com os 4 patrocinadores atuais quebrando
-              em 3 linhas no mobile (<640px), 2 no tablet (≥768px) e 1 no desktop (≥1024px) — se o
-              número de patrocinadores mudar bastante, vale remedir e ajustar. */}
-          <div className="flex flex-wrap items-center justify-center gap-4 min-h-[280px] md:min-h-[132px] lg:min-h-[60px]">
-            {sponsors.map((s) => (
-              <div
-                key={s.id}
-                className="flex items-center gap-2 rounded-lg border px-5 py-3 shadow-sm"
-                style={{ borderColor: '#e2e8f0' }}
-              >
-                <div
-                  className="flex h-8 w-8 items-center justify-center rounded-md text-white text-xs font-bold"
-                  style={{ background: BLUE }}
-                >
-                  {s.name.charAt(0)}
-                </div>
-                <span className="font-semibold text-slate-700">{s.name}</span>
-                <Badge variant="outline" className="ml-1 text-[10px] capitalize">
-                  {s.tier}
-                </Badge>
-              </div>
-            ))}
+          {/* PERFORMANCE (varredura, item I-Média-2): altura fixa, não min-h variável — cada card
+              de flip tem 92px de altura sempre, trocando só o número de colunas (2/3/5) conforme a
+              tela, então não há salto de layout (CLS) entre o fetch de /sponsors responder e os
+              cards aparecerem. */}
+          <div className="min-h-[92px]">
+            <SponsorFlipCards sponsors={sponsors} />
           </div>
         </div>
       </section>
@@ -466,14 +449,12 @@ function PublicSite({ categories, currentYear, onLoginClick }) {
           <div className="space-y-6">
             {/* Sponsor highlight box next to standings */}
             <Card className="overflow-hidden border-2" style={{ borderColor: RED }}>
-              <div className="relative h-28">
-                <Image src={IMG_COURT} alt="" fill sizes="(min-width: 1024px) 33vw, 100vw" className="object-cover" />
-                <div className="absolute inset-0 flex items-center justify-center" style={{ background: `${BLUE}bb` }}>
-                  <span className="text-white font-bold text-lg">Espaço Patrocinador</span>
-                </div>
+              <div className="py-2 text-center text-sm font-bold text-white" style={{ background: NAVY }}>
+                Espaço Patrocinador
               </div>
+              <SponsorVerticalTicker sponsors={sponsors} />
               <CardContent className="py-4 text-center text-sm text-slate-600">
-                Anuncie sua marca aqui e apoie o vôlei de Jundiaí.
+                Marcas que apoiam o vôlei de Jundiaí.
               </CardContent>
             </Card>
 
@@ -714,6 +695,14 @@ function LoginDialog({ open, onOpenChange, onAuthed, onForgotPassword }) {
 // Footer with sponsors
 // ============================================================================
 function Footer() {
+  // O rodapé aparece em toda página do site, não só na home — por isso busca os patrocinadores
+  // por conta própria, em vez de receber a lista que PublicSite já buscou (ela nem sempre existe,
+  // ex. em /ajuda, /privacidade).
+  const [sponsors, setSponsors] = useState([])
+  useEffect(() => {
+    api('/sponsors').then((d) => setSponsors(d.sponsors || [])).catch(() => {})
+  }, [])
+
   return (
     <footer className="mt-12" style={{ background: NAVY }}>
       <div className="container py-10 text-slate-300">
@@ -732,10 +721,14 @@ function Footer() {
           </div>
           <div>
             <h4 className="text-white font-semibold mb-3">Patrocínio</h4>
-            <p className="text-sm text-slate-400">Quer ver sua marca aqui e nas telas de classificação? Fale com a organização.</p>
-            <div className="mt-3 h-16 rounded-lg border border-dashed border-slate-600 flex items-center justify-center text-sm text-slate-500">
-              Espaço reservado para patrocinadores
-            </div>
+            <p className="text-sm text-slate-400 mb-3">Confira quem apoia a liga:</p>
+            {sponsors.length > 0 ? (
+              <SponsorCoverFlow sponsors={sponsors} />
+            ) : (
+              <div className="h-16 rounded-lg border border-dashed border-slate-600 flex items-center justify-center text-sm text-slate-500">
+                Espaço reservado para patrocinadores
+              </div>
+            )}
           </div>
           <div>
             <h4 className="text-white font-semibold mb-3">Contato</h4>
