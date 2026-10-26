@@ -82,7 +82,11 @@ export default function MatchAttendance({ expectedRole }) {
       </div>
       <Card>
         <CardHeader><CardTitle>Jogos e frequência</CardTitle><CardDescription>Confira a agenda da sua equipe e os registros de presença. Declarações ficam disponíveis após a confirmação de presença no jogo.</CardDescription></CardHeader>
-        <CardContent className="space-y-4">
+        {/* PERFORMANCE (mesma correção do item 5 da varredura): min-h evita o salto de altura entre
+            o texto de carregamento (uma linha) e a tabela populada — mesmo padrão corrigido em
+            app/page.js e app/(auth)/cadastro-atleta/page.jsx. Compartilhado por /atleta/jogos e
+            /jogos (prop expectedRole), então este único ajuste cobre as duas rotas. */}
+        <CardContent className="space-y-4 min-h-[280px]">
           {error && <Alert variant="destructive"><AlertTitle>Não foi possível carregar os jogos</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}
           {loading ? <p className="py-8 text-sm text-muted-foreground">Carregando jogos…</p> : <div className="overflow-x-auto">
             <Table>

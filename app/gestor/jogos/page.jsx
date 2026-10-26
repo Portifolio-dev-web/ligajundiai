@@ -73,7 +73,9 @@ export default function GestorJogosPage() {
       </div>
       <Card>
         <CardHeader><CardTitle>Agenda de jogos</CardTitle><CardDescription>{teams.length ? 'Sugestões envolvendo suas equipes. O jogo é confirmado quando os dois gestores aceitam.' : 'As sugestões de jogos das suas equipes aparecerão aqui.'}</CardDescription></CardHeader>
-        <CardContent className="space-y-4">
+        {/* PERFORMANCE (mesma correção do item 5 da varredura): min-h evita o salto de altura entre
+            o spinner de carregamento e a lista de jogos propostos. */}
+        <CardContent className="space-y-4 min-h-[180px]">
           {error && <Alert variant="destructive"><AlertTitle>Erro</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}
           {loading ? <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground"><LoaderCircle className="h-4 w-4 animate-spin" /> Carregando agenda…</div>
             : matches.length ? <div className="space-y-3">

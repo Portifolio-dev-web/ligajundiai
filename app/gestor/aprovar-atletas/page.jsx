@@ -80,7 +80,9 @@ export default function AprovarAtletasPage() {
           <CardTitle>Aprovação de atletas</CardTitle>
           <CardDescription>Revise os cadastros vinculados à sua equipe. A aprovação encaminha o atleta para análise final do administrador.</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        {/* PERFORMANCE (mesma correção do item 5 da varredura): min-h evita o salto de altura entre
+            o spinner de carregamento e a tabela populada. */}
+        <CardContent className="space-y-4 min-h-[280px]">
           {error && <Alert variant="destructive"><AlertTitle>Erro</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}
           {loading
             ? <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground"><LoaderCircle className="h-4 w-4 animate-spin" /> Carregando solicitações…</div>

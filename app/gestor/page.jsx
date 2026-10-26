@@ -97,9 +97,12 @@ export default function GestorDashboardPage() {
         </div>
       </header>
       {error && <Alert variant="destructive"><AlertTitle>Erro</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}
-      {loading
-        ? <div className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="h-4 w-4 animate-spin" /> Carregando equipes…</div>
-        : <div className="space-y-4">
+      {/* PERFORMANCE (mesma correção do item 5 da varredura): min-h evita o salto de altura entre
+          o spinner de carregamento e os cards de equipe + formulário de inscrição. */}
+      <div className="min-h-[360px]">
+        {loading
+          ? <div className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="h-4 w-4 animate-spin" /> Carregando equipes…</div>
+          : <div className="space-y-4">
           {teams.map((team) => (
             <Card key={team.id}>
               <CardHeader><CardTitle>{team.name}</CardTitle><CardDescription>{team.category}</CardDescription></CardHeader>
@@ -144,6 +147,7 @@ export default function GestorDashboardPage() {
             </CardContent>
           </Card>
         </div>}
+      </div>
     </main>
   )
 }

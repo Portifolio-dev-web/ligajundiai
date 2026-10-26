@@ -1,5 +1,6 @@
 'use client'
 
+import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { Button } from '@/components/ui/button'
@@ -9,7 +10,6 @@ import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { Badge } from '@/components/ui/badge'
 import {
   Dialog,
   DialogContent,
@@ -25,16 +25,31 @@ import {
   SelectItem,
 } from '@/components/ui/select'
 import { toastSuccess, toastError } from '@/lib/toast'
-import { Users, CalendarDays, UserPlus } from 'lucide-react'
+import { Users, UserPlus, LoaderCircle } from 'lucide-react'
 import { api } from '@/lib/lvjApi'
 import { formatRg, getAge, isValidRg } from '@/lib/athlete'
 import { financialResponsibilityTerm, IMAGE_USE_TERM, MINOR_GUARDIAN_TERM } from '@/lib/legalTerms'
 import { BLUE, RED, NAVY } from '@/lib/theme'
-import { StandingsTable, StatusBadge } from '@/components/standings'
+import { StatusBadge } from '@/components/standings'
 
 // PERFORMANCE (varredura, item I2): este painel morava embutido em app/page.js, no mesmo bundle
 // servido a todo visitante anônimo da home — hoje é carregado via next/dynamic (ver app/page.js)
 // e só baixado por quem realmente está logado como gestor.
+// PERFORMANCE (mesma correção do item 6 da varredura, aplicada aqui em escala menor): das 4 abas,
+// só "Elenco" (a mais usada) fica neste arquivo — Frequência/Classificação/Agenda viram chunks
+// próprios em components/gestor/tabs/, carregados sob demanda ao clicar na aba.
+function TabLoading() {
+  return (
+    <div className="mt-4 flex items-center justify-center rounded-lg border p-12 text-slate-500">
+      <LoaderCircle className="h-5 w-5 animate-spin mr-2" /> Carregando…
+    </div>
+  )
+}
+
+const GestorFrequency = dynamic(() => import('@/components/gestor/tabs/GestorFrequency'), { loading: TabLoading })
+const GestorStandings = dynamic(() => import('@/components/gestor/tabs/GestorStandings'), { loading: TabLoading })
+const GestorAgenda = dynamic(() => import('@/components/gestor/tabs/GestorAgenda'), { loading: TabLoading })
+
 // ============================================================================
 // GESTOR PANEL
 // ============================================================================
@@ -414,116 +429,6 @@ function GestorRoster({ token, team }) {
           </Button>
         </DialogContent>
       </Dialog>
-    </Card>
-  )
-}
-
-function GestorFrequency({ token, teamId }) {
-  const [data, setData] = useState({ attendance: [] })
-  useEffect(() => {
-    api('/attendance/mine', { token }).then(setData).catch(() => {})
-  }, [token])
-  // Risco 1 (varredura, análise LVJ 2027): /attendance/mine soma as equipes do gestor; aqui
-  // filtramos para a equipe ativa no painel.
-  const rows = (data.attendance || []).filter((item) => !teamId || item.team_id === teamId)
-  return (
-    <Card className="mt-4">
-      <CardHeader>
-        <CardTitle>Frequência (presença)</CardTitle>
-        <CardDescription>Acompanhe a presença de cada atleta em relação à meta mínima da liga.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        {rows.map((f) => (
-          <div key={f.athlete_id} className="rounded-lg border p-3">
-            <div className="flex items-center justify-between text-sm">
-              <span className="font-semibold">{f.name}</span>
-              <Badge className="border-0 text-white" style={{ background: f.eligible ? '#16a34a' : '#dc2626' }}>
-                {f.eligible ? `Apto (min ${f.min_required}%)` : `Inapto (min ${f.min_required}%)`}
-              </Badge>
-            </div>
-            <div className="mt-2 h-2 w-full rounded-full bg-slate-100 overflow-hidden">
-              <div className="h-full" style={{ width: `${Math.min(f.percent, 100)}%`, background: f.eligible ? '#16a34a' : RED }} />
-            </div>
-            <div className="text-xs text-slate-500 mt-1">{f.present}/{f.total_sessions} presenças • {f.percent}%</div>
-          </div>
-        ))}
-        {rows.length === 0 && <p className="text-sm text-slate-600">Ainda não há registros de presença.</p>}
-      </CardContent>
-    </Card>
-  )
-}
-
-function GestorStandings({ token, category }) {
-  const [standings, setStandings] = useState([])
-  useEffect(() => {
-    api(`/standings?category=${encodeURIComponent(category)}`).then((d) => setStandings(d.standings || [])).catch(() => {})
-  }, [category])
-  return (
-    <Card className="mt-4">
-      <CardHeader><CardTitle>Classificação • {category}</CardTitle></CardHeader>
-      <CardContent className="p-0"><StandingsTable standings={standings} category={category} /></CardContent>
-    </Card>
-  )
-}
-
-function GestorAgenda({ category, token, team }) {
-  const [matches, setMatches] = useState([])
-  const [filter, setFilter] = useState('all')
-  const load = useCallback(() => {
-    api(`/matches?category=${encodeURIComponent(category)}`).then((d) => setMatches(d.matches || [])).catch(() => {})
-  }, [category])
-  useEffect(load, [load])
-  const accept = async (matchId) => {
-    try {
-      await api(`/gestor/matches/${matchId}/accept`, { method: 'POST', token, body: {} })
-      toastSuccess('Aceite registrado.')
-      load()
-    } catch (e) {
-      toastError(e.message)
-    }
-  }
-  const filtered = matches.filter((m) => filter === 'all' || m.status === filter)
-  return (
-    <Card className="mt-4">
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle>Agenda • {category}</CardTitle>
-          <Select value={filter} onValueChange={setFilter}>
-            <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos</SelectItem>
-              <SelectItem value="proposed">Aguardando aceite</SelectItem>
-              <SelectItem value="confirmed">Confirmados</SelectItem>
-              <SelectItem value="scheduled">Agendados</SelectItem>
-              <SelectItem value="finished">Finalizados</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        {filtered.map((m) => {
-          const hs = (m.sets || []).filter((s) => s.home > s.away).length
-          const as = (m.sets || []).filter((s) => s.away > s.home).length
-          return (
-            <div key={m.id} className="flex items-center justify-between rounded-lg border p-3 text-sm">
-              <div>
-                <div className="font-semibold">
-                  {m.home_name} <span className="text-slate-600">x</span> {m.away_name}
-                  {m.status === 'finished' && <span className="ml-2 font-bold" style={{ color: BLUE }}>({hs}-{as})</span>}
-                </div>
-                <div className="text-xs text-slate-500">{new Date(m.scheduled_at).toLocaleString('pt-BR')} {m.venue ? `• ${m.venue}` : ''}</div>
-              </div>
-              <div className="flex items-center gap-2">
-                <StatusBadge status={m.status} />
-                {m.status === 'proposed' && [m.home_team_id, m.away_team_id].includes(team?.id) && (
-                  <Button size="sm" onClick={() => accept(m.id)}>Aceitar data</Button>
-                )}
-              </div>
-            </div>
-          )
-        })}
-        {filtered.length === 0 && <p className="text-sm text-slate-600">Nenhum jogo.</p>}
-      </CardContent>
     </Card>
   )
 }

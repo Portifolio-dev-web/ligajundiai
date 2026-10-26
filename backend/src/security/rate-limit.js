@@ -33,9 +33,11 @@ export const authRateLimit = rateLimit({
   // Teste: a suíte de integração roda com --runInBand (um processo só, sem Redis), então o
   // MemoryStore acima soma as chamadas de TODOS os testes do arquivo — sem isso, qualquer teste
   // novo que registre uma conta ou peça upload de biometria estoura o limite de outro teste sem
-  // relação nenhuma com ele. Nenhum teste verifica o 429 em si; produção (NODE_ENV=production ou
-  // development) continua com o limite de 10/15min de verdade.
-  skip: () => config.NODE_ENV === 'test',
+  // relação nenhuma com ele. Nenhum teste verifica o 429 em si.
+  // DEV: também pulado em desenvolvimento, por pedido explícito — testar login manualmente (ou
+  // rodar os scripts de verificação deste projeto) repetidas vezes no mesmo IP local esbarrava no
+  // limite de 10/15min. Só produção (NODE_ENV=production) continua com o limite valendo de verdade.
+  skip: () => config.NODE_ENV !== 'production',
   store: storeFor('lvj:auth:'),
   message: { error: 'Muitas tentativas de autenticação. Tente novamente mais tarde.' },
 })

@@ -260,3 +260,24 @@ export async function promoteUserToAtleta(userId) {
 export async function linkAthleteToUser(athleteId, userId) {
   await db().query('UPDATE athletes SET user_id = $1 WHERE id = $2', [userId, athleteId])
 }
+
+// PERFORMANCE: acumula o Cumulative Layout Shift real da página via a mesma Layout Instability
+// API que o Chrome usa para o Web Vitals — chame ANTES de page.goto() (precisa estar registrado
+// antes do primeiro paint) e leia o valor com readLayoutShift() depois que o conteúdo final já
+// estiver na tela. 0,1 é o limite oficial do Google para "bom" (web.dev/cls); os testes que usam
+// isso cobrem telas que trocam um spinner de uma linha por conteúdo bem mais alto (gestor/atleta)
+// — sem altura reservada, esse salto sozinho já estoura 0,1 com folga.
+export async function observeLayoutShift(page) {
+  await page.addInitScript(() => {
+    window.__cls = 0
+    try {
+      new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) if (!entry.hadRecentInput) window.__cls += entry.value
+      }).observe({ type: 'layout-shift', buffered: true })
+    } catch {}
+  })
+}
+
+export async function readLayoutShift(page) {
+  return page.evaluate(() => window.__cls ?? 0)
+}
