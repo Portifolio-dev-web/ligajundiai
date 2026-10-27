@@ -45,6 +45,10 @@ test.describe('Painel do atleta', () => {
 
     await loginPageAs(page, account)
     await page.goto('/atleta/jogos')
+    // PERFORMANCE/UX (redesign do painel do atleta, aprovado por mockup): o jogo (já ocorrido,
+    // já que createMatch sem scheduled_at explícito usa "agora") mora na aba "Presença", não mais
+    // numa tabela única — ver components/atleta/AtletaPanel.jsx.
+    await page.getByRole('tab', { name: 'Presença' }).click()
 
     const row = page.getByRole('row', { name: new RegExp(`${team.name} × ${opponent.name}|${opponent.name} × ${team.name}`) })
     await expect(row).toBeVisible()
@@ -69,6 +73,7 @@ test.describe('Painel do atleta', () => {
 
     await loginPageAs(page, account)
     await page.goto('/atleta/jogos')
+    await page.getByRole('tab', { name: 'Presença' }).click()
 
     const row = page.getByRole('row', { name: new RegExp(`${team.name} × ${opponent.name}|${opponent.name} × ${team.name}`) })
     await expect(row).toBeVisible()

@@ -7,7 +7,12 @@ import {
 } from './helpers.js'
 
 // Cobre só as 5 melhorias de performance aplicadas nesta rodada (painel do gestor e do atleta):
-// 1) components/MatchAttendance.jsx — min-h no CardContent (usado por /atleta/jogos e /jogos)
+// 1) components/MatchAttendance.jsx — min-h no CardContent (usado por /atleta/jogos e /jogos).
+//    ATUALIZAÇÃO: esse arquivo foi removido no redesign do painel do atleta (aprovado por
+//    mockup) — virou components/atleta/AtletaPanel.jsx (abas "Próximos jogos", eager, com cards
+//    de resumo "Próximo jogo"/"Frequência" no cabeçalho) + components/atleta/tabs/
+//    AtletaPresenca.jsx e AtletaClassificacao.jsx (abas "Presença" e "Classificação", lazy), cada
+//    um com seu próprio min-h. Os testes abaixo foram ajustados para a nova estrutura.
 // 2) app/gestor/aprovar-atletas/page.jsx — min-h no CardContent
 // 3) app/gestor/jogos/page.jsx — min-h no CardContent
 // 4) app/gestor/page.jsx — min-h no bloco carregando/conteúdo
@@ -94,11 +99,15 @@ test.describe('Performance — CLS (reserva de altura no carregamento)', () => {
     expect(await readLayoutShift(page)).toBeLessThan(GOOD_CLS)
   })
 
-  test('/atleta/jogos — CLS permanece bom ao trocar o spinner pela tabela de jogos (MatchAttendance)', async ({ page, request, baseURL }) => {
+  test('/atleta/jogos (aba Próximos jogos) — CLS permanece bom ao trocar o spinner pela tabela', async ({ page, request, baseURL }) => {
     const category = CATEGORIES[3]
     const { team, athlete } = await createFullyApprovedAthlete(request, baseURL, adminCtx, { category })
     const { team: opponent } = await createFullyApprovedAthlete(request, baseURL, adminCtx, { category })
-    await createMatch(adminCtx, baseURL, team.id, opponent.id)
+    // Data no futuro: components/atleta/AtletaPanel.jsx classifica por scheduled_at (ver comentário
+    // lá), não por status — um jogo futuro cai na aba padrão (eager), sem precisar clicar em nada.
+    await createMatch(adminCtx, baseURL, team.id, opponent.id, {
+      scheduled_at: new Date(Date.now() + 7 * 86400000).toISOString(),
+    })
     const account = await registerTestManager(request, baseURL)
     await promoteUserToAtleta(account.userId)
     await linkAthleteToUser(athlete.id, account.userId)
@@ -107,6 +116,31 @@ test.describe('Performance — CLS (reserva de altura no carregamento)', () => {
     await loginPageAs(page, account)
     await page.goto('/atleta/jogos')
 
+    const row = page.getByRole('row', { name: new RegExp(`${team.name} × ${opponent.name}|${opponent.name} × ${team.name}`) })
+    await expect(row).toBeVisible()
+    await page.waitForTimeout(300)
+    expect(await readLayoutShift(page)).toBeLessThan(GOOD_CLS)
+  })
+
+  test('/atleta/jogos (aba Presença) — CLS permanece bom ao trocar o skeleton da aba pela tabela', async ({ page, request, baseURL }) => {
+    const category = CATEGORIES[3]
+    const { team, athlete } = await createFullyApprovedAthlete(request, baseURL, adminCtx, { category })
+    const { team: opponent } = await createFullyApprovedAthlete(request, baseURL, adminCtx, { category })
+    await createMatch(adminCtx, baseURL, team.id, opponent.id, {
+      scheduled_at: new Date(Date.now() - 86400000).toISOString(),
+    })
+    const account = await registerTestManager(request, baseURL)
+    await promoteUserToAtleta(account.userId)
+    await linkAthleteToUser(athlete.id, account.userId)
+
+    await observeLayoutShift(page)
+    await loginPageAs(page, account)
+    await page.goto('/atleta/jogos')
+    await expect(page.getByRole('heading', { name: 'Painel do Atleta' })).toBeVisible()
+    await page.waitForTimeout(1500)
+    await resetLayoutShift(page)
+
+    await page.getByRole('tab', { name: 'Presença' }).click()
     const row = page.getByRole('row', { name: new RegExp(`${team.name} × ${opponent.name}|${opponent.name} × ${team.name}`) })
     await expect(row).toBeVisible()
     await page.waitForTimeout(300)
@@ -177,5 +211,68 @@ test.describe('Performance — code-splitting das abas do GestorPanel (next/dyna
     // os nomes com "x" minúsculo (não "×").
     await expect(page.getByText(`${teamA.name} x ${teamB.name}`)).toBeVisible()
     void match
+  })
+
+  // UX/PERFORMANCE (redesign do painel do atleta, aprovado por mockup): "Próximos jogos" fica no
+  // bundle de AtletaPanel.jsx (eager); "Presença" é components/atleta/tabs/AtletaPresenca.jsx,
+  // carregada só quando a aba é clicada.
+  test('/atleta/jogos — Presença só baixa JS ao clicar na aba', async ({ page, request, baseURL }) => {
+    const category = CATEGORIES[2]
+    const { team, athlete } = await createFullyApprovedAthlete(request, baseURL, adminCtx, { category })
+    const { team: opponent } = await createFullyApprovedAthlete(request, baseURL, adminCtx, { category })
+    await createMatch(adminCtx, baseURL, team.id, opponent.id, {
+      scheduled_at: new Date(Date.now() - 86400000).toISOString(),
+    })
+    const account = await registerTestManager(request, baseURL)
+    await promoteUserToAtleta(account.userId)
+    await linkAthleteToUser(athlete.id, account.userId)
+
+    const chunksSeen = new Set()
+    page.on('response', (response) => {
+      const url = response.url()
+      if (url.includes('/_next/static/chunks/') && url.endsWith('.js')) chunksSeen.add(url)
+    })
+
+    await loginPageAs(page, account)
+    await page.goto('/atleta/jogos')
+    await expect(page.getByRole('heading', { name: 'Painel do Atleta' })).toBeVisible()
+    await expect(page.getByRole('tabpanel').getByText('Próximos jogos', { exact: true })).toBeVisible()
+    const chunksBeforeClick = chunksSeen.size
+
+    await page.getByRole('tab', { name: 'Presença' }).click()
+    const row = page.getByRole('row', { name: new RegExp(`${team.name} × ${opponent.name}|${opponent.name} × ${team.name}`) })
+    await expect(row).toBeVisible()
+    expect(chunksSeen.size, 'clicar em "Presença" deveria baixar o chunk JS próprio dessa aba (next/dynamic)')
+      .toBeGreaterThan(chunksBeforeClick)
+  })
+
+  // UX/PERFORMANCE (redesign do painel do atleta, aprovado por mockup): a classificação é sempre
+  // da categoria da PRÓPRIA equipe do atleta (GET /athletes/me, com a categoria vinda de um JOIN
+  // com teams — ver backend/src/routes/athletes.js), e a aba carrega sob demanda.
+  test('/atleta/jogos — Classificação só baixa JS ao clicar na aba, e mostra a categoria da própria equipe', async ({ page, request, baseURL }) => {
+    // Reaproveita CATEGORIES[1] — Sub-19 Masculino/Feminino (índices 4/5) estão com active=false
+    // no banco local no momento, estado alheio a esta suíte (ver outros testes deste arquivo).
+    const category = CATEGORIES[1]
+    const { team, athlete } = await createFullyApprovedAthlete(request, baseURL, adminCtx, { category })
+    const account = await registerTestManager(request, baseURL)
+    await promoteUserToAtleta(account.userId)
+    await linkAthleteToUser(athlete.id, account.userId)
+
+    const chunksSeen = new Set()
+    page.on('response', (response) => {
+      const url = response.url()
+      if (url.includes('/_next/static/chunks/') && url.endsWith('.js')) chunksSeen.add(url)
+    })
+
+    await loginPageAs(page, account)
+    await page.goto('/atleta/jogos')
+    await expect(page.getByRole('heading', { name: 'Painel do Atleta' })).toBeVisible()
+    const chunksBeforeClick = chunksSeen.size
+
+    await page.getByRole('tab', { name: 'Classificação' }).click()
+    await expect(page.getByText(`Classificação • ${category}`)).toBeVisible()
+    await expect(page.getByRole('row', { name: new RegExp(team.name) })).toBeVisible()
+    expect(chunksSeen.size, 'clicar em "Classificação" deveria baixar o chunk JS próprio dessa aba (next/dynamic)')
+      .toBeGreaterThan(chunksBeforeClick)
   })
 })

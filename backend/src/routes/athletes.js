@@ -305,11 +305,17 @@ athletesRouter.get('/mine', authenticate, authorize('gestor'), asyncRoute(async 
   res.json({ athletes: result.rows.map((athlete) => ({ ...toPublicAthlete(athlete), position: athlete.positions[0] })) })
 }))
 
+// PERFORMANCE/UX (redesign do painel do atleta, aprovado por mockup): a aba Classificação precisa
+// da categoria da PRÓPRIA equipe do atleta — antes esta rota não trazia essa informação nenhuma
+// (só team_id). JOIN com teams, mesmo padrão já usado em POST /rg-lookup logo abaixo, em vez de
+// inferir a categoria de outro lugar.
 athletesRouter.get('/me', authenticate, authorize('atleta'), asyncRoute(async (req, res) => {
   const result = await query(
     `SELECT a.id, a.team_id, a.name, a.birthdate, a.positions, a.status, a.justification,
-      a.biometry_status, a.control_id_reference, a.created_at
-     FROM athletes a WHERE a.user_id = $1 AND a.deleted_at IS NULL ORDER BY a.created_at DESC`,
+      a.biometry_status, a.control_id_reference, a.created_at,
+      t.name AS team_name, t.category
+     FROM athletes a JOIN teams t ON t.id = a.team_id
+     WHERE a.user_id = $1 AND a.deleted_at IS NULL ORDER BY a.created_at DESC`,
     [req.user.id],
   )
   res.json({ athletes: result.rows })

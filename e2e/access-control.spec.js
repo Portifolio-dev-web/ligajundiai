@@ -104,7 +104,7 @@ test.describe('Controle de acesso (middleware.js)', () => {
     await loginPageAs(page, 'atleta')
     await page.goto('/atleta')
     await expect(page).toHaveURL(/\/atleta\/jogos$/)
-    await expect(page.getByText('Jogos e frequência', { exact: true })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Painel do Atleta' })).toBeVisible()
   })
 
   // PERFORMANCE/UX (redesign do painel do gestor, aprovado por mockup): /jogos e /gestor/jogos
@@ -122,7 +122,7 @@ test.describe('Controle de acesso (middleware.js)', () => {
     await loginPageAs(page, 'atleta')
     await page.goto('/jogos')
     await expect(page).toHaveURL(/\/atleta\/jogos$/)
-    await expect(page.getByText('Jogos e frequência', { exact: true })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Painel do Atleta' })).toBeVisible()
   })
 
   test('/gestor/jogos — rota antiga redireciona para o painel (aba Agenda)', async ({ page }) => {
