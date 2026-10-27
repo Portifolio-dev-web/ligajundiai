@@ -34,20 +34,12 @@ import {
   SelectContent,
   SelectItem,
 } from '@/components/ui/select'
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-} from '@/components/ui/dropdown-menu'
 import { toastSuccess, toastError } from '@/lib/toast'
 import {
   Volleyball,
   Trophy,
   CalendarDays,
   LogOut,
-  Menu,
   UserPlus,
   LoaderCircle,
 } from 'lucide-react'
@@ -270,38 +262,17 @@ function TopNav({ user, token, onLoginClick, onLogout }) {
               antes deste componente montar (ver App(), acima), então os links daqui são só do gestor. */}
           {user ? (
             <>
+              {/* PERFORMANCE/UX (mesma mudança do painel do admin): os links de navegação do
+                  gestor (Minha equipe, Aprovar atletas, Agenda, Jogos) saíram daqui — viram abas
+                  dentro do próprio Painel do Gestor (ver components/gestor/GestorPanel.jsx), que é
+                  onde o gestor sempre cai depois do login. Sem links para esconder, o menu mobile
+                  (DropdownMenu) também deixou de ser necessário — "Sair" sozinho cabe nas duas
+                  larguras, então fica sempre visível em vez de duplicado em dois componentes. */}
               <Badge className="hidden sm:inline-flex text-white border-0" style={{ background: RED }}>
                 Gestor de Equipe
               </Badge>
               <span className="hidden sm:block text-sm text-slate-200">{user.name}</span>
-              <a href="/gestor" className="hidden text-sm text-white underline sm:inline">Minha equipe</a>
-              <a href="/gestor/aprovar-atletas" className="hidden text-sm text-white underline sm:inline">Aprovar atletas</a>
-              <a href="/gestor/jogos" className="hidden text-sm text-white underline sm:inline">Agenda</a>
-              <a href="/jogos" className="hidden text-sm text-white underline md:inline">Jogos</a>
-              {/* ACESSIBILIDADE (varredura, item A5): abaixo de sm, todos os links acima ficam
-                  escondidos e não havia nenhum jeito de alcançá-los — quem acessa pelo celular só
-                  via o botão "Sair". Este menu reúne os mesmos links só nessa faixa de largura. */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button size="icon" variant="secondary" className="sm:hidden" aria-label="Abrir menu de navegação">
-                    <Menu className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="sm:hidden">
-                  <div className="px-2 py-1.5 text-sm font-medium">{user.name}</div>
-                  <div className="px-2 pb-1.5 text-xs text-muted-foreground">Gestor de Equipe</div>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem asChild><a href="/gestor">Minha equipe</a></DropdownMenuItem>
-                  <DropdownMenuItem asChild><a href="/gestor/aprovar-atletas">Aprovar atletas</a></DropdownMenuItem>
-                  <DropdownMenuItem asChild><a href="/gestor/jogos">Agenda</a></DropdownMenuItem>
-                  <DropdownMenuItem asChild><a href="/jogos">Jogos</a></DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onSelect={onLogout}>
-                    <LogOut className="h-4 w-4 mr-1" /> Sair
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-              <Button size="sm" variant="secondary" className="hidden sm:inline-flex" onClick={onLogout}>
+              <Button size="sm" variant="secondary" onClick={onLogout}>
                 <LogOut className="h-4 w-4 mr-1" /> Sair
               </Button>
             </>

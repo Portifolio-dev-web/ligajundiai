@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test'
 import {
   loginAsAdmin, loginAsManager, loginPageAs, createApprovedTeam, createAthleteAsManager, createMatch,
   createFullyApprovedAthlete, acceptMatch, registerTestManager, promoteUserToAtleta, linkAthleteToUser,
-  observeLayoutShift, readLayoutShift,
+  observeLayoutShift, readLayoutShift, resetLayoutShift,
   CATEGORIES, closeDb,
 } from './helpers.js'
 
@@ -63,7 +63,18 @@ test.describe('Performance — CLS (reserva de altura no carregamento)', () => {
     expect(await readLayoutShift(page)).toBeLessThan(GOOD_CLS)
   })
 
-  test('/gestor/jogos — CLS permanece bom ao trocar o spinner pela lista de jogos propostos', async ({ page, request, baseURL }) => {
+  // PERFORMANCE/UX (redesign do painel do gestor, aprovado por mockup): /gestor/jogos virou um
+  // redirect (ver app/gestor/jogos/page.jsx) — a lista de jogos propostos agora vive na aba
+  // Agenda, carregada sob demanda (next/dynamic); o salto entre o skeleton de carregamento da aba
+  // (TabLoading, em GestorPanel.jsx) e o card real é o equivalente atual ao que esse teste media.
+  //
+  // ACHADO AO ESCREVER ESTE TESTE: "/" sozinha (antes de qualquer clique) já acumula um CLS de
+  // ~0,4-0,5 só em `next dev` (confirmado com um build de produção local: lá o mesmo fluxo mede
+  // ~0 — é o indicador de build do Next 15 no modo dev, não um bug do app). resetLayoutShift()
+  // zera o acumulador depois que a página assenta e antes do clique, para medir só o que o clique
+  // na aba realmente causa — sem isso, o ruído do dev server faria este teste falhar sempre,
+  // mascarando uma regressão real se uma acontecesse.
+  test('/ (aba Agenda) — CLS permanece bom ao trocar o skeleton da aba pela lista de jogos', async ({ page, request, baseURL }) => {
     const category = CATEGORIES[2]
     const { manager: managerA, team: teamA } = await createApprovedTeam(request, baseURL, adminCtx, { category })
     const { team: teamB } = await createApprovedTeam(request, baseURL, adminCtx, { category })
@@ -71,9 +82,14 @@ test.describe('Performance — CLS (reserva de altura no carregamento)', () => {
 
     await observeLayoutShift(page)
     await loginPageAsManager(page, managerA)
-    await page.goto('/gestor/jogos')
+    await page.goto('/')
+    await expect(page.getByRole('heading', { name: 'Painel do Gestor' })).toBeVisible()
+    await page.waitForTimeout(1500)
+    await resetLayoutShift(page)
 
-    await expect(page.getByText(`${teamA.name} × ${teamB.name}`)).toBeVisible()
+    await page.getByRole('tab', { name: 'Agenda' }).click()
+
+    await expect(page.getByText(`${teamA.name} x ${teamB.name}`)).toBeVisible()
     await page.waitForTimeout(300)
     expect(await readLayoutShift(page)).toBeLessThan(GOOD_CLS)
   })
@@ -97,33 +113,22 @@ test.describe('Performance — CLS (reserva de altura no carregamento)', () => {
     expect(await readLayoutShift(page)).toBeLessThan(GOOD_CLS)
   })
 
-  test('/jogos — mesmo componente (MatchAttendance) também fica com CLS bom para o gestor', async ({ page, request, baseURL }) => {
-    // Reaproveita CATEGORIES[0] (não CATEGORIES[4]/[5] — "Sub-19 Masculino"/"Sub-19 Feminino"
-    // estão com active=false no banco local no momento, estado alheio a esta suíte; reutilizar uma
-    // categoria ativa já usada em outro teste deste arquivo é seguro, ver createApprovedTeam acima).
-    const category = CATEGORIES[0]
-    const { manager: managerA, team: teamA } = await createApprovedTeam(request, baseURL, adminCtx, { category })
-    const { team: teamB } = await createApprovedTeam(request, baseURL, adminCtx, { category })
-    await createMatch(adminCtx, baseURL, teamA.id, teamB.id)
-
-    await observeLayoutShift(page)
-    await loginPageAsManager(page, managerA)
-    await page.goto('/jogos')
-
-    await expect(page.getByText(`${teamA.name} × ${teamB.name}`)).toBeVisible()
-    await page.waitForTimeout(300)
-    expect(await readLayoutShift(page)).toBeLessThan(GOOD_CLS)
-  })
+  // PERFORMANCE/UX (redesign do painel do gestor, aprovado por mockup): /jogos agora redireciona
+  // todo mundo para /atleta/jogos (ver app/jogos/page.jsx) — um gestor que caia lá é barrado pelo
+  // middleware.js (role mismatch) e volta para /gestor, então não há mais conteúdo de gestor
+  // nessa rota para medir CLS; a cobertura de controle de acesso fica em access-control.spec.js.
 })
 
 test.describe('Performance — code-splitting das abas do GestorPanel (next/dynamic)', () => {
-  test('/ — Frequência, Classificação e Agenda só baixam JS ao clicar na aba', async ({ page, request, baseURL }) => {
+  test('/ — Aprovar atletas, Frequência, Classificação e Agenda só baixam JS ao clicar na aba', async ({ page, request, baseURL }) => {
     const category = CATEGORIES[1]
     const { manager: managerA, team: teamA } = await createApprovedTeam(request, baseURL, adminCtx, { category })
     const { team: teamB } = await createApprovedTeam(request, baseURL, adminCtx, { category })
     const match = await createMatch(adminCtx, baseURL, teamA.id, teamB.id)
     const managerCtxA = await loginAsManager(baseURL, managerA)
     await acceptMatch(managerCtxA, baseURL, match.id)
+    const pendingAthleteName = `Atleta Pendente Perf ${Date.now()}`
+    await createAthleteAsManager(managerCtxA, baseURL, teamA.id, { name: pendingAthleteName })
     await managerCtxA.dispose()
 
     const chunksSeen = new Set()
@@ -138,13 +143,22 @@ test.describe('Performance — code-splitting das abas do GestorPanel (next/dyna
     // Elenco é a aba padrão (eager) — já deve estar renderizada sem precisar clicar em nada.
     // Escopado ao tabpanel porque "Elenco" também é o texto do próprio TabsTrigger.
     await expect(page.getByRole('tabpanel').getByText('Elenco', { exact: true })).toBeVisible()
+    // A contagem de pendentes (bolinha vermelha) carrega junto com o Elenco, sem precisar clicar
+    // na aba "Aprovar atletas" — confirma que o número aparece assim que os dados chegam.
+    await expect(page.getByRole('tab', { name: /Aprovar atletas/ }).getByText('1', { exact: true })).toBeVisible()
     const chunksBeforeClick = chunksSeen.size
+
+    await page.getByRole('tab', { name: /Aprovar atletas/ }).click()
+    await expect(page.getByText(pendingAthleteName)).toBeVisible()
+    const chunksAfterAprovar = chunksSeen.size
+    expect(chunksAfterAprovar, 'clicar em "Aprovar atletas" deveria baixar o chunk JS próprio dessa aba (next/dynamic)')
+      .toBeGreaterThan(chunksBeforeClick)
 
     await page.getByRole('tab', { name: 'Frequência' }).click()
     await expect(page.getByText('Frequência (presença)')).toBeVisible()
     const chunksAfterFrequencia = chunksSeen.size
     expect(chunksAfterFrequencia, 'clicar em "Frequência" deveria baixar o chunk JS próprio dessa aba (next/dynamic)')
-      .toBeGreaterThan(chunksBeforeClick)
+      .toBeGreaterThan(chunksAfterAprovar)
 
     await page.getByRole('tab', { name: 'Classificação' }).click()
     await expect(page.getByText(`Classificação • ${category}`)).toBeVisible()
@@ -159,8 +173,8 @@ test.describe('Performance — code-splitting das abas do GestorPanel (next/dyna
       .toBeGreaterThan(chunksAfterClassificacao)
 
     // A aba lazy também precisa funcionar de verdade, não só renderizar: aceitar a data aqui
-    // confirma que o chunk sob demanda não quebrou a ação real contra a API. GestorAgenda usa "x"
-    // minúsculo entre os nomes (diferente do "×" usado em app/gestor/jogos/page.jsx).
+    // confirma que o chunk sob demanda não quebrou a ação real contra a API. GestorAgenda junta
+    // os nomes com "x" minúsculo (não "×").
     await expect(page.getByText(`${teamA.name} x ${teamB.name}`)).toBeVisible()
     void match
   })

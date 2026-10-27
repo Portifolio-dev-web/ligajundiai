@@ -73,9 +73,11 @@ export default function MatchAttendance({ expectedRole }) {
 
   return (
     <main className="mx-auto min-h-screen max-w-6xl space-y-6 px-4 py-10">
-      {/* Esta é a home do painel do atleta (e a tela de jogos do gestor) — sem link para "/":
-          Sair (components/LogoutButton.jsx) é o único caminho de volta ao site público, para
-          manter a sessão protegida enquanto dentro do painel. */}
+      {/* Esta é a home do painel do atleta (/atleta/jogos) — sem link para "/": Sair
+          (components/LogoutButton.jsx) é o único caminho de volta ao site público, para manter a
+          sessão protegida enquanto dentro do painel. O gestor não chega mais aqui: /jogos e
+          /gestor/jogos agora só redirecionam (ver app/jogos/page.jsx e app/gestor/jogos/page.jsx);
+          o papel "gestor" tratado abaixo é vestigial, mantido só porque é inofensivo. */}
       <div className="flex items-center justify-end gap-2">
         <HelpLink />
         <LogoutButton />

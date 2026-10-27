@@ -5,7 +5,6 @@ export default function sitemap() {
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
   const routes = [
     { path: '/', priority: 1 },
-    { path: '/jogos', priority: 0.8 },
     { path: '/cadastro-atleta', priority: 0.6 },
     { path: '/ajuda', priority: 0.4 },
     { path: '/privacidade', priority: 0.3 },

@@ -49,6 +49,7 @@ function TabLoading() {
 const GestorFrequency = dynamic(() => import('@/components/gestor/tabs/GestorFrequency'), { loading: TabLoading })
 const GestorStandings = dynamic(() => import('@/components/gestor/tabs/GestorStandings'), { loading: TabLoading })
 const GestorAgenda = dynamic(() => import('@/components/gestor/tabs/GestorAgenda'), { loading: TabLoading })
+const GestorApproveAthletes = dynamic(() => import('@/components/gestor/tabs/GestorApproveAthletes'), { loading: TabLoading })
 
 // ============================================================================
 // GESTOR PANEL
@@ -77,6 +78,18 @@ export default function GestorPanel({ token, categories, user, myTeams, refreshM
     period.category === teamForm.category && period.registration_type === 'team'
   ))
   const teamRegistrationOpen = teamPeriod?.status === 'open'
+
+  // UX (redesign do painel, aprovado por mockup): o elenco agora é carregado aqui, não mais dentro
+  // de GestorRoster — tanto a aba Elenco quanto a nova aba "Aprovar atletas" (fila só de
+  // pendentes) precisam da mesma lista, e o número de pendentes também vira o contador da aba.
+  // Uma chamada só em vez de duas evita refazer a mesma requisição em dois componentes.
+  const [athletes, setAthletes] = useState([])
+  const loadAthletes = useCallback(() => {
+    if (!activeTeam) return
+    api(`/athletes/mine?team_id=${activeTeam.id}`, { token }).then((d) => setAthletes(d.athletes || [])).catch(() => {})
+  }, [token, activeTeam])
+  useEffect(() => { loadAthletes() }, [loadAthletes])
+  const pendingAthleteCount = athletes.filter((a) => a.status === 'awaiting_manager').length
 
   const createTeam = async () => {
     if (!teamRegistrationOpen) {
@@ -130,17 +143,33 @@ export default function GestorPanel({ token, categories, user, myTeams, refreshM
             </CardContent>
           </Card>
 
+          {/* PERFORMANCE/UX (redesign do painel, mesma correção aplicada no /admin): com 5 abas —
+              uma a mais desde que "Aprovar atletas" entrou — a faixa ganha rolagem horizontal numa
+              linha só em vez de quebrar em várias linhas no mobile; shrink-0 em cada aba evita que
+              o texto fique espremido dentro do contêiner que rola. */}
           <Tabs defaultValue="elenco" key={activeTeam.id}>
-            <TabsList>
-              <TabsTrigger value="elenco">Elenco</TabsTrigger>
-              <TabsTrigger value="frequencia">Frequência</TabsTrigger>
-              <TabsTrigger value="classificacao">Classificação</TabsTrigger>
-              <TabsTrigger value="agenda">Agenda</TabsTrigger>
+            <TabsList className="flex w-full flex-nowrap justify-start gap-1 overflow-x-auto">
+              <TabsTrigger value="elenco" className="shrink-0">Elenco</TabsTrigger>
+              <TabsTrigger value="aprovar-atletas" className="shrink-0 gap-1.5">
+                Aprovar atletas
+                {pendingAthleteCount > 0 && (
+                  <span
+                    className="inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white"
+                    style={{ background: RED }}
+                  >
+                    {pendingAthleteCount}
+                  </span>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="frequencia" className="shrink-0">Frequência</TabsTrigger>
+              <TabsTrigger value="agenda" className="shrink-0">Agenda</TabsTrigger>
+              <TabsTrigger value="classificacao" className="shrink-0">Classificação</TabsTrigger>
             </TabsList>
-            <TabsContent value="elenco"><GestorRoster token={token} team={activeTeam} /></TabsContent>
+            <TabsContent value="elenco"><GestorRoster token={token} team={activeTeam} athletes={athletes} reload={loadAthletes} /></TabsContent>
+            <TabsContent value="aprovar-atletas"><GestorApproveAthletes token={token} athletes={athletes} reload={loadAthletes} /></TabsContent>
             <TabsContent value="frequencia"><GestorFrequency token={token} teamId={activeTeam.id} /></TabsContent>
-            <TabsContent value="classificacao"><GestorStandings token={token} category={activeTeam.category} /></TabsContent>
             <TabsContent value="agenda"><GestorAgenda category={activeTeam.category} token={token} team={activeTeam} /></TabsContent>
+            <TabsContent value="classificacao"><GestorStandings token={token} category={activeTeam.category} /></TabsContent>
           </Tabs>
         </>}
       </>}
@@ -187,8 +216,7 @@ export default function GestorPanel({ token, categories, user, myTeams, refreshM
   )
 }
 
-function GestorRoster({ token, team }) {
-  const [athletes, setAthletes] = useState([])
+function GestorRoster({ token, team, athletes, reload }) {
   const [athletePeriod, setAthletePeriod] = useState(null)
   const [loadingAthletePeriod, setLoadingAthletePeriod] = useState(true)
   // LGPD (varredura, item L2): guardianName/guardianRg/guardianRelationship só são obrigatórios
@@ -214,11 +242,6 @@ function GestorRoster({ token, team }) {
   const isMinor = athleteAge !== null && athleteAge < 18
   const validGuardianRg = isValidRg(form.guardianRg)
 
-  const load = useCallback(() => {
-    // Risco 1 (varredura, análise LVJ 2027): o elenco mostrado aqui é só da equipe ativa.
-    api(`/athletes/mine?team_id=${team.id}`, { token }).then((d) => setAthletes(d.athletes || [])).catch(() => {})
-  }, [token, team.id])
-  useEffect(load, [load])
   useEffect(() => {
     api('/registration-periods')
       .then((result) => {
@@ -274,7 +297,7 @@ function GestorRoster({ token, team }) {
         biometricConsent: false,
         guardianName: '', guardianRg: '', guardianRelationship: '',
       })
-      load()
+      reload()
     } catch (e) {
       setAddError(e.message)
       nameInputRef.current?.focus()
@@ -288,7 +311,7 @@ function GestorRoster({ token, team }) {
       toastSuccess(action === 'approve' ? 'Atleta encaminhado para aprovação final.' : 'Cadastro do atleta recusado.')
       setRejectId(null)
       setJustification('')
-      load()
+      reload()
     } catch (e) {
       toastError(e.message)
     }
@@ -300,7 +323,12 @@ function GestorRoster({ token, team }) {
         <CardTitle>Elenco</CardTitle>
         <CardDescription>Os cadastros passam primeiro pela aprovação do gestor e depois pela aprovação final do administrador.</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
+      {/* PERFORMANCE (achado ao escrever o teste e2e desta rodada — mesma correção do item 5 da
+          varredura original): "Verificando o período…" (uma linha) virava o formulário completo
+          de cadastro assim que loadingAthletePeriod resolvia, sem altura reservada — um salto
+          grande o bastante para empurrar o rodapé da página inteira (CLS medido: ~0,43, acima do
+          limite "bom" de 0,1). min-h absorve a troca. */}
+      <CardContent className="space-y-4 min-h-[420px]">
         {team.status === 'approved' && loadingAthletePeriod ? (
           <div role="status" className="rounded-lg border p-3 text-sm text-slate-600">Verificando o período de cadastro de atletas…</div>
         ) : team.status === 'approved' && athletePeriod?.status === 'open' ? (

@@ -40,7 +40,6 @@ test.describe('Controle de acesso (middleware.js)', () => {
     { path: '/admin', role: 'admin', ownHome: '/admin' },
     { path: '/gestor', role: 'gestor', ownHome: '/gestor' },
     { path: '/gestor/aprovar-atletas', role: 'gestor', ownHome: '/gestor' },
-    { path: '/gestor/jogos', role: 'gestor', ownHome: '/gestor' },
     { path: '/atleta', role: 'atleta', ownHome: '/atleta' },
     { path: '/atleta/jogos', role: 'atleta', ownHome: '/atleta' },
   ]
@@ -108,18 +107,29 @@ test.describe('Controle de acesso (middleware.js)', () => {
     await expect(page.getByText('Jogos e frequência', { exact: true })).toBeVisible()
   })
 
-  test('/jogos — gestor autenticado acessa', async ({ page }) => {
+  // PERFORMANCE/UX (redesign do painel do gestor, aprovado por mockup): /jogos e /gestor/jogos
+  // agora só redirecionam (ver app/jogos/page.jsx e app/gestor/jogos/page.jsx) — a função das duas
+  // rotas migrou para a aba "Agenda" dentro do Painel do Gestor.
+  test('/jogos — gestor autenticado é redirecionado para o próprio painel', async ({ page }) => {
     await loginPageAs(page, 'gestor')
     await page.goto('/jogos')
-    await expect(page).toHaveURL(/\/jogos$/)
+    // /jogos redireciona para /atleta/jogos; como quem chegou é um gestor (papel errado para
+    // /atleta/jogos), o middleware.js intercepta e manda de volta para a própria home do gestor.
+    await expect(page).toHaveURL(/\/gestor$/)
+  })
+
+  test('/jogos — atleta autenticado é redirecionado para /atleta/jogos', async ({ page }) => {
+    await loginPageAs(page, 'atleta')
+    await page.goto('/jogos')
+    await expect(page).toHaveURL(/\/atleta\/jogos$/)
     await expect(page.getByText('Jogos e frequência', { exact: true })).toBeVisible()
   })
 
-  test('/jogos — atleta autenticado acessa', async ({ page }) => {
-    await loginPageAs(page, 'atleta')
-    await page.goto('/jogos')
-    await expect(page).toHaveURL(/\/jogos$/)
-    await expect(page.getByText('Jogos e frequência', { exact: true })).toBeVisible()
+  test('/gestor/jogos — rota antiga redireciona para o painel (aba Agenda)', async ({ page }) => {
+    await loginPageAs(page, 'gestor')
+    await page.goto('/gestor/jogos')
+    await expect(page).toHaveURL(/\/$/)
+    await expect(page.getByRole('heading', { name: 'Painel do Gestor' })).toBeVisible()
   })
 
   test('/ — admin autenticado é redirecionado automaticamente para /admin', async ({ page }) => {

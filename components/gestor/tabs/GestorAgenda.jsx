@@ -58,8 +58,21 @@ export default function GestorAgenda({ category, token, team }) {
               </div>
               <div className="flex items-center gap-2">
                 <StatusBadge status={m.status} />
-                {m.status === 'proposed' && [m.home_team_id, m.away_team_id].includes(team?.id) && (
+                {/* CORREÇÃO (migração da rota /gestor/jogos para esta aba): a rota antiga escondia
+                    o botão assim que ESTA equipe já tinha aceitado (home_accepted_at/
+                    away_accepted_at), mesmo com o jogo ainda "proposed" esperando o outro lado —
+                    esta aba não checava isso e deixava "Aceitar data" clicável de novo. */}
+                {m.status === 'proposed' && m.home_team_id === team?.id && !m.home_accepted_at && (
                   <Button size="sm" onClick={() => accept(m.id)}>Aceitar data</Button>
+                )}
+                {m.status === 'proposed' && m.away_team_id === team?.id && !m.away_accepted_at && (
+                  <Button size="sm" onClick={() => accept(m.id)}>Aceitar data</Button>
+                )}
+                {m.status === 'proposed' && (
+                  (m.home_team_id === team?.id && m.home_accepted_at) ||
+                  (m.away_team_id === team?.id && m.away_accepted_at)
+                ) && (
+                  <span className="text-xs text-slate-500">Seu aceite foi registrado</span>
                 )}
               </div>
             </div>

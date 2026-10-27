@@ -281,3 +281,9 @@ export async function observeLayoutShift(page) {
 export async function readLayoutShift(page) {
   return page.evaluate(() => window.__cls ?? 0)
 }
+
+// Zera o acumulador — útil para medir só o CLS de UMA interação (ex.: clicar numa aba), sem o
+// ruído de qualquer coisa que tenha acontecido antes (carregamento inicial da página, etc.).
+export async function resetLayoutShift(page) {
+  await page.evaluate(() => { window.__cls = 0 })
+}
