@@ -24,6 +24,11 @@ const schema = z.object({
   S3_PUBLIC_ENDPOINT: z.string().url(),
   S3_REGION: z.string().default('us-east-1'),
   S3_BUCKET: z.string().min(3),
+  // SEGURANÇA: bucket separado do S3_BUCKET (biometria, dado sensível). Fica no mesmo serviço de
+  // armazenamento, mas logos de patrocinador não têm nenhuma das proteções que a biometria exige
+  // (sem chave assinada de leitura, sem metadata de dono) — misturar os dois no mesmo bucket
+  // deixaria fácil uma política futura (ex.: leitura pública para um, por engano para o outro).
+  S3_PUBLIC_BUCKET: z.string().min(3).default('lvj-public'),
   S3_ACCESS_KEY: z.string().min(1),
   S3_SECRET_KEY: z.string().min(1),
   CONTROL_ID_MODE: z.enum(['simulation', 'live']).default('simulation'),

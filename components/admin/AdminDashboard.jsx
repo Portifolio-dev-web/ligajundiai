@@ -46,6 +46,7 @@ const AdminRegistrationPeriods = dynamic(() => import('@/components/admin/tabs/A
 const RulesEngine = dynamic(() => import('@/components/admin/tabs/RulesEngine'), { loading: TabLoading })
 const AdminStandings = dynamic(() => import('@/components/admin/tabs/AdminStandings'), { loading: TabLoading })
 const AdminCategories = dynamic(() => import('@/components/admin/tabs/AdminCategories'), { loading: TabLoading })
+const AdminSponsors = dynamic(() => import('@/components/admin/tabs/AdminSponsors'), { loading: TabLoading })
 const AdminEmails = dynamic(() => import('@/components/admin/tabs/AdminEmails'), { loading: TabLoading })
 const AdminAccountSecurity = dynamic(() => import('@/components/admin/tabs/AdminAccountSecurity'), { loading: TabLoading })
 
@@ -55,7 +56,7 @@ const AdminAccountSecurity = dynamic(() => import('@/components/admin/tabs/Admin
 // cai para 3 itens; o 2º nível só mostra as abas do grupo ativo.
 const TAB_GROUPS = [
   { key: 'operacao', label: 'Operação', tabs: ['equipes', 'atletas', 'jogos', 'datas', 'presenca', 'classificacao'] },
-  { key: 'configuracao', label: 'Configuração', tabs: ['categorias', 'regulamento', 'inscricoes'] },
+  { key: 'configuracao', label: 'Configuração', tabs: ['categorias', 'patrocinio', 'regulamento', 'inscricoes'] },
   { key: 'sistema', label: 'Sistema', tabs: ['emails', 'seguranca'] },
 ]
 const TAB_LABELS = {
@@ -66,6 +67,7 @@ const TAB_LABELS = {
   presenca: 'Presença',
   classificacao: 'Classificação',
   categorias: 'Categorias',
+  patrocinio: 'Patrocínio',
   regulamento: 'Regulamento',
   inscricoes: 'Inscrições',
   emails: 'E-mails',
@@ -179,6 +181,7 @@ export default function AdminDashboard() {
         <TabsContent value="presenca"><AdminAttendance categories={categories} /></TabsContent>
         <TabsContent value="inscricoes"><AdminRegistrationPeriods /></TabsContent>
         <TabsContent value="categorias"><AdminCategories onCategoriesChanged={loadCategories} /></TabsContent>
+        <TabsContent value="patrocinio"><AdminSponsors /></TabsContent>
         <TabsContent value="regulamento"><RulesEngine /></TabsContent>
         <TabsContent value="classificacao"><AdminStandings categories={categories} /></TabsContent>
         <TabsContent value="emails"><AdminEmails /></TabsContent>
