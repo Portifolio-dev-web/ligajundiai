@@ -45,6 +45,8 @@ import { api, CATEGORY_FALLBACK } from '@/lib/lvjApi'
 import { SponsorFlipCards } from '@/components/SponsorFlipCards'
 import { SponsorVerticalTicker } from '@/components/SponsorVerticalTicker'
 import { SponsorCoverFlow } from '@/components/SponsorCoverFlow'
+import { AboutSection } from '@/components/AboutSection'
+import { SponsorCtaSection } from '@/components/SponsorCtaSection'
 // Paleta alinhada ao logo oficial da LVJ (marinho + vermelho + azul da bola) — compartilhada com
 // components/standings.jsx e components/admin/AdminDashboard.jsx, por isso vive em lib/theme.js.
 import { BLUE, RED, NAVY } from '@/lib/theme'
@@ -387,6 +389,8 @@ function PublicSite({ categories, currentYear, onLoginClick }) {
         </div>
       </section>
 
+      <AboutSection />
+
       {/* SPONSOR STRIP */}
       <section className="border-y bg-white">
         <div className="container py-6">
@@ -518,6 +522,8 @@ function PublicSite({ categories, currentYear, onLoginClick }) {
           </div>
         </div>
       </section>
+
+      <SponsorCtaSection />
     </div>
   )
 }
