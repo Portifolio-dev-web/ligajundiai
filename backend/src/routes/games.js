@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { query, transaction } from '../db/pool.js'
 import { AppError, forbidden, notFound } from '../errors.js'
-import { authenticate, authorize } from '../security/auth.js'
+import { authenticate, authorize, requireCurrentConsent } from '../security/auth.js'
 import { cleanText, parse, uuidSchema } from '../security/validation.js'
 import { asyncRoute, audit, notify } from '../utils.js'
 import { assertValidCategory, listCategoryNames, lockCategoryName } from '../services/categories.js'
@@ -28,7 +28,7 @@ matchesRouter.get('/', asyncRoute(async (req, res) => {
   res.json({ matches: result.rows })
 }))
 
-adminGamesRouter.use(authenticate, authorize('admin'))
+adminGamesRouter.use(authenticate, authorize('admin'), requireCurrentConsent)
 adminGamesRouter.post('/game-dates', asyncRoute(async (req, res) => {
   const input = parse(z.object({
     available_at: z.string().datetime(),
@@ -141,7 +141,7 @@ adminGamesRouter.put('/matches/:matchId/result', asyncRoute(async (req, res) => 
   res.json({ match: result.rows[0] })
 }))
 
-gestorGamesRouter.use(authenticate, authorize('gestor'))
+gestorGamesRouter.use(authenticate, authorize('gestor'), requireCurrentConsent)
 gestorGamesRouter.post('/:matchId/accept', asyncRoute(async (req, res) => {
   const match = await transaction(async (client) => {
     // Risco 1 (varredura, análise LVJ 2027): um gestor pode ter mais de uma equipe aprovada,
@@ -242,7 +242,7 @@ adminRulesRouter.get('/', asyncRoute(async (_req, res) => {
   res.json({ rules: result.rows[0] ?? null })
 }))
 
-adminRulesRouter.put('/', authenticate, authorize('admin'), asyncRoute(async (req, res) => {
+adminRulesRouter.put('/', authenticate, authorize('admin'), requireCurrentConsent, asyncRoute(async (req, res) => {
   const input = parse(z.object({
     points: z.record(z.string(), z.number().int().min(0).max(10)),
     tiebreakers: z.array(z.enum(['points', 'wins', 'sets_ratio', 'points_ratio'])).min(1).max(4),

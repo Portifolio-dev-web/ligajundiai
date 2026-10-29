@@ -11,6 +11,10 @@ import { config } from '../config.js'
 import { exportRateLimit } from '../security/rate-limit.js'
 
 export const privacyRouter = Router()
+// LGPD: deliberadamente SEM requireCurrentConsent (ver security/auth.js) — o direito de exportar
+// ou excluir os próprios dados não pode depender de aceitar uma versão nova da Política/Termos
+// primeiro. Bloquear isso até o reconsentimento transformaria o próprio mecanismo de proteção da
+// LGPD numa forma de reter a pessoa no sistema contra a vontade dela.
 privacyRouter.use(authenticate)
 
 // SEGURANÇA (varredura, item S16): antes só exigia sessão válida — uma sessão vazada/roubada

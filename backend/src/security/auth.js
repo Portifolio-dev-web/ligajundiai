@@ -93,6 +93,22 @@ export function authorize(...roles) {
   }
 }
 
+// SEGURANÇA (LGPD): consent_outdated (GET /auth/me) era só informativo — nenhuma rota de fato
+// bloqueava o acesso de quem não reconsentiu com a versão atual da Política/Termos, apesar do
+// comentário do item L10 dizer que essa era a intenção ("o front pede reconsentimento explícito
+// antes de continuar"). Aplicado depois de `authenticate` em todo router autenticado, EXCETO:
+// authRouter (GET /me e POST /reconsent precisam ficar acessíveis para a pessoa ver o status e
+// reconsentir; POST /logout também) e privacyRouter (o direito de exportar/excluir os próprios
+// dados da LGPD não pode depender de aceitar uma política nova primeiro — bloquear isso seria
+// pior que o problema original).
+export function requireCurrentConsent(req, _res, next) {
+  if (!req.user) return next(unauthorized())
+  if (req.user.consent_version !== config.CONSENT_VERSION) {
+    return next(new AppError(403, 'CONSENT_OUTDATED', 'É necessário reconsentir com a versão atual da Política/Termos antes de continuar'))
+  }
+  next()
+}
+
 export async function hashPassword(password) {
   return argon2.hash(password, { type: argon2.argon2id, memoryCost: 19456, timeCost: 2, parallelism: 1 })
 }

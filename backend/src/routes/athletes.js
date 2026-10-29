@@ -3,11 +3,11 @@ import { z } from 'zod'
 import { config } from '../config.js'
 import { query, transaction } from '../db/pool.js'
 import { AppError, notFound } from '../errors.js'
-import { authenticate, authorize, createSession, hashPassword } from '../security/auth.js'
+import { authenticate, authorize, createSession, hashPassword, requireCurrentConsent } from '../security/auth.js'
 import { rgDigest, encryptSensitive, maskRg } from '../security/crypto.js'
 import { cleanText, emailSchema, justificationSchema, parse, requireValidRg, validatePositions, uuidSchema } from '../security/validation.js'
 import { enqueueEmail, escapeHtml } from '../services/email.js'
-import { createBiometryUpload } from '../services/storage.js'
+import { createBiometryReadUrl, createBiometryUpload, verifyBiometryObject } from '../services/storage.js'
 import { assertRegistrationOpen } from '../services/registration.js'
 import { IMAGE_USE_TERM, MINOR_GUARDIAN_TERM, consentTextHash } from '../services/legalTexts.js'
 import { asyncRoute, audit, notify, toPublicAthlete, teamForManager, userTeams } from '../utils.js'
@@ -36,6 +36,9 @@ async function createAthlete(client, { userId, managerId, team, input, actor, ip
   const key = input.biometry_key || null
   if (key && !key.startsWith(`biometry/${managerId}/`)) {
     throw new AppError(400, 'INVALID_BIOMETRY_KEY', 'A chave de biometria não pertence a esta equipe')
+  }
+  if (key && !(await verifyBiometryObject(key, managerId))) {
+    throw new AppError(400, 'BIOMETRY_NOT_FOUND', 'O envio da foto não foi concluído ou expirou. Capture a foto novamente.')
   }
   // LGPD (varredura, item L4): a foto biométrica é dado sensível (art. 11, I) — precisa de um
   // consentimento específico e destacado, não só o aceite genérico da Política/Termos (input.consent).
@@ -136,7 +139,7 @@ async function createAthlete(client, { userId, managerId, team, input, actor, ip
   return athlete
 }
 
-athletesRouter.post('/biometry-upload', authenticate, authorize('gestor'), asyncRoute(async (req, res) => {
+athletesRouter.post('/biometry-upload', authenticate, authorize('gestor'), requireCurrentConsent, asyncRoute(async (req, res) => {
   const input = parse(z.object({
     team_id: uuidSchema,
     content_type: z.enum(['image/jpeg', 'image/png', 'image/webp']),
@@ -171,7 +174,7 @@ athletesRouter.post('/biometry-upload-public', authRateLimit, asyncRoute(async (
   res.status(201).json(upload)
 }))
 
-athletesRouter.post('/', authenticate, authorize('gestor'), asyncRoute(async (req, res) => {
+athletesRouter.post('/', authenticate, authorize('gestor'), requireCurrentConsent, asyncRoute(async (req, res) => {
   const input = parse(z.object({
     team_id: uuidSchema,
     name: z.string().trim().min(2).max(120),
@@ -285,7 +288,7 @@ athletesRouter.post('/self-register', authRateLimit, asyncRoute(async (req, res)
   res.status(201).json({ user: result.user, athlete: toPublicAthlete(result.athlete) })
 }))
 
-athletesRouter.get('/mine', authenticate, authorize('gestor'), asyncRoute(async (req, res) => {
+athletesRouter.get('/mine', authenticate, authorize('gestor'), requireCurrentConsent, asyncRoute(async (req, res) => {
   // Risco 1 (varredura, análise LVJ 2027): sem team_id na query, lista o elenco de TODAS as
   // equipes do gestor; com team_id, filtra para uma delas (confirmando que é dele).
   const teamId = req.query.team_id ? parse(uuidSchema, req.query.team_id) : null
@@ -309,7 +312,7 @@ athletesRouter.get('/mine', authenticate, authorize('gestor'), asyncRoute(async 
 // da categoria da PRÓPRIA equipe do atleta — antes esta rota não trazia essa informação nenhuma
 // (só team_id). JOIN com teams, mesmo padrão já usado em POST /rg-lookup logo abaixo, em vez de
 // inferir a categoria de outro lugar.
-athletesRouter.get('/me', authenticate, authorize('atleta'), asyncRoute(async (req, res) => {
+athletesRouter.get('/me', authenticate, authorize('atleta'), requireCurrentConsent, asyncRoute(async (req, res) => {
   const result = await query(
     `SELECT a.id, a.team_id, a.name, a.birthdate, a.positions, a.status, a.justification,
       a.biometry_status, a.control_id_reference, a.created_at,
@@ -325,7 +328,7 @@ athletesRouter.get('/me', authenticate, authorize('atleta'), asyncRoute(async (r
 // ficava em log de proxy/servidor e no histórico do navegador, mesmo autenticado. Virou POST com o
 // documento no corpo da requisição, igual ao resto da API já fazia para outros dados sensíveis.
 // Decisão (análise LVJ 2027, risco 1): /cpf-lookup virou /rg-lookup com a troca de CPF por RG.
-athletesRouter.post('/rg-lookup', authenticate, authorize('admin', 'gestor'), asyncRoute(async (req, res) => {
+athletesRouter.post('/rg-lookup', authenticate, authorize('admin', 'gestor'), requireCurrentConsent, asyncRoute(async (req, res) => {
   const input = parse(z.object({ rg: z.string().min(1).max(20) }).strict(), req.body)
   const rg = requireValidRg(input.rg)
   const result = await query(
@@ -340,7 +343,7 @@ athletesRouter.post('/rg-lookup', authenticate, authorize('admin', 'gestor'), as
   res.json({ rg: maskRg(rg), registrations: result.rows })
 }))
 
-gestorAthletesRouter.use(authenticate, authorize('gestor'))
+gestorAthletesRouter.use(authenticate, authorize('gestor'), requireCurrentConsent)
 gestorAthletesRouter.get('/', asyncRoute(async (req, res) => {
   const status = req.query.status ? String(req.query.status) : 'awaiting_manager'
   if (!['awaiting_manager', 'awaiting_admin', 'approved', 'rejected'].includes(status)) {
@@ -355,14 +358,20 @@ gestorAthletesRouter.get('/', asyncRoute(async (req, res) => {
     // LGPD (varredura, item L2): guardian_name/guardian_relationship aparecem aqui para o gestor
     // confirmar, na hora de aprovar, que um atleta menor de idade tem responsável identificado.
     `SELECT a.id, a.name, a.birthdate, a.age_at_registration, a.positions,
-       a.status, a.justification, a.biometry_status, a.created_at, a.team_id, t.name AS team_name,
-       a.guardian_name, a.guardian_relationship
+       a.status, a.justification, a.biometry_status, a.biometry_object_key, a.created_at, a.team_id,
+       t.name AS team_name, a.guardian_name, a.guardian_relationship
      FROM athletes a JOIN teams t ON t.id = a.team_id
      WHERE a.team_id = ANY($1::uuid[]) AND a.status = $2 AND a.deleted_at IS NULL
      ORDER BY a.created_at DESC`,
     [teams.map((team) => team.id), status],
   )
-  res.json({ athletes: result.rows })
+  // SEGURANÇA (varredura, item 9): o gestor precisa poder ver a foto antes de aprovar — sem isso,
+  // a aprovação em duas etapas não tinha como detectar uma biometria errada ou incompatível.
+  const athletes = await Promise.all(result.rows.map(async ({ biometry_object_key, ...athlete }) => ({
+    ...athlete,
+    biometry_preview_url: biometry_object_key ? await createBiometryReadUrl(biometry_object_key) : null,
+  })))
+  res.json({ athletes })
 }))
 
 gestorAthletesRouter.post('/:athleteId/:action', asyncRoute(async (req, res) => {
@@ -408,7 +417,7 @@ gestorAthletesRouter.post('/:athleteId/:action', asyncRoute(async (req, res) => 
 }))
 
 export const adminAthleteActionsRouter = Router()
-adminAthleteActionsRouter.use(authenticate, authorize('admin'))
+adminAthleteActionsRouter.use(authenticate, authorize('admin'), requireCurrentConsent)
 adminAthleteActionsRouter.get('/', asyncRoute(async (req, res) => {
   const statusFilter = req.query.status === 'pending' ? 'awaiting_admin' : req.query.status || null
   if (statusFilter && !['awaiting_admin', 'awaiting_manager', 'approved', 'rejected'].includes(statusFilter)) {
@@ -419,8 +428,8 @@ adminAthleteActionsRouter.get('/', asyncRoute(async (req, res) => {
     // legal de um atleta menor de idade antes de aprovar (toPublicAthlete mascara o RG dele).
     `SELECT a.id, a.user_id, a.team_id, a.manager_user_id, a.name, a.birthdate,
        a.age_at_registration, a.positions, a.status, a.justification, a.biometry_url,
-       a.biometry_status, a.control_id_reference, a.created_at, a.rg_ciphertext, t.name AS team_name,
-       t.category, u.name AS manager_name, u.email AS manager_email,
+       a.biometry_status, a.biometry_object_key, a.control_id_reference, a.created_at,
+       a.rg_ciphertext, t.name AS team_name, t.category, u.name AS manager_name, u.email AS manager_email,
        a.guardian_name, a.guardian_rg_ciphertext, a.guardian_relationship
      FROM athletes a JOIN teams t ON t.id = a.team_id
      JOIN users u ON u.id = a.manager_user_id
@@ -428,7 +437,16 @@ adminAthleteActionsRouter.get('/', asyncRoute(async (req, res) => {
      ORDER BY a.created_at DESC`,
     [statusFilter],
   )
-  res.json({ athletes: result.rows.map(toPublicAthlete) })
+  // SEGURANÇA (varredura, item 9): mesma lógica do gestor acima — a aprovação final também
+  // precisa de uma forma de visualizar a foto, não só confiar no status reportado.
+  const athletes = await Promise.all(result.rows.map(async (row) => {
+    const { biometry_object_key, ...publicAthlete } = toPublicAthlete(row)
+    return {
+      ...publicAthlete,
+      biometry_preview_url: biometry_object_key ? await createBiometryReadUrl(biometry_object_key) : null,
+    }
+  }))
+  res.json({ athletes })
 }))
 
 adminAthleteActionsRouter.post('/:athleteId/:action', asyncRoute(async (req, res) => {

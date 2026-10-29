@@ -62,11 +62,24 @@ export async function startQueueWorkers() {
 
   worker.on('failed', (job, error) => {
     console.error(`Background job ${job?.name} failed:`, error)
+    // SEGURANÇA (varredura, item 9): antes só marcava biometry_status = 'rejected' e deixava o
+    // atleta com status 'approved' — ou seja, elegível para jogar sem o cadastro biométrico que a
+    // aprovação deveria garantir. Agora o status volta para revisão do admin.
     if (job?.name === 'biometry.sync' && job.attemptsMade >= Number(job.opts.attempts ?? 1)) {
       query(
-        "UPDATE athletes SET biometry_status = 'rejected', updated_at = now() WHERE id = $1 AND status = 'approved'",
+        `UPDATE athletes SET biometry_status = 'rejected', status = 'awaiting_admin', updated_at = now()
+         WHERE id = $1 AND status = 'approved' RETURNING manager_user_id, name`,
         [job.data.athleteId],
-      ).catch((updateError) => console.error('Could not record failed biometric synchronization:', updateError))
+      ).then(async (result) => {
+        const athlete = result.rows[0]
+        if (!athlete) return
+        const title = 'Biometria não sincronizada'
+        const body = `A sincronização biométrica de ${athlete.name} falhou e o cadastro voltou para análise do administrador.`
+        await query(
+          'INSERT INTO notifications (target, type, title, body) VALUES ($1, $3, $4, $5), ($2, $3, $4, $5)',
+          [athlete.manager_user_id, 'admin', 'athlete_biometry_sync_failed', title, body],
+        )
+      }).catch((updateError) => console.error('Could not record failed biometric synchronization:', updateError))
     }
   })
   const dispatch = () => enqueueOutboxEvents(jobsQueue).catch((error) => console.error('Outbox dispatch failed:', error))

@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { query } from '../db/pool.js'
 import { asyncRoute, userTeams } from '../utils.js'
-import { authenticate, authorize } from '../security/auth.js'
+import { authenticate, authorize, requireCurrentConsent } from '../security/auth.js'
 import { getRegistrationPeriods } from '../services/registration.js'
 import { listCategoryNames } from '../services/categories.js'
 
@@ -31,7 +31,7 @@ publicRouter.get('/sponsors', asyncRoute(async (_req, res) => {
 }))
 
 export const attendanceRouter = Router()
-attendanceRouter.get('/mine', authenticate, authorize('gestor'), asyncRoute(async (req, res) => {
+attendanceRouter.get('/mine', authenticate, authorize('gestor'), requireCurrentConsent, asyncRoute(async (req, res) => {
   // Risco 1 (varredura, análise LVJ 2027): a frequência agora soma os atletas de todas as
   // equipes do gestor, não só de uma.
   const teams = await userTeams(req.user.id)
@@ -54,7 +54,7 @@ attendanceRouter.get('/mine', authenticate, authorize('gestor'), asyncRoute(asyn
   res.json({ attendance, teams })
 }))
 
-attendanceRouter.get('/athlete/mine', authenticate, authorize('atleta'), asyncRoute(async (req, res) => {
+attendanceRouter.get('/athlete/mine', authenticate, authorize('atleta'), requireCurrentConsent, asyncRoute(async (req, res) => {
   const result = await query(
     `SELECT att.id, att.match_id, att.attendance_date, att.present, att.source,
        m.home_name, m.away_name
@@ -68,7 +68,7 @@ attendanceRouter.get('/athlete/mine', authenticate, authorize('atleta'), asyncRo
 }))
 
 export const approvedTeamsRouter = Router()
-approvedTeamsRouter.get('/', authenticate, authorize('admin'), asyncRoute(async (req, res) => {
+approvedTeamsRouter.get('/', authenticate, authorize('admin'), requireCurrentConsent, asyncRoute(async (req, res) => {
   const category = req.query.category ? String(req.query.category).slice(0, 80) : null
   const result = await query(
     `SELECT * FROM teams WHERE status = 'approved' AND deleted_at IS NULL

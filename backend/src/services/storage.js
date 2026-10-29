@@ -73,6 +73,25 @@ export async function createBiometryReadUrl(key) {
   return getSignedUrl(presignClient, command, { expiresIn: 300 })
 }
 
+// SEGURANÇA: antes, uma chave de biometria só era validada por prefixo de string
+// (biometry/<managerId>/...) — nada confirmava que o objeto existia, que o upload de verdade
+// aconteceu, ou que ele não estava sendo reaproveitado de outro cadastro. Isso deixava o cadastro
+// de atleta (e as duas etapas de aprovação, que não têm como visualizar a foto) aceitarem uma
+// chave forjada ou nunca enviada. Chamado antes do INSERT em createAthlete, não só depois da
+// aprovação (biometry.sync em queue.js).
+export async function verifyBiometryObject(key, expectedManagerId) {
+  let metadata
+  try {
+    metadata = await storageClient.send(new HeadObjectCommand({ Bucket: config.S3_BUCKET, Key: key }))
+  } catch {
+    return false
+  }
+  if (metadata.Metadata?.manager !== String(expectedManagerId)) return false
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(metadata.ContentType)) return false
+  if (!metadata.ContentLength || metadata.ContentLength > 5 * 1024 * 1024) return false
+  return true
+}
+
 export async function readBiometry(key) {
   const metadata = await storageClient.send(new HeadObjectCommand({ Bucket: config.S3_BUCKET, Key: key }))
   if (!['image/jpeg', 'image/png', 'image/webp'].includes(metadata.ContentType) ||

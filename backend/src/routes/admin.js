@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { query, transaction } from '../db/pool.js'
 import { AppError, notFound } from '../errors.js'
-import { authenticate, authorize } from '../security/auth.js'
+import { authenticate, authorize, requireCurrentConsent } from '../security/auth.js'
 import { decryptSensitive, maskRg } from '../security/crypto.js'
 import { cleanText, parse, uuidSchema } from '../security/validation.js'
 import { getRegistrationPeriods, registrationStatus } from '../services/registration.js'
@@ -10,7 +10,7 @@ import { assertValidCategory, lockCategoryName } from '../services/categories.js
 import { asyncRoute, audit } from '../utils.js'
 
 export const adminRouter = Router()
-adminRouter.use(authenticate, authorize('admin'))
+adminRouter.use(authenticate, authorize('admin'), requireCurrentConsent)
 
 adminRouter.get('/registration-periods', asyncRoute(async (_req, res) => {
   res.json({ periods: await getRegistrationPeriods() })
@@ -206,7 +206,7 @@ adminRouter.post('/sumula', asyncRoute(async (req, res) => {
 }))
 
 export const approveTeamRouter = Router()
-approveTeamRouter.use(authenticate, authorize('admin'))
+approveTeamRouter.use(authenticate, authorize('admin'), requireCurrentConsent)
 approveTeamRouter.post('/:teamId/:action', asyncRoute(async (req, res, next) => {
   if (!['approve', 'reject'].includes(req.params.action)) return next(notFound('Rota não encontrada'))
   next()

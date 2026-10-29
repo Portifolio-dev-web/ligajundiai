@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { config } from '../config.js'
 import { query, transaction } from '../db/pool.js'
 import { AppError, notFound } from '../errors.js'
-import { authenticate, authorize } from '../security/auth.js'
+import { authenticate, authorize, requireCurrentConsent } from '../security/auth.js'
 import { cleanText, justificationSchema, parse } from '../security/validation.js'
 import { enqueueEmail, escapeHtml } from '../services/email.js'
 import { assertRegistrationOpen } from '../services/registration.js'
@@ -13,7 +13,7 @@ import { asyncRoute, audit, notify } from '../utils.js'
 
 export const teamsRouter = Router()
 export const adminTeamsRouter = Router()
-teamsRouter.use(authenticate, authorize('gestor'))
+teamsRouter.use(authenticate, authorize('gestor'), requireCurrentConsent)
 
 teamsRouter.post('/', asyncRoute(async (req, res) => {
   const input = parse(z.object({
@@ -68,7 +68,7 @@ teamsRouter.get('/mine', asyncRoute(async (req, res) => {
   res.json({ teams: result.rows })
 }))
 
-adminTeamsRouter.use(authenticate, authorize('admin'))
+adminTeamsRouter.use(authenticate, authorize('admin'), requireCurrentConsent)
 
 adminTeamsRouter.get('/', asyncRoute(async (req, res) => {
   const status = req.query.status

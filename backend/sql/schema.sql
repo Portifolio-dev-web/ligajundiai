@@ -187,6 +187,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS athletes_rg_team_active_uq
   ON athletes (rg_hash, team_id) WHERE deleted_at IS NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS athletes_control_reference_active_uq
   ON athletes (control_id_reference) WHERE control_id_reference IS NOT NULL AND deleted_at IS NULL;
+-- SEGURANÇA: sem esta restrição, a mesma foto (chave de objeto) podia ser enviada no cadastro de
+-- vários atletas diferentes — nada no banco impedia o reaproveitamento, só a convenção de prefixo
+-- por gestor na aplicação (ver verifyBiometryObject em storage.js e createAthlete em athletes.js).
+CREATE UNIQUE INDEX IF NOT EXISTS athletes_biometry_key_active_uq
+  ON athletes (biometry_object_key) WHERE biometry_object_key IS NOT NULL AND deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS athletes_team_status_idx ON athletes (team_id, status, created_at DESC) WHERE deleted_at IS NULL;
 
 CREATE OR REPLACE FUNCTION enforce_athlete_team_manager() RETURNS trigger LANGUAGE plpgsql AS $$

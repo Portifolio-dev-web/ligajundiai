@@ -9,6 +9,18 @@ import { app } from '../app.js'
 import { pool } from '../db/pool.js'
 import { sweepExpiredRetention } from '../services/retention.js'
 import { encryptSensitive } from '../security/crypto.js'
+import { initializeStorage } from '../services/storage.js'
+
+// SEGURANÇA (varredura, item 9): createAthlete agora verifica (HeadObjectCommand) que a chave de
+// biometria presignada foi realmente usada para subir um arquivo antes de aceitar o cadastro — os
+// testes que só pedem a presigned URL sem nunca enviar bytes precisam fazer o upload de verdade.
+async function uploadBiometryFixture(presign) {
+  const form = new FormData()
+  for (const [field, value] of Object.entries(presign.uploadFields)) form.append(field, value)
+  form.append('file', new Blob([Buffer.from([0xff, 0xd8, 0xff, 0xd9])], { type: 'image/jpeg' }), 'foto.jpg')
+  const response = await fetch(presign.uploadUrl, { method: 'POST', body: form })
+  if (!response.ok) throw new Error(`Upload de biometria de teste falhou: ${response.status} ${await response.text()}`)
+}
 
 const migrationPath = fileURLToPath(new URL('../../sql/schema.sql', import.meta.url))
 const teamName = `Integracao ${randomUUID()}`
@@ -24,8 +36,8 @@ async function createAdminSession() {
   const adminJti = randomUUID()
   await pool.query(
     `INSERT INTO users (id, role, name, email, password_hash, consent_version)
-     VALUES ($1, 'admin', 'Admin de integração', $2, '!test-only!', 'test')`,
-    [id, `admin-${randomUUID()}@example.test`],
+     VALUES ($1, 'admin', 'Admin de integração', $2, '!test-only!', $3)`,
+    [id, `admin-${randomUUID()}@example.test`, process.env.CONSENT_VERSION || 'test'],
   )
   latestAdminId = id
   createdAdminIds.push(id)
@@ -71,6 +83,7 @@ describe('team creation constraints', () => {
   beforeAll(async () => {
     await pool.query(await readFile(migrationPath, 'utf8'))
     await pool.query('DELETE FROM registration_periods')
+    await initializeStorage()
   })
 
   afterAll(async () => {
@@ -299,6 +312,7 @@ describe('team creation constraints', () => {
       .send({ team_id: team.id, content_type: 'image/jpeg' })
     expect(presign.status).toBe(201)
     expect(presign.body.key).toMatch(new RegExp(`^biometry/${team.manager_user_id}/`))
+    await uploadBiometryFixture(presign.body)
 
     const registration = await request(app)
       .post('/api/athletes/self-register')
@@ -359,6 +373,7 @@ describe('team creation constraints', () => {
       .post('/api/athletes/biometry-upload-public')
       .send({ team_id: team.id, content_type: 'image/jpeg' })
     expect(publicPresign.status).toBe(201)
+    await uploadBiometryFixture(publicPresign.body)
 
     const selfRegisterWithoutBiometricConsent = await request(app)
       .post('/api/athletes/self-register')
@@ -380,6 +395,7 @@ describe('team creation constraints', () => {
       .set('Cookie', manager.headers['set-cookie'])
       .send({ team_id: team.id, content_type: 'image/jpeg' })
     expect(managerPresign.status).toBe(201)
+    await uploadBiometryFixture(managerPresign.body)
 
     const gestorCreatedWithoutBiometricConsent = await request(app)
       .post('/api/athletes')

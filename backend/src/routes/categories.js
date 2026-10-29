@@ -2,13 +2,13 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { transaction } from '../db/pool.js'
 import { AppError, notFound } from '../errors.js'
-import { authenticate, authorize } from '../security/auth.js'
+import { authenticate, authorize, requireCurrentConsent } from '../security/auth.js'
 import { cleanText, parse, uuidSchema } from '../security/validation.js'
 import { asyncRoute, audit } from '../utils.js'
 import { listCategories, lockCategoryName } from '../services/categories.js'
 
 export const adminCategoriesRouter = Router()
-adminCategoriesRouter.use(authenticate, authorize('admin'))
+adminCategoriesRouter.use(authenticate, authorize('admin'), requireCurrentConsent)
 
 async function categoryUsage(client, name) {
   // SEGURANÇA: antes só contava teams/matches; game_dates e registration_periods também

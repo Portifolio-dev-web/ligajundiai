@@ -190,11 +190,18 @@ services:
       <<: *api-environment
       NODE_ENV: test
       DATABASE_URL: postgresql://liga:liga_local_only@postgres-test:5432/ligajundiai_test
-      S3_ENDPOINT: http://localhost:9000
-      S3_INTERNAL_ENDPOINT: http://localhost:9000
-      S3_PUBLIC_ENDPOINT: http://localhost:9000
+      # SEGURANÇA (varredura, item 9): antes apontava para localhost:9000, sem nenhum servidor de
+      # objetos ouvindo dentro do próprio container de teste — a verificação de existência da
+      # biometria (verifyBiometryObject) então nunca encontrava nada e os testes nem chegavam a
+      # exercitar o fluxo real de upload. Aqui o "navegador" e a API são o mesmo processo, então
+      # tanto o endpoint interno quanto o "público" apontam para o serviço de objetos real.
+      S3_ENDPOINT: http://object-storage:9000
+      S3_INTERNAL_ENDPOINT: http://object-storage:9000
+      S3_PUBLIC_ENDPOINT: http://object-storage:9000
     depends_on:
       postgres-test:
+        condition: service_healthy
+      object-storage:
         condition: service_healthy
 
 volumes:
