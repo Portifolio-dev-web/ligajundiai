@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import {
@@ -23,7 +24,7 @@ import LogoutButton from '@/components/LogoutButton'
 import { StatusBadge } from '@/components/standings'
 import { toastSuccess, toastError } from '@/lib/toast'
 import { api, CATEGORY_FALLBACK } from '@/lib/lvjApi'
-import { BLUE, NAVY, RED } from '@/lib/theme'
+import { BLUE, DANGER, GREEN, NAVY, RED } from '@/lib/theme'
 
 // PERFORMANCE (varredura, item I-Baixa-3): /admin era o maior bundle do site (196 kB First Load JS)
 // porque todas as 11 abas — a maioria usada com pouca frequência (E-mails, Segurança, Categorias,
@@ -66,11 +67,15 @@ const AdminAccountSecurity = dynamic(() => import('@/components/admin/tabs/Admin
 export default function AdminDashboard() {
   const [notif, setNotif] = useState({ pending_teams: 0, pending_athletes: 0, unread: 0, items: [] })
   const [stats, setStats] = useState({})
+  // UX (auditoria de leis de UX, Limiar de Doherty, Fase 2): stats começava como {} e os StatCard
+  // renderizavam "0" antes da API responder — indistinguível de "realmente zero". statsLoading só
+  // fica true na primeira carga; o polling de 15s abaixo não volta a mostrar o esqueleto.
+  const [statsLoading, setStatsLoading] = useState(true)
   const [categories, setCategories] = useState(CATEGORY_FALLBACK)
 
   const loadNotif = useCallback(() => {
     api('/admin/notifications').then(setNotif).catch(() => {})
-    api('/admin/stats').then(setStats).catch(() => {})
+    api('/admin/stats').then((d) => { setStats(d); setStatsLoading(false) }).catch(() => setStatsLoading(false))
   }, [])
 
   const loadCategories = useCallback(() => {
@@ -104,18 +109,18 @@ export default function AdminDashboard() {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
-        <StatCard label="Equipes" value={stats.teams || 0} icon={Users} color={BLUE} />
-        <StatCard label="Atletas" value={stats.athletes || 0} icon={Volleyball} color={RED} />
-        <StatCard label="Jogos" value={stats.matches || 0} icon={CalendarDays} color={NAVY} />
-        <StatCard label="Equipes pend." value={stats.pending_teams || 0} icon={ClipboardList} color="#dc2626" />
-        <StatCard label="Atletas pend." value={stats.pending_athletes || 0} icon={ClipboardList} color="#dc2626" />
+        <StatCard label="Equipes" value={stats.teams} loading={statsLoading} icon={Users} color={BLUE} />
+        <StatCard label="Atletas" value={stats.athletes} loading={statsLoading} icon={Volleyball} color={RED} />
+        <StatCard label="Jogos" value={stats.matches} loading={statsLoading} icon={CalendarDays} color={NAVY} />
+        <StatCard label="Equipes pend." value={stats.pending_teams} loading={statsLoading} icon={ClipboardList} color={DANGER} />
+        <StatCard label="Atletas pend." value={stats.pending_athletes} loading={statsLoading} icon={ClipboardList} color={DANGER} />
       </div>
 
       <Tabs defaultValue="equipes">
         {/* UX (varredura, item U-Baixa-3): com 11 abas, "flex flex-wrap" quebrava em até 4 linhas
             de pills no mobile (375px) — denso e difícil de escanear. Uma faixa com rolagem
-            horizontal (igual ao padrão já usado em app/gestor/aprovar-atletas e
-            components/MatchAttendance.jsx para tabelas largas) cabe numa linha só. */}
+            horizontal (igual ao padrão já usado em components/MatchAttendance.jsx para tabelas
+            largas) cabe numa linha só. */}
         <TabsList className="flex w-full flex-nowrap justify-start gap-1 overflow-x-auto">
           <TabsTrigger value="equipes" className="shrink-0">Equipes</TabsTrigger>
           <TabsTrigger value="atletas" className="shrink-0">Atletas</TabsTrigger>
@@ -146,7 +151,7 @@ export default function AdminDashboard() {
   )
 }
 
-function StatCard({ label, value, icon: Icon, color }) {
+function StatCard({ label, value, loading, icon: Icon, color }) {
   return (
     <Card>
       <CardContent className="p-4 flex items-center gap-3">
@@ -154,7 +159,11 @@ function StatCard({ label, value, icon: Icon, color }) {
           <Icon className="h-5 w-5" />
         </div>
         <div>
-          <div className="text-2xl font-extrabold leading-none">{value}</div>
+          {/* UX (auditoria de leis de UX, Limiar de Doherty, Fase 2): esqueleto em vez de "0" fixo
+              enquanto stats ainda não respondeu — "0" parecia dado confirmado, não carregamento. */}
+          {loading
+            ? <Skeleton className="h-7 w-8" />
+            : <div className="text-2xl font-extrabold leading-none">{value || 0}</div>}
           <div className="text-xs text-slate-500">{label}</div>
         </div>
       </CardContent>
@@ -279,7 +288,7 @@ function AdminTeams({ reload }) {
               <StatusBadge status={t.status} />
               {t.status === 'pending' && (
                 <div className="flex items-center gap-4">
-                  <Button className="text-white border-0" style={{ background: '#16a34a' }} onClick={() => act(t.id, 'approve')}>
+                  <Button className="text-white border-0" style={{ background: GREEN }} onClick={() => act(t.id, 'approve')}>
                     <CheckCircle2 className="h-4 w-4 mr-1" /> Aprovar
                   </Button>
                   <Button size="sm" variant="ghost" className="text-red-600 hover:bg-red-50 hover:text-red-700" onClick={() => setRejectId(t.id)}>
@@ -353,7 +362,7 @@ function AdminAthletes({ reload }) {
               <StatusBadge status={a.status} />
               {a.status === 'awaiting_admin' && (
                 <div className="flex items-center gap-4">
-                  <Button className="text-white border-0" style={{ background: '#16a34a' }} onClick={() => act(a.id, 'approve')}>
+                  <Button className="text-white border-0" style={{ background: GREEN }} onClick={() => act(a.id, 'approve')}>
                     <CheckCircle2 className="h-4 w-4 mr-1" /> Liberar
                   </Button>
                   <Button size="sm" variant="ghost" className="text-red-600 hover:bg-red-50 hover:text-red-700" onClick={() => setRejectId(a.id)}>

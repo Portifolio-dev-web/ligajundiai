@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Info } from 'lucide-react'
-import { BLUE, RED } from '@/lib/theme'
+import { AMBER, BLUE, DANGER, GREEN, ORANGE, RED, SLATE } from '@/lib/theme'
 
 export function categoryAbbrev(category) {
   if (!category) return '#'
@@ -130,16 +130,16 @@ export function StandingsTable({ standings, category }) {
 
 export function StatusBadge({ status }) {
   const map = {
-    pending: { label: 'Pendente', bg: '#f59e0b' },
-    awaiting_manager: { label: 'Aguardando gestor', bg: '#f59e0b' },
-    awaiting_admin: { label: 'Aguardando administrador', bg: '#f97316' },
-    approved: { label: 'Aprovado', bg: '#16a34a' },
-    rejected: { label: 'Recusado', bg: '#dc2626' },
-    proposed: { label: 'Aguardando aceite', bg: '#f59e0b' },
-    confirmed: { label: 'Confirmado', bg: '#16a34a' },
-    scheduled: { label: 'Agendado', bg: '#16a34a' },
-    cancelled: { label: 'Cancelado', bg: '#64748b' },
-    finished: { label: 'Finalizado', bg: '#64748b' },
+    pending: { label: 'Pendente', bg: AMBER },
+    awaiting_manager: { label: 'Aguardando gestor', bg: AMBER },
+    awaiting_admin: { label: 'Aguardando administrador', bg: ORANGE },
+    approved: { label: 'Aprovado', bg: GREEN },
+    rejected: { label: 'Recusado', bg: DANGER },
+    proposed: { label: 'Aguardando aceite', bg: AMBER },
+    confirmed: { label: 'Confirmado', bg: GREEN },
+    scheduled: { label: 'Agendado', bg: GREEN },
+    cancelled: { label: 'Cancelado', bg: SLATE },
+    finished: { label: 'Finalizado', bg: SLATE },
   }
   const s = map[status] || map.pending
   return (

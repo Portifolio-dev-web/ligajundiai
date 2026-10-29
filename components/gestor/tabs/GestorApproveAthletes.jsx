@@ -15,10 +15,11 @@ import { toastSuccess, toastError } from '@/lib/toast'
 import { api } from '@/lib/lvjApi'
 
 // UX/PERFORMANCE (redesign do painel do gestor, aprovado por mockup): antes vivia na rota
-// dedicada /gestor/aprovar-atletas (ainda existe, só não tem mais link no menu) — esta aba é a
-// mesma fila, só de pendentes, só que no estilo de linha já usado no Elenco (não uma <Table>),
-// para ficar visualmente consistente com as outras abas do painel. A aba Elenco continua
-// aprovando/recusando inline também (decisão do usuário: manter os dois jeitos).
+// dedicada /gestor/aprovar-atletas (hoje um redirect) — esta aba é a mesma fila, só de pendentes,
+// só que no estilo de linha já usado no Elenco (não uma <Table>), para ficar visualmente
+// consistente com as outras abas do painel.
+// UX (auditoria de leis de UX, Lei de Occam/Lei de Jakob, Fase 2): esta é agora a ÚNICA tela que
+// aprova/recusa atleta — a aba Elenco (GestorPanel.jsx) só mostra o status, sem ação duplicada.
 export default function GestorApproveAthletes({ token, athletes, reload }) {
   const [rejectId, setRejectId] = useState(null)
   const [justification, setJustification] = useState('')
@@ -50,9 +51,11 @@ export default function GestorApproveAthletes({ token, athletes, reload }) {
               <div className="font-semibold">{a.name}</div>
               <div className="text-xs text-slate-500">RG {a.rg} {a.position ? `• ${a.position}` : ''}</div>
             </div>
-            <div className="flex items-center gap-2">
-              <Button size="sm" onClick={() => review(a.id, 'approve')}>Aprovar</Button>
-              <Button size="sm" variant="destructive" onClick={() => setRejectId(a.id)}>Recusar</Button>
+            {/* UX (auditoria de leis de UX, Lei de Fitts): "Aprovar" primário e maior, "Recusar"
+                menor e afastado — reduz toque acidental numa ação destrutiva. */}
+            <div className="flex items-center gap-4">
+              <Button onClick={() => review(a.id, 'approve')}>Aprovar</Button>
+              <Button size="sm" variant="ghost" className="text-red-600 hover:bg-red-50 hover:text-red-700" onClick={() => setRejectId(a.id)}>Recusar</Button>
             </div>
           </div>
         ))}

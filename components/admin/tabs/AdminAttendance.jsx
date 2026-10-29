@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ClipboardList } from 'lucide-react'
 import { toastSuccess, toastError } from '@/lib/toast'
 import { api } from '@/lib/lvjApi'
-import { BLUE, NAVY } from '@/lib/theme'
+import { BLUE, DANGER, GREEN, NAVY } from '@/lib/theme'
 
 // ---------------- ATTENDANCE ----------------
 export default function AdminAttendance({ categories }) {
@@ -111,7 +111,7 @@ export default function AdminAttendance({ categories }) {
                       <span>{f.name}</span>
                       <span className="flex items-center gap-2">
                         <span className="text-slate-500">{f.present}/{f.total_sessions} ({f.percent}%)</span>
-                        <Badge className="border-0 text-white" style={{ background: f.eligible ? '#16a34a' : '#dc2626' }}>
+                        <Badge className="border-0 text-white" style={{ background: f.eligible ? GREEN : DANGER }}>
                           {f.eligible ? 'Apto' : 'Inapto'}
                         </Badge>
                       </span>

@@ -11,7 +11,7 @@ import { CalendarCheck, CalendarDays, LoaderCircle, TrendingUp } from 'lucide-re
 import HelpLink from '@/components/HelpLink'
 import LogoutButton from '@/components/LogoutButton'
 import { api } from '@/lib/lvjApi'
-import { BLUE, NAVY, RED } from '@/lib/theme'
+import { BLUE, DANGER, GREEN, NAVY, RED } from '@/lib/theme'
 
 // PERFORMANCE/UX (redesign do painel do atleta, aprovado por mockup): antes era uma página única
 // (componente MatchAttendance.jsx, hoje removido) sem cabeçalho de painel, misturando próximos
@@ -140,7 +140,7 @@ export default function AtletaPanel() {
         </Card>
         <Card>
           <CardContent className="p-4 flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-lg text-white flex-shrink-0" style={{ background: '#16a34a' }}>
+            <div className="flex h-11 w-11 items-center justify-center rounded-lg text-white flex-shrink-0" style={{ background: GREEN }}>
               <TrendingUp className="h-5 w-5" />
             </div>
             <div className="min-w-0 min-h-[40px]">
@@ -153,7 +153,7 @@ export default function AtletaPanel() {
                 <div className="flex items-baseline gap-2">
                   <span className="text-xl font-extrabold text-slate-900">{frequenciaPercent}%</span>
                   {eligible !== null && (
-                    <Badge className="text-white border-0 text-[10px]" style={{ background: eligible ? '#16a34a' : '#dc2626' }}>
+                    <Badge className="text-white border-0 text-[10px]" style={{ background: eligible ? GREEN : DANGER }}>
                       {eligible ? `Apto (mín. ${minRequired}%)` : `Inapto (mín. ${minRequired}%)`}
                     </Badge>
                   )}

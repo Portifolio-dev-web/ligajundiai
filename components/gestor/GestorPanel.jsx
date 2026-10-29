@@ -6,17 +6,9 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from '@/components/ui/dialog'
 import {
   Select,
   SelectTrigger,
@@ -229,8 +221,6 @@ function GestorRoster({ token, team, athletes, reload }) {
     biometricConsent: false,
     guardianName: '', guardianRg: '', guardianRelationship: '',
   })
-  const [rejectId, setRejectId] = useState(null)
-  const [justification, setJustification] = useState('')
   // ACESSIBILIDADE (varredura, item A12): erro de cadastro de atleta só existia como toast — sem
   // foco movido nem campo marcado, quem usa teclado/leitor de tela não sabia onde corrigir.
   const [addError, setAddError] = useState('')
@@ -301,18 +291,6 @@ function GestorRoster({ token, team, athletes, reload }) {
     } catch (e) {
       setAddError(e.message)
       nameInputRef.current?.focus()
-      toastError(e.message)
-    }
-  }
-
-  const review = async (id, action, reason = '') => {
-    try {
-      await api(`/gestor/athletes/${id}/${action}`, { method: 'POST', token, body: { justification: reason } })
-      toastSuccess(action === 'approve' ? 'Atleta encaminhado para aprovação final.' : 'Cadastro do atleta recusado.')
-      setRejectId(null)
-      setJustification('')
-      reload()
-    } catch (e) {
       toastError(e.message)
     }
   }
@@ -430,36 +408,18 @@ function GestorRoster({ token, team, athletes, reload }) {
                 <div className="font-semibold">{a.name}</div>
                 <div className="text-xs text-slate-500">RG {a.rg} {a.position ? `• ${a.position}` : ''}</div>
                 {a.status === 'rejected' && a.justification && <div className="text-xs text-red-500">Motivo: {a.justification}</div>}
+                {/* UX (auditoria de leis de UX, Lei de Occam/Lei de Jakob, Fase 2): aprovar/recusar
+                    saiu daqui — era a mesma ação duplicada em 3 lugares diferentes (ver
+                    components/gestor/tabs/GestorApproveAthletes.jsx). O Elenco agora só mostra o
+                    status; a ação vive num único lugar, a aba "Aprovar atletas". */}
+                {a.status === 'awaiting_manager' && <div className="text-xs text-slate-500">Revise na aba &ldquo;Aprovar atletas&rdquo;.</div>}
               </div>
-              {/* UX (auditoria de leis de UX, Lei de Fitts): "Aprovar" e "Recusar" tinham o mesmo
-                  tamanho e ficavam colados — risco de toque acidental numa ação destrutiva. Agora
-                  "Aprovar" é o botão primário (maior) e "Recusar" fica menor, afastado e discreto. */}
-              <div className="flex items-center gap-3">
-                <StatusBadge status={a.status} />
-                {a.status === 'awaiting_manager' && (
-                  <div className="flex items-center gap-4">
-                    <Button onClick={() => review(a.id, 'approve')}>Aprovar</Button>
-                    <Button size="sm" variant="ghost" className="text-red-600 hover:bg-red-50 hover:text-red-700" onClick={() => setRejectId(a.id)}>Recusar</Button>
-                  </div>
-                )}
-              </div>
+              <StatusBadge status={a.status} />
             </div>
           ))}
           {athletes.length === 0 && <p className="text-sm text-slate-600">Nenhum atleta no elenco.</p>}
         </div>
       </CardContent>
-      <Dialog open={!!rejectId} onOpenChange={(open) => !open && setRejectId(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Recusar cadastro de atleta</DialogTitle>
-            <DialogDescription>Informe o motivo da recusa.</DialogDescription>
-          </DialogHeader>
-          <Textarea value={justification} onChange={(e) => setJustification(e.target.value)} />
-          <Button variant="destructive" onClick={() => review(rejectId, 'reject', justification)} disabled={!justification.trim()}>
-            Confirmar recusa
-          </Button>
-        </DialogContent>
-      </Dialog>
     </Card>
   )
 }
