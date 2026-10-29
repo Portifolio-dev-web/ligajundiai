@@ -4,12 +4,11 @@ import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Badge } from '@/components/ui/badge'
 import {
   Dialog,
@@ -40,12 +39,9 @@ import {
   Trophy,
   CalendarDays,
   LogOut,
-  UserPlus,
   LoaderCircle,
 } from 'lucide-react'
 import { api, CATEGORY_FALLBACK } from '@/lib/lvjApi'
-import { formatRg } from '@/lib/athlete'
-import ForgotPasswordDialog from '@/components/ForgotPasswordDialog'
 import { SponsorFlipCards } from '@/components/SponsorFlipCards'
 import { SponsorVerticalTicker } from '@/components/SponsorVerticalTicker'
 import { SponsorCoverFlow } from '@/components/SponsorCoverFlow'
@@ -66,6 +62,16 @@ const GestorPanel = dynamic(() => import('@/components/gestor/GestorPanel'), {
   ),
 })
 
+// PERFORMANCE (varredura): mesmo raciocínio do GestorPanel acima — "/" é a rota mais visitada do
+// site, e os dois diálogos abaixo (Tabs, os dois formulários, chamadas de API) só importam depois
+// de um clique em "Entrar" ou "Esqueci minha senha", nunca no primeiro carregamento. loginEverOpened
+// em App(), mais abaixo, garante que o import só dispara após esse primeiro clique — sem isso, os
+// dois já nasceriam montados na árvore (só escondidos pelo Dialog) e o code-splitting não valeria
+// nada. Pré-carregados no onMouseEnter/onFocus do botão "Entrar" (ver prefetchLogin), então quem
+// passa o mouse antes de clicar não sente a espera do download.
+const LoginDialog = dynamic(() => import('@/components/LoginDialog'), { ssr: false })
+const ForgotPasswordDialog = dynamic(() => import('@/components/ForgotPasswordDialog'), { ssr: false })
+
 // SEGURANÇA (varredura, item S11): antes essas imagens vinham direto de images.unsplash.com — cada
 // visita à home entregava o IP de quem acessa à Unsplash (hotlink). Agora são arquivos locais em
 // public/images, as mesmas fotos, baixadas uma vez. IMG_ACTION1 nunca era usada — removida.
@@ -82,7 +88,12 @@ function App() {
   const [myTeams, setMyTeams] = useState([])
   const [categories, setCategories] = useState(CATEGORY_FALLBACK)
   const [loginOpen, setLoginOpen] = useState(false)
+  // PERFORMANCE: LoginDialog só entra na árvore (e só então baixa seu chunk — ver dynamic() acima)
+  // depois do primeiro open; depois disso fica sempre montado, igual antes, pra não perder a
+  // animação de fechar do Dialog entre uma abertura e outra.
+  const [loginEverOpened, setLoginEverOpened] = useState(false)
   const [forgotPasswordOpen, setForgotPasswordOpen] = useState(false)
+  const [forgotPasswordEverOpened, setForgotPasswordEverOpened] = useState(false)
   const [booting, setBooting] = useState(true)
   const currentYear = new Date().getFullYear()
 
@@ -131,6 +142,16 @@ function App() {
     loadMe().finally(() => setBooting(false))
   }, [loadCategories, loadMe])
 
+  const openLogin = () => {
+    setLoginEverOpened(true)
+    setLoginOpen(true)
+  }
+  // PERFORMANCE: dispara o download do chunk do LoginDialog assim que alguém passa o mouse (ou o
+  // foco do teclado) no botão "Entrar" — quem clica logo em seguida já encontra o componente
+  // baixado, sem esperar a rede no meio do clique. import() repetido é seguro: o módulo só baixa
+  // uma vez, as chamadas seguintes reaproveitam a mesma Promise já resolvida.
+  const prefetchLogin = () => { import('@/components/LoginDialog') }
+
   const onAuthed = (authenticatedUser) => {
     setToken('cookie-session')
     setUser(authenticatedUser)
@@ -162,7 +183,8 @@ function App() {
       <TopNav
         user={user}
         token={token}
-        onLoginClick={() => setLoginOpen(true)}
+        onLoginClick={openLogin}
+        onLoginHover={prefetchLogin}
         onLogout={logout}
       />
       {/* ACESSIBILIDADE (varredura, item A1): id="main-content" é o alvo do link "Pular para o
@@ -171,21 +193,25 @@ function App() {
         {user?.role === 'gestor' ? (
           <GestorPanel token={token} categories={categories} user={user} myTeams={myTeams} refreshMe={() => loadMe(token)} />
         ) : (
-          <PublicSite categories={categories} currentYear={currentYear} onLoginClick={() => setLoginOpen(true)} />
+          <PublicSite categories={categories} currentYear={currentYear} onLoginClick={openLogin} />
         )}
       </main>
       <Footer />
-      <LoginDialog
-        open={loginOpen}
-        onOpenChange={setLoginOpen}
-        onAuthed={onAuthed}
-        onForgotPassword={() => { setLoginOpen(false); setForgotPasswordOpen(true) }}
-      />
-      <ForgotPasswordDialog
-        open={forgotPasswordOpen}
-        onOpenChange={setForgotPasswordOpen}
-        onBackToLogin={() => setLoginOpen(true)}
-      />
+      {loginEverOpened && (
+        <LoginDialog
+          open={loginOpen}
+          onOpenChange={setLoginOpen}
+          onAuthed={onAuthed}
+          onForgotPassword={() => { setLoginOpen(false); setForgotPasswordEverOpened(true); setForgotPasswordOpen(true) }}
+        />
+      )}
+      {forgotPasswordEverOpened && (
+        <ForgotPasswordDialog
+          open={forgotPasswordOpen}
+          onOpenChange={setForgotPasswordOpen}
+          onBackToLogin={() => setLoginOpen(true)}
+        />
+      )}
       {/* LGPD (varredura, item L10): ver ReconsentDialog abaixo. */}
       {user?.consent_outdated && <ReconsentDialog onAccepted={loadMe} />}
     </div>
@@ -239,7 +265,7 @@ function ReconsentDialog({ onAccepted }) {
 // ============================================================================
 // Top Navigation
 // ============================================================================
-function TopNav({ user, token, onLoginClick, onLogout }) {
+function TopNav({ user, token, onLoginClick, onLoginHover, onLogout }) {
   return (
     <header className="sticky top-0 z-40 border-b border-white/10" style={{ background: NAVY }}>
       <div className="container flex h-16 items-center justify-between">
@@ -280,6 +306,8 @@ function TopNav({ user, token, onLoginClick, onLogout }) {
             <Button
               size="sm"
               onClick={onLoginClick}
+              onMouseEnter={onLoginHover}
+              onFocus={onLoginHover}
               className="text-white border-0"
               style={{ background: RED }}
             >
@@ -517,148 +545,6 @@ function MatchResultCard({ m }) {
         ))}
       </div>
     </div>
-  )
-}
-
-// ============================================================================
-// LOGIN DIALOG
-// ============================================================================
-function LoginDialog({ open, onOpenChange, onAuthed, onForgotPassword }) {
-  const [tab, setTab] = useState('senha')
-
-  // Password
-  // A aba "Entrar" agora é o padrão e é compartilhada por gestor e admin — não faz mais
-  // sentido pré-preencher com o e-mail do admin, já que todo gestor cai nela primeiro.
-  const [pwEmail, setPwEmail] = useState('')
-  const [pw, setPw] = useState('')
-  const [pwTotp, setPwTotp] = useState('')
-  const [requiresTotp, setRequiresTotp] = useState(false)
-
-  // Register
-  const [reg, setReg] = useState({ name: '', email: '', phone: '', rg: '', password: '', consent: false })
-
-  const [loading, setLoading] = useState(false)
-  // ACESSIBILIDADE (varredura, item A12): o erro de login/cadastro só aparecia num toast — quem usa
-  // teclado ou leitor de tela não tinha o foco movido de volta para corrigir, nem o campo marcado
-  // como inválido. pwEmailRef/registerEmailRef abaixo são o alvo do foco quando a chamada falha.
-  const [loginInvalid, setLoginInvalid] = useState(false)
-  const [registerInvalid, setRegisterInvalid] = useState(false)
-  const pwEmailRef = useRef(null)
-  const registerEmailRef = useRef(null)
-
-  const loginPw = async () => {
-    setLoading(true)
-    try {
-      const d = await api('/auth/login-password', { method: 'POST', body: { email: pwEmail, password: pw, ...(pwTotp ? { totp: pwTotp } : {}) } })
-      setLoginInvalid(false)
-      onAuthed(d.user)
-    } catch (e) {
-      if (e.code === 'TOTP_REQUIRED') setRequiresTotp(true)
-      else { setLoginInvalid(true); pwEmailRef.current?.focus() }
-      toastError(e.message)
-    } finally {
-      setLoading(false)
-    }
-  }
-  const doRegister = async () => {
-    setLoading(true)
-    try {
-      const d = await api('/auth/register', { method: 'POST', body: reg })
-      setRegisterInvalid(false)
-      onAuthed(d.user)
-    } catch (e) {
-      setRegisterInvalid(true)
-      registerEmailRef.current?.focus()
-      toastError(e.message)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Volleyball className="h-5 w-5" style={{ color: BLUE }} /> Acesso LVJ
-          </DialogTitle>
-          <DialogDescription>
-            Gestores podem entrar ou criar uma conta para inscrever a equipe. Atletas devem usar o cadastro público, disponível após a aprovação da equipe.
-          </DialogDescription>
-          <a href="/cadastro-atleta" className="text-sm font-medium text-primary underline underline-offset-4">
-            Sou atleta: cadastrar minha conta
-          </a>
-        </DialogHeader>
-
-        <Tabs value={tab} onValueChange={setTab}>
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="senha">Entrar</TabsTrigger>
-            <TabsTrigger value="cadastro">Cadastrar gestor</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="senha" className="space-y-3 pt-2">
-            <div>
-              <Label htmlFor="login-password-email">E-mail</Label>
-              <Input ref={pwEmailRef} id="login-password-email" type="email" autoComplete="email" value={pwEmail} aria-invalid={loginInvalid} aria-describedby={loginInvalid ? 'login-password-error' : undefined} onChange={(e) => { setPwEmail(e.target.value); setLoginInvalid(false) }} />
-            </div>
-            <div>
-              <Label htmlFor="login-password">Senha</Label>
-              <Input id="login-password" type="password" autoComplete="current-password" value={pw} aria-invalid={loginInvalid} aria-describedby={loginInvalid ? 'login-password-error' : undefined} onChange={(e) => { setPw(e.target.value); setLoginInvalid(false) }} />
-            </div>
-            {loginInvalid && <p id="login-password-error" role="alert" className="text-xs text-red-600">E-mail ou senha inválidos.</p>}
-            <div className="flex justify-end">
-              <button type="button" onClick={onForgotPassword} className="text-sm font-medium underline underline-offset-4" style={{ color: BLUE }}>
-                Esqueci minha senha?
-              </button>
-            </div>
-            {(requiresTotp || pwTotp) && (
-              <div>
-                <Label htmlFor="login-password-totp">Código 2FA do administrador</Label>
-                <Input id="login-password-totp" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={pwTotp} onChange={(e) => setPwTotp(e.target.value.replace(/\D/g, ''))} placeholder="000000" />
-              </div>
-            )}
-            <Button className="w-full text-white border-0" style={{ background: BLUE }} onClick={loginPw} disabled={loading}>
-              Entrar
-            </Button>
-          </TabsContent>
-
-          <TabsContent value="cadastro" className="space-y-3 pt-2">
-            <div>
-              <Label htmlFor="manager-register-name">Nome</Label>
-              <Input id="manager-register-name" autoComplete="name" value={reg.name} onChange={(e) => setReg({ ...reg, name: e.target.value })} />
-            </div>
-            <div>
-              <Label htmlFor="manager-register-email">E-mail (login)</Label>
-              <Input ref={registerEmailRef} id="manager-register-email" type="email" autoComplete="email" value={reg.email} aria-invalid={registerInvalid} aria-describedby={registerInvalid ? 'manager-register-error' : undefined} onChange={(e) => { setReg({ ...reg, email: e.target.value }); setRegisterInvalid(false) }} />
-            </div>
-            {registerInvalid && <p id="manager-register-error" role="alert" className="text-xs text-red-600">Não foi possível concluir o cadastro — confira os dados acima.</p>}
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <div>
-                <Label htmlFor="manager-register-phone">Celular</Label>
-                <Input id="manager-register-phone" type="tel" autoComplete="tel" value={reg.phone} onChange={(e) => setReg({ ...reg, phone: e.target.value })} placeholder="(11) 90000-0000" />
-              </div>
-              <div>
-                <Label htmlFor="manager-register-rg">RG</Label>
-                <Input id="manager-register-rg" inputMode="text" autoComplete="off" value={reg.rg} onChange={(e) => setReg({ ...reg, rg: formatRg(e.target.value) })} />
-              </div>
-            </div>
-            <div>
-              <Label htmlFor="manager-register-password">Senha (mínimo de 12 caracteres)</Label>
-              <Input id="manager-register-password" type="password" autoComplete="new-password" minLength={12} value={reg.password} onChange={(e) => setReg({ ...reg, password: e.target.value })} />
-            </div>
-            {/* LGPD (varredura, item L1): o texto citava "a política de privacidade" sem link para ela;
-                agora linka a política e os termos, que já têm conteúdo real (antes eram páginas vazias). */}
-            <label className="flex items-start gap-2 text-sm text-slate-600">
-              <input id="manager-register-consent" type="checkbox" checked={reg.consent} onChange={(e) => setReg({ ...reg, consent: e.target.checked })} />
-              <span>Consinto com o tratamento dos meus dados para gestão da liga, conforme a <Link className="underline" href="/privacidade" target="_blank">Política de Privacidade</Link> e os <Link className="underline" href="/termos-de-uso" target="_blank">Termos de Uso</Link>.</span>
-            </label>
-            <Button className="w-full text-white border-0" style={{ background: RED }} onClick={doRegister} disabled={loading || !reg.name || !reg.email || reg.password.length < 12 || !reg.consent}>
-              <UserPlus className="h-4 w-4 mr-2" /> Criar conta de Gestor
-            </Button>
-          </TabsContent>
-        </Tabs>
-      </DialogContent>
-    </Dialog>
   )
 }
 
