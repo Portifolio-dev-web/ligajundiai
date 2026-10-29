@@ -476,12 +476,23 @@ CREATE TABLE IF NOT EXISTS sumulas (
   deleted_at timestamptz
 );
 
+-- Patrocinadores reais da LVJ (logos em public/images/sponsors/{flip,vticker,coverflow}/<arquivo>,
+-- as 3 variantes pré-tratadas que SponsorFlipCards/SponsorVerticalTicker/SponsorCoverFlow usam —
+-- ver lib/sponsorImage.js). Antes daqui havia 4 patrocinadores fictícios sem logo; como essa
+-- semente só roda quando a tabela nasce vazia (ex.: `docker compose down --volumes`), sem os reais
+-- aqui, qualquer banco recriado do zero voltava a mostrar os fictícios no lugar dos de verdade.
 INSERT INTO sponsors (name, logo_url, website, tier)
-SELECT seed.name, '', seed.website, seed.tier
+SELECT seed.name, seed.logo_url, '', seed.tier
 FROM (VALUES
-  ('Jundiaí Esportes', 'https://example.com', 'ouro'),
-  ('Rede Vôlei Sports', 'https://example.com', 'prata'),
-  ('Academia PowerFit', 'https://example.com', 'bronze'),
-  ('Padaria do Centro', 'https://example.com', 'apoio')
-) AS seed(name, website, tier)
+  ('Cereser', '/images/sponsors/flip/cereser.jpg', 'apoio'),
+  ('Cintia Eduarda - Fisioterapia Esportiva', '/images/sponsors/flip/cintia-eduarda.jpg', 'apoio'),
+  ('Drogaria Marlene', '/images/sponsors/flip/drogaria-marlene.jpg', 'apoio'),
+  ('Fuzzy Açaí', '/images/sponsors/flip/fuzzy-acai.jpg', 'apoio'),
+  ('Studio Kim - Joaquim Oliveira', '/images/sponsors/flip/studio-kim.jpg', 'apoio'),
+  ('Jundiá Sorvetes', '/images/sponsors/flip/jundia-sorvetes.jpg', 'apoio'),
+  ('Magofy', '/images/sponsors/flip/magofy.jpg', 'apoio'),
+  ('MDQ Esportes', '/images/sponsors/flip/mdq-esportes.jpg', 'apoio'),
+  ('Mais Esporte - TV Mais Brasil', '/images/sponsors/flip/mais-esporte.jpg', 'apoio'),
+  ('WS Pets Jundiaí', '/images/sponsors/flip/ws-pets-jundiai.jpg', 'apoio')
+) AS seed(name, logo_url, tier)
 WHERE NOT EXISTS (SELECT 1 FROM sponsors);

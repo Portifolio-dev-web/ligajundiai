@@ -8,8 +8,11 @@ import { sponsorImageVariant } from '@/lib/sponsorImage'
 // compositor. A lista é duplicada (ver `loop`) só pra o translateY(-50%) fechar o laço sem salto;
 // a cópia é decorativa, por isso some de leitores de tela e some da tela em "reduzir movimento".
 export function SponsorVerticalTicker({ sponsors }) {
-  if (!sponsors.length) return null
-  const loop = [...sponsors, ...sponsors]
+  // Um patrocinador sem logo (ex.: cadastrado pelo admin antes de subir a imagem — logo_url
+  // nasce '' no banco) quebraria o <Image> do Next, que exige um src válido.
+  const withLogo = sponsors.filter((s) => s.logo_url)
+  if (!withLogo.length) return null
+  const loop = [...withLogo, ...withLogo]
 
   return (
     <div className="relative h-[260px] overflow-hidden" style={{ background: NAVY }}>
@@ -28,7 +31,7 @@ export function SponsorVerticalTicker({ sponsors }) {
         style={{ willChange: 'transform' }}
       >
         {loop.map((s, i) => {
-          const duplicate = i >= sponsors.length
+          const duplicate = i >= withLogo.length
           return (
             <div
               key={`${s.id}-${i}`}

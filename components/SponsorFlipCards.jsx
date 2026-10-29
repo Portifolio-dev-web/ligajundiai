@@ -6,10 +6,13 @@ import { NAVY } from '@/lib/theme'
 import { sponsorImageVariant } from '@/lib/sponsorImage'
 
 export function SponsorFlipCards({ sponsors }) {
-  if (!sponsors.length) return null
+  // Um patrocinador sem logo (ex.: cadastrado pelo admin antes de subir a imagem — logo_url
+  // nasce '' no banco) quebraria o <Image> do Next, que exige um src válido.
+  const withLogo = sponsors.filter((s) => s.logo_url)
+  if (!withLogo.length) return null
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-      {sponsors.map((s) => (
+      {withLogo.map((s) => (
         <FlipCard key={s.id} sponsor={s} />
       ))}
     </div>

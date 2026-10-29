@@ -6,13 +6,16 @@ import { sponsorImageVariant } from '@/lib/sponsorImage'
 
 export function SponsorCoverFlow({ sponsors }) {
   const [center, setCenter] = useState(0)
-  if (!sponsors.length) return null
-  const n = sponsors.length
+  // Um patrocinador sem logo (ex.: cadastrado pelo admin antes de subir a imagem — logo_url
+  // nasce '' no banco) quebraria o <Image> do Next, que exige um src válido.
+  const withLogo = sponsors.filter((s) => s.logo_url)
+  if (!withLogo.length) return null
+  const n = withLogo.length
 
   return (
     <div>
       <div className="relative mx-auto h-[92px] w-full max-w-[260px]">
-        {sponsors.map((s, i) => {
+        {withLogo.map((s, i) => {
           let offset = i - center
           if (offset > n / 2) offset -= n
           if (offset < -n / 2) offset += n
@@ -64,7 +67,7 @@ export function SponsorCoverFlow({ sponsors }) {
           ›
         </button>
       </div>
-      <div className="mt-1.5 text-center text-[11px] font-semibold text-slate-200">{sponsors[center]?.name}</div>
+      <div className="mt-1.5 text-center text-[11px] font-semibold text-slate-200">{withLogo[center]?.name}</div>
     </div>
   )
 }
