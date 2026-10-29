@@ -2,8 +2,10 @@
 
 import { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { FileText } from 'lucide-react'
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, (character) => ({
@@ -53,9 +55,12 @@ export default function AtletaPresenca({ matches, attendance, userName, loading 
                   <TableCell>{new Date(match.scheduled_at).toLocaleString('pt-BR')}</TableCell>
                   <TableCell>{match.venue || '—'}</TableCell>
                   <TableCell>{record?.present ? <Badge>Presente</Badge> : 'Não registrada'}</TableCell>
-                  <TableCell>{record?.present && <button type="button" className="text-sm font-medium text-primary underline" onClick={() => {
+                  {/* UX (auditoria de leis de UX, Lei de Fitts): era um link de texto sublinhado
+                      (~14px de alvo de toque) na ação mais procurada desta tela — agora um botão
+                      real, com área de toque adequada. */}
+                  <TableCell>{record?.present && <Button type="button" size="sm" variant="outline" onClick={() => {
                     try { printDeclaration(match, { ...record, athlete_name: userName }) } catch (printError) { setError(printError.message) }
-                  }}>Gerar declaração</button>}</TableCell>
+                  }}><FileText className="h-4 w-4" /> Gerar declaração</Button>}</TableCell>
                 </TableRow>
               })}
               {matches.length === 0 && <TableRow><TableCell colSpan={5} className="py-8 text-center text-muted-foreground">Nenhum jogo realizado ainda.</TableCell></TableRow>}

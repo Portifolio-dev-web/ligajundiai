@@ -30,6 +30,16 @@ function TabLoading() {
 const AtletaPresenca = dynamic(() => import('@/components/atleta/tabs/AtletaPresenca'), { loading: TabLoading })
 const AtletaClassificacao = dynamic(() => import('@/components/atleta/tabs/AtletaClassificacao'), { loading: TabLoading })
 
+// UX (auditoria de leis de UX, Lei de Jakob/Carga cognitiva): match.status vem do backend em
+// inglês (backend/src/routes/games.js) — o atleta não deveria precisar entender o enum interno.
+const MATCH_STATUS_LABELS = {
+  proposed: 'Proposto',
+  confirmed: 'Confirmado',
+  scheduled: 'Agendado',
+  finished: 'Finalizado',
+  cancelled: 'Cancelado',
+}
+
 export default function AtletaPanel() {
   const [user, setUser] = useState(null)
   const [category, setCategory] = useState(null)
@@ -181,7 +191,7 @@ export default function AtletaPanel() {
                         <TableCell className="font-medium">{match.home_name} × {match.away_name}</TableCell>
                         <TableCell>{new Date(match.scheduled_at).toLocaleString('pt-BR')}</TableCell>
                         <TableCell>{match.venue || '—'}</TableCell>
-                        <TableCell><Badge variant="secondary">{match.status}</Badge></TableCell>
+                        <TableCell><Badge variant="secondary">{MATCH_STATUS_LABELS[match.status] ?? match.status}</Badge></TableCell>
                       </TableRow>
                     ))}
                     {proximosJogos.length === 0 && <TableRow><TableCell colSpan={4} className="py-8 text-center text-muted-foreground">Nenhum jogo agendado.</TableCell></TableRow>}

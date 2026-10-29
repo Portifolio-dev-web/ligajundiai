@@ -431,13 +431,16 @@ function GestorRoster({ token, team, athletes, reload }) {
                 <div className="text-xs text-slate-500">RG {a.rg} {a.position ? `• ${a.position}` : ''}</div>
                 {a.status === 'rejected' && a.justification && <div className="text-xs text-red-500">Motivo: {a.justification}</div>}
               </div>
-              <div className="flex items-center gap-2">
+              {/* UX (auditoria de leis de UX, Lei de Fitts): "Aprovar" e "Recusar" tinham o mesmo
+                  tamanho e ficavam colados — risco de toque acidental numa ação destrutiva. Agora
+                  "Aprovar" é o botão primário (maior) e "Recusar" fica menor, afastado e discreto. */}
+              <div className="flex items-center gap-3">
                 <StatusBadge status={a.status} />
                 {a.status === 'awaiting_manager' && (
-                  <>
-                    <Button size="sm" onClick={() => review(a.id, 'approve')}>Aprovar</Button>
-                    <Button size="sm" variant="destructive" onClick={() => setRejectId(a.id)}>Recusar</Button>
-                  </>
+                  <div className="flex items-center gap-4">
+                    <Button onClick={() => review(a.id, 'approve')}>Aprovar</Button>
+                    <Button size="sm" variant="ghost" className="text-red-600 hover:bg-red-50 hover:text-red-700" onClick={() => setRejectId(a.id)}>Recusar</Button>
+                  </div>
                 )}
               </div>
             </div>

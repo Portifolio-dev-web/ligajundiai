@@ -273,17 +273,19 @@ function AdminTeams({ reload }) {
                 <div className="text-xs text-red-500 mt-1">Motivo: {t.justification}</div>
               )}
             </div>
-            <div className="flex items-center gap-2">
+            {/* UX (auditoria de leis de UX, Lei de Fitts): mesmo tamanho e colados antes — "Aprovar"
+                agora é o botão primário (maior) e "Recusar" fica menor, afastado e discreto. */}
+            <div className="flex items-center gap-3">
               <StatusBadge status={t.status} />
               {t.status === 'pending' && (
-                <>
-                  <Button size="sm" className="text-white border-0" style={{ background: '#16a34a' }} onClick={() => act(t.id, 'approve')}>
+                <div className="flex items-center gap-4">
+                  <Button className="text-white border-0" style={{ background: '#16a34a' }} onClick={() => act(t.id, 'approve')}>
                     <CheckCircle2 className="h-4 w-4 mr-1" /> Aprovar
                   </Button>
-                  <Button size="sm" variant="destructive" onClick={() => setRejectId(t.id)}>
+                  <Button size="sm" variant="ghost" className="text-red-600 hover:bg-red-50 hover:text-red-700" onClick={() => setRejectId(t.id)}>
                     <XCircle className="h-4 w-4 mr-1" /> Recusar
                   </Button>
-                </>
+                </div>
               )}
             </div>
           </div>
@@ -345,17 +347,19 @@ function AdminAthletes({ reload }) {
                 RG {a.rg} • {a.team_name} • {a.category} {a.position ? `• ${a.position}` : ''}
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            {/* UX (auditoria de leis de UX, Lei de Fitts): mesmo tamanho e colados antes — "Liberar"
+                agora é o botão primário (maior) e "Recusar" fica menor, afastado e discreto. */}
+            <div className="flex items-center gap-3">
               <StatusBadge status={a.status} />
               {a.status === 'awaiting_admin' && (
-                <>
-                  <Button size="sm" className="text-white border-0" style={{ background: '#16a34a' }} onClick={() => act(a.id, 'approve')}>
+                <div className="flex items-center gap-4">
+                  <Button className="text-white border-0" style={{ background: '#16a34a' }} onClick={() => act(a.id, 'approve')}>
                     <CheckCircle2 className="h-4 w-4 mr-1" /> Liberar
                   </Button>
-                  <Button size="sm" variant="destructive" onClick={() => setRejectId(a.id)}>
+                  <Button size="sm" variant="ghost" className="text-red-600 hover:bg-red-50 hover:text-red-700" onClick={() => setRejectId(a.id)}>
                     <XCircle className="h-4 w-4 mr-1" /> Recusar
                   </Button>
-                </>
+                </div>
               )}
             </div>
           </div>

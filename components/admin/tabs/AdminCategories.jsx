@@ -33,6 +33,9 @@ export default function AdminCategories({ onCategoriesChanged }) {
   // em lugar nenhum) — inconsistente, sem foco gerenciado nem leitura por leitor de tela como os
   // outros diálogos da aplicação.
   const [removeTarget, setRemoveTarget] = useState(null)
+  // UX (auditoria de leis de UX, Lei de Murphy): desativar disparava direto no clique do switch,
+  // podendo ocultar uma categoria por acidente — só a desativação (não a ativação) pede confirmação.
+  const [deactivateTarget, setDeactivateTarget] = useState(null)
 
   const load = useCallback(() => {
     api('/admin/categories').then((d) => {
@@ -177,7 +180,10 @@ export default function AdminCategories({ onCategoriesChanged }) {
                     <Input type="number" className="text-center" value={d.sort_order} onChange={(e) => setDraft(cat.id, 'sort_order', e.target.value)} />
                   </TableCell>
                   <TableCell className="text-center">
-                    <Switch checked={cat.active} onCheckedChange={() => toggleActive(cat)} />
+                    <Switch
+                      checked={cat.active}
+                      onCheckedChange={(checked) => (checked ? toggleActive(cat) : setDeactivateTarget(cat))}
+                    />
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center justify-center gap-1">
@@ -212,6 +218,22 @@ export default function AdminCategories({ onCategoriesChanged }) {
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction className="bg-red-600 hover:bg-red-700" onClick={() => removeCategory(removeTarget)}>
               Remover
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog open={!!deactivateTarget} onOpenChange={(open) => !open && setDeactivateTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Desativar categoria</AlertDialogTitle>
+            <AlertDialogDescription>
+              Desativar &ldquo;{deactivateTarget?.name}&rdquo;? Ela deixa de aparecer para gestores e atletas até ser reativada.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { toggleActive(deactivateTarget); setDeactivateTarget(null) }}>
+              Desativar
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

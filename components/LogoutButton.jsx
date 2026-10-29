@@ -2,6 +2,17 @@
 
 import { useState } from 'react'
 import { LogOut, LoaderCircle } from 'lucide-react'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { api } from '@/lib/api'
 
@@ -27,9 +38,25 @@ export default function LogoutButton() {
   }
 
   return (
-    <Button variant="outline" size="sm" onClick={logout} disabled={loggingOut}>
-      {loggingOut ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}
-      Sair
-    </Button>
+    // UX (auditoria de leis de UX, Lei de Murphy): logout disparava a sessão imediatamente num
+    // único clique/toque, ao lado de "Ajuda" — agora exige confirmação explícita.
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button variant="outline" size="sm" disabled={loggingOut}>
+          {loggingOut ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}
+          Sair
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Encerrar sessão?</AlertDialogTitle>
+          <AlertDialogDescription>Você precisará entrar novamente para acessar o painel.</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+          <AlertDialogAction onClick={logout}>Sair</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   )
 }
