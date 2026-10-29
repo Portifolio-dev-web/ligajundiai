@@ -107,14 +107,22 @@ export default function AdminAttendance({ categories }) {
                 <h4 className="font-semibold mt-4 mb-2" style={{ color: NAVY }}>Frequência da equipe</h4>
                 <div className="space-y-1">
                   {freq.map((f) => (
-                    <div key={f.athlete_id} className="flex items-center justify-between text-sm rounded border p-2">
-                      <span>{f.name}</span>
-                      <span className="flex items-center gap-2">
-                        <span className="text-slate-500">{f.present}/{f.total_sessions} ({f.percent}%)</span>
-                        <Badge className="border-0 text-white" style={{ background: f.eligible ? GREEN : DANGER }}>
-                          {f.eligible ? 'Apto' : 'Inapto'}
-                        </Badge>
-                      </span>
+                    <div key={f.athlete_id} className="rounded border p-2 text-sm">
+                      <div className="flex items-center justify-between">
+                        <span>{f.name}</span>
+                        <span className="flex items-center gap-2">
+                          <span className="text-slate-500">{f.present}/{f.total_sessions} ({f.percent}%)</span>
+                          <Badge className="border-0 text-white" style={{ background: f.eligible ? GREEN : DANGER }}>
+                            {f.eligible ? 'Apto' : 'Inapto'}
+                          </Badge>
+                        </span>
+                      </div>
+                      {/* UX (auditoria de leis de UX, Efeito gradiente de meta, Fase 4): marcador no
+                          mínimo exigido, mesmo padrão já usado na Frequência do gestor e do atleta. */}
+                      <div className="relative mt-2 h-2 w-full rounded-full bg-slate-100">
+                        <div className="h-2 rounded-full" style={{ width: `${Math.min(f.percent, 100)}%`, background: f.eligible ? GREEN : DANGER }} />
+                        <div className="absolute top-0 h-2 w-0.5 bg-slate-700" style={{ left: `${Math.min(f.min_required, 100)}%` }} />
+                      </div>
                     </div>
                   ))}
                 </div>

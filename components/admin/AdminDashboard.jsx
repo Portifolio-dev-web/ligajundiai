@@ -16,8 +16,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import {
-  Bell, CalendarDays, CheckCircle2, ClipboardList, LoaderCircle, ShieldCheck, Users, Volleyball,
-  XCircle,
+  Bell, CalendarDays, CheckCircle2, Clock, ClipboardList, LoaderCircle, ShieldCheck, Users,
+  Volleyball, XCircle,
 } from 'lucide-react'
 import HelpLink from '@/components/HelpLink'
 import LogoutButton from '@/components/LogoutButton'
@@ -188,6 +188,26 @@ export default function AdminDashboard() {
   )
 }
 
+// UX (auditoria de leis de UX, Lei de Parkinson, Fase 4): sem prazo visível, uma aprovação pode se
+// arrastar indefinidamente sem que o admin perceba — a tarefa "se expande" até preencher o tempo
+// disponível. Mostra há quanto tempo o item espera e destaca em vermelho a partir de 48h.
+function daysSince(dateStr) {
+  const diffMs = Date.now() - new Date(dateStr).getTime()
+  return Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)))
+}
+
+function PendingAge({ createdAt }) {
+  if (!createdAt) return null
+  const days = daysSince(createdAt)
+  const urgent = days >= 2
+  const label = days === 0 ? 'aguardando desde hoje' : `aguardando há ${days} dia${days > 1 ? 's' : ''}`
+  return (
+    <span className={`inline-flex items-center gap-1 text-xs font-medium ${urgent ? 'text-red-600' : 'text-amber-600'}`}>
+      <Clock className="h-3 w-3" /> {label}
+    </span>
+  )
+}
+
 function StatCard({ label, value, loading, icon: Icon, color }) {
   return (
     <Card>
@@ -318,6 +338,7 @@ function AdminTeams({ reload }) {
               {t.status === 'rejected' && t.justification && (
                 <div className="text-xs text-red-500 mt-1">Motivo: {t.justification}</div>
               )}
+              {t.status === 'pending' && <div className="mt-1"><PendingAge createdAt={t.created_at} /></div>}
             </div>
             {/* UX (auditoria de leis de UX, Lei de Fitts): mesmo tamanho e colados antes — "Aprovar"
                 agora é o botão primário (maior) e "Recusar" fica menor, afastado e discreto. */}
@@ -392,6 +413,7 @@ function AdminAthletes({ reload }) {
               <div className="text-xs text-slate-500">
                 RG {a.rg} • {a.team_name} • {a.category} {a.position ? `• ${a.position}` : ''}
               </div>
+              {a.status === 'awaiting_admin' && <div className="mt-1"><PendingAge createdAt={a.created_at} /></div>}
             </div>
             {/* UX (auditoria de leis de UX, Lei de Fitts): mesmo tamanho e colados antes — "Liberar"
                 agora é o botão primário (maior) e "Recusar" fica menor, afastado e discreto. */}

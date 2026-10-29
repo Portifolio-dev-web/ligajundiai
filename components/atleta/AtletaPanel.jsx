@@ -1,13 +1,15 @@
 'use client'
 
 import dynamic from 'next/dynamic'
+import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { CalendarCheck, CalendarDays, LoaderCircle, TrendingUp } from 'lucide-react'
+import { CalendarCheck, CalendarDays, LoaderCircle, Star, TrendingUp } from 'lucide-react'
 import HelpLink from '@/components/HelpLink'
 import LogoutButton from '@/components/LogoutButton'
 import { api } from '@/lib/lvjApi'
@@ -143,21 +145,40 @@ export default function AtletaPanel() {
             <div className="flex h-11 w-11 items-center justify-center rounded-lg text-white flex-shrink-0" style={{ background: GREEN }}>
               <TrendingUp className="h-5 w-5" />
             </div>
-            <div className="min-w-0 min-h-[40px]">
+            <div className="min-w-0 min-h-[40px] flex-1">
               <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Frequência</div>
               {loading ? (
                 <div className="text-sm text-slate-500">Carregando…</div>
               ) : frequenciaPercent === null ? (
                 <div className="text-sm text-slate-600">Sem registros de presença ainda.</div>
               ) : (
-                <div className="flex items-baseline gap-2">
-                  <span className="text-xl font-extrabold text-slate-900">{frequenciaPercent}%</span>
-                  {eligible !== null && (
-                    <Badge className="text-white border-0 text-[10px]" style={{ background: eligible ? GREEN : DANGER }}>
-                      {eligible ? `Apto (mín. ${minRequired}%)` : `Inapto (mín. ${minRequired}%)`}
-                    </Badge>
+                <>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-xl font-extrabold text-slate-900">{frequenciaPercent}%</span>
+                    {eligible !== null && (
+                      <Badge className="text-white border-0 text-[10px]" style={{ background: eligible ? GREEN : DANGER }}>
+                        {eligible ? `Apto (mín. ${minRequired}%)` : `Inapto (mín. ${minRequired}%)`}
+                      </Badge>
+                    )}
+                  </div>
+                  {/* UX (auditoria de leis de UX, Efeito gradiente de meta, Fase 4): número + badge
+                      binário não mostravam o quão perto o atleta está da meta. A barra com marcador
+                      no mínimo exigido torna o progresso (ou a distância até cair abaixo dele)
+                      visível de imediato. */}
+                  {minRequired !== null && (
+                    <div className="relative mt-1.5 h-2 max-w-[220px] rounded-full bg-slate-200">
+                      <div
+                        className="h-2 rounded-full"
+                        style={{ width: `${Math.min(frequenciaPercent, 100)}%`, background: eligible ? GREEN : DANGER }}
+                      />
+                      <div
+                        className="absolute top-0 h-2 w-0.5 bg-slate-700"
+                        style={{ left: `${Math.min(minRequired, 100)}%` }}
+                        title={`Mínimo exigido: ${minRequired}%`}
+                      />
+                    </div>
                   )}
-                </div>
+                </>
               )}
             </div>
           </CardContent>
@@ -186,15 +207,45 @@ export default function AtletaPanel() {
                 <Table>
                   <TableHeader><TableRow><TableHead>Partida</TableHead><TableHead>Data</TableHead><TableHead>Local</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
                   <TableBody>
-                    {proximosJogos.map((match) => (
-                      <TableRow key={match.id}>
-                        <TableCell className="font-medium">{match.home_name} × {match.away_name}</TableCell>
-                        <TableCell>{new Date(match.scheduled_at).toLocaleString('pt-BR')}</TableCell>
-                        <TableCell>{match.venue || '—'}</TableCell>
-                        <TableCell><Badge variant="secondary">{MATCH_STATUS_LABELS[match.status] ?? match.status}</Badge></TableCell>
+                    {/* UX (auditoria de leis de UX, Efeito Von Restorff, Fase 4): a próxima partida já
+                        ganhava destaque no card-resumo acima, mas aparecia com o mesmo peso visual
+                        das demais aqui na lista — nada sinalizava "esta é a próxima" dentro dela. */}
+                    {proximosJogos.map((match) => {
+                      const isNext = proximoJogo?.id === match.id
+                      return (
+                        <TableRow key={match.id} className={isNext ? 'bg-blue-50/70 hover:bg-blue-50' : undefined}>
+                          <TableCell className="font-medium">
+                            <span className="inline-flex items-center gap-1.5">
+                              {isNext && <Star className="h-3.5 w-3.5 shrink-0 fill-current" style={{ color: BLUE }} />}
+                              {match.home_name} × {match.away_name}
+                            </span>
+                          </TableCell>
+                          <TableCell>{new Date(match.scheduled_at).toLocaleString('pt-BR')}</TableCell>
+                          <TableCell>{match.venue || '—'}</TableCell>
+                          <TableCell>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <Badge variant="secondary">{MATCH_STATUS_LABELS[match.status] ?? match.status}</Badge>
+                              {isNext && <Badge className="text-white border-0" style={{ background: BLUE }}>Próximo</Badge>}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                    {/* UX (auditoria de leis de UX, Regra do pico-fim, Fase 4): texto cinza plano era o
+                        último elemento visto quando não há jogos — termina a visita de forma neutra,
+                        sem acolher nem indicar o próximo passo. */}
+                    {proximosJogos.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={4} className="py-10 text-center">
+                          <CalendarDays className="mx-auto h-8 w-8 text-slate-300" />
+                          <p className="mt-2 font-medium text-slate-700">Nenhum jogo agendado ainda</p>
+                          <p className="text-sm text-muted-foreground">Fale com seu gestor para saber a próxima data.</p>
+                          <Button asChild variant="outline" size="sm" className="mt-3">
+                            <Link href="/ajuda">Ver ajuda</Link>
+                          </Button>
+                        </TableCell>
                       </TableRow>
-                    ))}
-                    {proximosJogos.length === 0 && <TableRow><TableCell colSpan={4} className="py-8 text-center text-muted-foreground">Nenhum jogo agendado.</TableCell></TableRow>}
+                    )}
                   </TableBody>
                 </Table>
               </div>}
