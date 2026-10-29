@@ -3,6 +3,7 @@
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { useEffect, useState, useCallback, useRef } from 'react'
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -310,77 +311,106 @@ function GestorRoster({ token, team, athletes, reload }) {
         {team.status === 'approved' && loadingAthletePeriod ? (
           <div role="status" className="rounded-lg border p-3 text-sm text-slate-600">Verificando o período de cadastro de atletas…</div>
         ) : team.status === 'approved' && athletePeriod?.status === 'open' ? (
-          <div className="grid gap-3 md:grid-cols-3 items-end rounded-lg border p-4 bg-slate-50">
-            <div>
-              <Label className="text-xs">Nome do atleta</Label>
-              <Input ref={nameInputRef} value={form.name} aria-invalid={!!addError} aria-describedby={addError ? 'add-athlete-error' : undefined} onChange={(e) => { setForm({ ...form, name: e.target.value }); setAddError('') }} />
-            </div>
-            <div>
-              <Label className="text-xs">RG</Label>
-              <Input value={form.rg} onChange={(e) => setForm({ ...form, rg: formatRg(e.target.value) })} />
-            </div>
-            <div>
-              <Label className="text-xs">Posição</Label>
-              <select className="h-10 w-full rounded-md border bg-white px-3 text-sm" value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })}>
-                <option value="">Selecione</option>
-                <option value="central">Central</option>
-                <option value="ponteiro">Ponteiro</option>
-                <option value="saida">Saída</option>
-                <option value="levantador">Levantador</option>
-                <option value="libero">Líbero</option>
-              </select>
-            </div>
-            <div>
-              {/* LGPD (varredura, item L2): precisa ser obrigatória — sem ela não dá para saber se
-                  o atleta é menor de idade, e o aviso do responsável legal abaixo nunca apareceria. */}
-              <Label className="text-xs">Data de nascimento</Label>
-              <Input type="date" value={form.birthdate} onChange={(e) => setForm({ ...form, birthdate: e.target.value })} required />
-            </div>
-            <div>
-              <Label className="text-xs">E-mail do atleta (opcional)</Label>
-              <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-            </div>
-            <div>
-              <Label className="text-xs">Foto para biometria (máx. 5 MB)</Label>
-              <Input type="file" accept="image/jpeg,image/png,image/webp" capture="user" onChange={(e) => setForm({ ...form, photo: e.target.files?.[0] || null })} />
-            </div>
-            {/* LGPD (varredura, item L2): aparece só quando a data de nascimento indica menor de
-                18 anos — art. 14 da LGPD exige o consentimento do responsável legal, identificado. */}
-            {isMinor && <div className="md:col-span-2 space-y-3 rounded-md border border-amber-200 bg-amber-50 p-3">
-              <p className="text-xs text-amber-900">Atleta menor de idade: informe o responsável legal.</p>
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div>
-                  <Label className="text-xs">Nome do responsável</Label>
-                  <Input value={form.guardianName} onChange={(e) => setForm({ ...form, guardianName: e.target.value })} />
-                </div>
-                <div>
-                  <Label className="text-xs">RG do responsável</Label>
-                  <Input value={form.guardianRg} onChange={(e) => setForm({ ...form, guardianRg: formatRg(e.target.value) })} />
-                </div>
-                <div>
-                  <Label className="text-xs">Parentesco</Label>
-                  <Input placeholder="mãe, pai, tutor(a)…" value={form.guardianRelationship} onChange={(e) => setForm({ ...form, guardianRelationship: e.target.value })} />
-                </div>
-              </div>
-            </div>}
-            {/* Risco 3 (análise LVJ 2027): texto real do Termo de Autorização de Uso de Imagem
-                (todo atleta) e, quando menor de idade, também da Autorização para Participação de
-                Atletas Menores — não mais o aceite genérico de dados. */}
-            {isMinor && <div className="md:col-span-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">{MINOR_GUARDIAN_TERM}</div>}
-            <div className="md:col-span-2 rounded-md border bg-slate-50 p-3 text-xs text-slate-600">{IMAGE_USE_TERM}</div>
-            {/* LGPD (varredura, item L4): checkbox separado do consentimento geral abaixo, só exigido
-                quando há foto anexada — a biometria é dado sensível (art. 11 da LGPD). */}
-            {form.photo && <label className="flex items-start gap-2 text-xs text-amber-900 md:col-span-2 rounded-md border border-amber-200 bg-amber-50 p-3">
-              <input type="checkbox" checked={form.biometricConsent} onChange={(e) => setForm({ ...form, biometricConsent: e.target.checked })} />
-              <span>Confirmo o consentimento específico do atleta (ou responsável legal) para o tratamento da foto biométrica para controle de acesso (reconhecimento facial), como dado pessoal sensível (art. 11 da LGPD).</span>
-            </label>}
-            <label className="flex items-start gap-2 text-xs text-slate-600 md:col-span-2">
-              <input type="checkbox" checked={form.consent} onChange={(e) => setForm({ ...form, consent: e.target.checked })} />
-              <span>Confirmo que obtive o consentimento do atleta (ou responsável legal) para os termos acima e para tratar os dados e a foto biométrica, conforme a <Link className="underline" href="/privacidade" target="_blank">Política de Privacidade</Link> e os <Link className="underline" href="/termos-de-uso" target="_blank">Termos de Uso</Link>.</span>
-            </label>
-            {addError && <p id="add-athlete-error" role="alert" className="md:col-span-2 text-xs text-red-600">{addError}</p>}
+          // UX (auditoria de leis de UX, Lei de Miller/Carga cognitiva, Fase 3): eram 11+ campos
+          // visíveis ao mesmo tempo num grid único. Agrupados em 3 seções colapsáveis — só "Dados
+          // do atleta" abre por padrão, as outras ficam disponíveis a um clique quando precisar.
+          <div className="rounded-lg border bg-slate-50 p-4">
+            <Accordion type="single" collapsible defaultValue="dados" className="w-full">
+              <AccordionItem value="dados">
+                <AccordionTrigger>Dados do atleta</AccordionTrigger>
+                <AccordionContent>
+                  <div className="grid gap-3 md:grid-cols-3 items-end">
+                    <div>
+                      <Label className="text-xs">Nome do atleta</Label>
+                      <Input ref={nameInputRef} value={form.name} aria-invalid={!!addError} aria-describedby={addError ? 'add-athlete-error' : undefined} onChange={(e) => { setForm({ ...form, name: e.target.value }); setAddError('') }} />
+                    </div>
+                    <div>
+                      <Label className="text-xs">RG</Label>
+                      <Input value={form.rg} onChange={(e) => setForm({ ...form, rg: formatRg(e.target.value) })} />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Posição</Label>
+                      <select className="h-10 w-full rounded-md border bg-white px-3 text-sm" value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })}>
+                        <option value="">Selecione</option>
+                        <option value="central">Central</option>
+                        <option value="ponteiro">Ponteiro</option>
+                        <option value="saida">Saída</option>
+                        <option value="levantador">Levantador</option>
+                        <option value="libero">Líbero</option>
+                      </select>
+                    </div>
+                    <div>
+                      {/* LGPD (varredura, item L2): precisa ser obrigatória — sem ela não dá para saber se
+                          o atleta é menor de idade, e o aviso do responsável legal abaixo nunca apareceria. */}
+                      <Label className="text-xs">Data de nascimento</Label>
+                      <Input type="date" value={form.birthdate} onChange={(e) => setForm({ ...form, birthdate: e.target.value })} required />
+                    </div>
+                    <div>
+                      <Label className="text-xs">E-mail do atleta (opcional)</Label>
+                      <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+                    </div>
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+
+              <AccordionItem value="documentos">
+                <AccordionTrigger>Documentação e biometria</AccordionTrigger>
+                <AccordionContent>
+                  <div className="space-y-3">
+                    <div>
+                      <Label className="text-xs">Foto para biometria (máx. 5 MB)</Label>
+                      <Input type="file" accept="image/jpeg,image/png,image/webp" capture="user" onChange={(e) => setForm({ ...form, photo: e.target.files?.[0] || null })} />
+                    </div>
+                    {/* LGPD (varredura, item L2): aparece só quando a data de nascimento indica menor de
+                        18 anos — art. 14 da LGPD exige o consentimento do responsável legal, identificado. */}
+                    {isMinor && <div className="space-y-3 rounded-md border border-amber-200 bg-amber-50 p-3">
+                      <p className="text-xs text-amber-900">Atleta menor de idade: informe o responsável legal.</p>
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        <div>
+                          <Label className="text-xs">Nome do responsável</Label>
+                          <Input value={form.guardianName} onChange={(e) => setForm({ ...form, guardianName: e.target.value })} />
+                        </div>
+                        <div>
+                          <Label className="text-xs">RG do responsável</Label>
+                          <Input value={form.guardianRg} onChange={(e) => setForm({ ...form, guardianRg: formatRg(e.target.value) })} />
+                        </div>
+                        <div>
+                          <Label className="text-xs">Parentesco</Label>
+                          <Input placeholder="mãe, pai, tutor(a)…" value={form.guardianRelationship} onChange={(e) => setForm({ ...form, guardianRelationship: e.target.value })} />
+                        </div>
+                      </div>
+                    </div>}
+                    {/* LGPD (varredura, item L4): checkbox separado do consentimento geral abaixo, só exigido
+                        quando há foto anexada — a biometria é dado sensível (art. 11 da LGPD). */}
+                    {form.photo && <label className="flex items-start gap-2 text-xs text-amber-900 rounded-md border border-amber-200 bg-amber-50 p-3">
+                      <input type="checkbox" checked={form.biometricConsent} onChange={(e) => setForm({ ...form, biometricConsent: e.target.checked })} />
+                      <span>Confirmo o consentimento específico do atleta (ou responsável legal) para o tratamento da foto biométrica para controle de acesso (reconhecimento facial), como dado pessoal sensível (art. 11 da LGPD).</span>
+                    </label>}
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+
+              <AccordionItem value="termos" className="border-b-0">
+                <AccordionTrigger>Termos e consentimento</AccordionTrigger>
+                <AccordionContent>
+                  <div className="space-y-3">
+                    {/* Risco 3 (análise LVJ 2027): texto real do Termo de Autorização de Uso de Imagem
+                        (todo atleta) e, quando menor de idade, também da Autorização para Participação de
+                        Atletas Menores — não mais o aceite genérico de dados. */}
+                    {isMinor && <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">{MINOR_GUARDIAN_TERM}</div>}
+                    <div className="rounded-md border bg-white p-3 text-xs text-slate-600">{IMAGE_USE_TERM}</div>
+                    <label className="flex items-start gap-2 text-xs text-slate-600">
+                      <input type="checkbox" checked={form.consent} onChange={(e) => setForm({ ...form, consent: e.target.checked })} />
+                      <span>Confirmo que obtive o consentimento do atleta (ou responsável legal) para os termos acima e para tratar os dados e a foto biométrica, conforme a <Link className="underline" href="/privacidade" target="_blank">Política de Privacidade</Link> e os <Link className="underline" href="/termos-de-uso" target="_blank">Termos de Uso</Link>.</span>
+                    </label>
+                  </div>
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+
+            {addError && <p id="add-athlete-error" role="alert" className="mt-3 text-xs text-red-600">{addError}</p>}
             <Button
-              className="text-white border-0"
+              className="mt-4 text-white border-0"
               style={{ background: BLUE }}
               onClick={add}
               disabled={!form.name || !form.rg || !form.position || !form.birthdate || !form.consent ||

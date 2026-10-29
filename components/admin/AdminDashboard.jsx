@@ -49,6 +49,29 @@ const AdminCategories = dynamic(() => import('@/components/admin/tabs/AdminCateg
 const AdminEmails = dynamic(() => import('@/components/admin/tabs/AdminEmails'), { loading: TabLoading })
 const AdminAccountSecurity = dynamic(() => import('@/components/admin/tabs/AdminAccountSecurity'), { loading: TabLoading })
 
+// UX (auditoria de leis de UX, Lei de Hick/Lei de Miller, Fase 3): as 11 abas numa faixa só
+// excediam em mais que o dobro o limite de ~7±2 opções simultâneas de Miller, e aumentavam o
+// tempo de decisão a cada troca (Hick). Reagrupadas em 3 grupos de 1º nível — a decisão inicial
+// cai para 3 itens; o 2º nível só mostra as abas do grupo ativo.
+const TAB_GROUPS = [
+  { key: 'operacao', label: 'Operação', tabs: ['equipes', 'atletas', 'jogos', 'datas', 'presenca', 'classificacao'] },
+  { key: 'configuracao', label: 'Configuração', tabs: ['categorias', 'regulamento', 'inscricoes'] },
+  { key: 'sistema', label: 'Sistema', tabs: ['emails', 'seguranca'] },
+]
+const TAB_LABELS = {
+  equipes: 'Equipes',
+  atletas: 'Atletas',
+  jogos: 'Jogos & Resultados',
+  datas: 'Datas disponíveis',
+  presenca: 'Presença',
+  classificacao: 'Classificação',
+  categorias: 'Categorias',
+  regulamento: 'Regulamento',
+  inscricoes: 'Inscrições',
+  emails: 'E-mails',
+  seguranca: 'Segurança',
+}
+
 // ============================================================================
 // PAINEL ADMINISTRATIVO (refatoração 2026-10-23)
 //
@@ -72,6 +95,12 @@ export default function AdminDashboard() {
   // fica true na primeira carga; o polling de 15s abaixo não volta a mostrar o esqueleto.
   const [statsLoading, setStatsLoading] = useState(true)
   const [categories, setCategories] = useState(CATEGORY_FALLBACK)
+  const [activeTab, setActiveTab] = useState('equipes')
+  const activeGroup = TAB_GROUPS.find((g) => g.tabs.includes(activeTab))?.key ?? TAB_GROUPS[0].key
+  const switchGroup = (groupKey) => {
+    const group = TAB_GROUPS.find((g) => g.key === groupKey)
+    if (group) setActiveTab(group.tabs[0])
+  }
 
   const loadNotif = useCallback(() => {
     api('/admin/notifications').then(setNotif).catch(() => {})
@@ -116,23 +145,31 @@ export default function AdminDashboard() {
         <StatCard label="Atletas pend." value={stats.pending_athletes} loading={statsLoading} icon={ClipboardList} color={DANGER} />
       </div>
 
-      <Tabs defaultValue="equipes">
-        {/* UX (varredura, item U-Baixa-3): com 11 abas, "flex flex-wrap" quebrava em até 4 linhas
-            de pills no mobile (375px) — denso e difícil de escanear. Uma faixa com rolagem
-            horizontal (igual ao padrão já usado em components/MatchAttendance.jsx para tabelas
-            largas) cabe numa linha só. */}
+      {/* UX (auditoria de leis de UX, Lei de Hick/Lei de Miller, Fase 3): 1º nível com 3 grupos
+          (ver TAB_GROUPS acima) — a escolha inicial do admin cai de 11 para 3 opções. */}
+      <div className="mb-2 flex w-full flex-nowrap gap-2 overflow-x-auto">
+        {TAB_GROUPS.map((group) => (
+          <button
+            key={group.key}
+            type="button"
+            onClick={() => switchGroup(group.key)}
+            className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-medium transition-colors ${
+              activeGroup === group.key ? 'text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+            style={activeGroup === group.key ? { background: NAVY } : undefined}
+          >
+            {group.label}
+          </button>
+        ))}
+      </div>
+
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        {/* 2º nível: só as abas do grupo selecionado acima, numa faixa com rolagem horizontal
+            (mesmo padrão já usado em components/MatchAttendance.jsx para tabelas largas). */}
         <TabsList className="flex w-full flex-nowrap justify-start gap-1 overflow-x-auto">
-          <TabsTrigger value="equipes" className="shrink-0">Equipes</TabsTrigger>
-          <TabsTrigger value="atletas" className="shrink-0">Atletas</TabsTrigger>
-          <TabsTrigger value="jogos" className="shrink-0">Jogos & Resultados</TabsTrigger>
-          <TabsTrigger value="datas" className="shrink-0">Datas disponíveis</TabsTrigger>
-          <TabsTrigger value="presenca" className="shrink-0">Presença</TabsTrigger>
-          <TabsTrigger value="inscricoes" className="shrink-0">Inscrições</TabsTrigger>
-          <TabsTrigger value="regulamento" className="shrink-0">Regulamento</TabsTrigger>
-          <TabsTrigger value="classificacao" className="shrink-0">Classificação</TabsTrigger>
-          <TabsTrigger value="categorias" className="shrink-0">Categorias</TabsTrigger>
-          <TabsTrigger value="emails" className="shrink-0">E-mails</TabsTrigger>
-          <TabsTrigger value="seguranca" className="shrink-0">Segurança</TabsTrigger>
+          {TAB_GROUPS.find((g) => g.key === activeGroup).tabs.map((tab) => (
+            <TabsTrigger key={tab} value={tab} className="shrink-0">{TAB_LABELS[tab]}</TabsTrigger>
+          ))}
         </TabsList>
 
         <TabsContent value="equipes"><AdminTeams reload={loadNotif} /></TabsContent>
