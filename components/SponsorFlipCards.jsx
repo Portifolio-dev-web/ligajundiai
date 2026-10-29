@@ -1,18 +1,22 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import Image from 'next/image'
 import { NAVY } from '@/lib/theme'
 import { sponsorImageVariant } from '@/lib/sponsorImage'
+import { shuffled } from '@/lib/shuffle'
 
 export function SponsorFlipCards({ sponsors }) {
-  // Um patrocinador sem logo (ex.: cadastrado pelo admin antes de subir a imagem — logo_url
-  // nasce '' no banco) quebraria o <Image> do Next, que exige um src válido.
-  const withLogo = sponsors.filter((s) => s.logo_url)
-  if (!withLogo.length) return null
+  // UX: ordem sorteada uma vez por carregamento, não a cada render — useMemo só recalcula quando
+  // `sponsors` muda de referência, o que só acontece quando o fetch inicial (em app/page.js)
+  // resolve, nunca por causa de um re-render de outro estado da página. Um patrocinador sem logo
+  // (ex.: cadastrado pelo admin antes de subir a imagem — logo_url nasce '' no banco) quebraria o
+  // <Image> do Next, que exige um src válido, por isso o filtro antes do sorteio.
+  const ordered = useMemo(() => shuffled(sponsors.filter((s) => s.logo_url)), [sponsors])
+  if (!ordered.length) return null
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-      {withLogo.map((s) => (
+      {ordered.map((s) => (
         <FlipCard key={s.id} sponsor={s} />
       ))}
     </div>

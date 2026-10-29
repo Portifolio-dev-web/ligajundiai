@@ -1,21 +1,22 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import Image from 'next/image'
 import { sponsorImageVariant } from '@/lib/sponsorImage'
+import { shuffled } from '@/lib/shuffle'
 
 export function SponsorCoverFlow({ sponsors }) {
   const [center, setCenter] = useState(0)
-  // Um patrocinador sem logo (ex.: cadastrado pelo admin antes de subir a imagem — logo_url
-  // nasce '' no banco) quebraria o <Image> do Next, que exige um src válido.
-  const withLogo = sponsors.filter((s) => s.logo_url)
-  if (!withLogo.length) return null
-  const n = withLogo.length
+  // UX: ordem sorteada uma vez por carregamento (ver mesmo comentário em SponsorFlipCards). Um
+  // patrocinador sem logo quebraria o <Image> do Next, que exige um src válido, por isso o filtro.
+  const ordered = useMemo(() => shuffled(sponsors.filter((s) => s.logo_url)), [sponsors])
+  if (!ordered.length) return null
+  const n = ordered.length
 
   return (
     <div>
       <div className="relative mx-auto h-[92px] w-full max-w-[260px]">
-        {withLogo.map((s, i) => {
+        {ordered.map((s, i) => {
           let offset = i - center
           if (offset > n / 2) offset -= n
           if (offset < -n / 2) offset += n
@@ -67,7 +68,7 @@ export function SponsorCoverFlow({ sponsors }) {
           ›
         </button>
       </div>
-      <div className="mt-1.5 text-center text-[11px] font-semibold text-slate-200">{withLogo[center]?.name}</div>
+      <div className="mt-1.5 text-center text-[11px] font-semibold text-slate-200">{ordered[center]?.name}</div>
     </div>
   )
 }

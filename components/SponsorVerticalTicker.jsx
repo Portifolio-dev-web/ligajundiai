@@ -1,18 +1,21 @@
 'use client'
 
+import { useMemo } from 'react'
 import Image from 'next/image'
 import { NAVY } from '@/lib/theme'
 import { sponsorImageVariant } from '@/lib/sponsorImage'
+import { shuffled } from '@/lib/shuffle'
 
 // PERFORMANCE: mesmo princípio do carrossel horizontal — só `transform` (translateY) rodando no
 // compositor. A lista é duplicada (ver `loop`) só pra o translateY(-50%) fechar o laço sem salto;
 // a cópia é decorativa, por isso some de leitores de tela e some da tela em "reduzir movimento".
 export function SponsorVerticalTicker({ sponsors }) {
-  // Um patrocinador sem logo (ex.: cadastrado pelo admin antes de subir a imagem — logo_url
-  // nasce '' no banco) quebraria o <Image> do Next, que exige um src válido.
-  const withLogo = sponsors.filter((s) => s.logo_url)
-  if (!withLogo.length) return null
-  const loop = [...withLogo, ...withLogo]
+  // UX: ordem sorteada uma vez por carregamento (ver mesmo comentário em SponsorFlipCards), antes
+  // de duplicar a lista — embaralhar depois arriscaria o mesmo patrocinador cair colado nele mesmo
+  // na emenda do loop. Um patrocinador sem logo quebraria o <Image> do Next, por isso o filtro.
+  const ordered = useMemo(() => shuffled(sponsors.filter((s) => s.logo_url)), [sponsors])
+  if (!ordered.length) return null
+  const loop = [...ordered, ...ordered]
 
   return (
     <div className="relative h-[260px] overflow-hidden" style={{ background: NAVY }}>
@@ -31,7 +34,7 @@ export function SponsorVerticalTicker({ sponsors }) {
         style={{ willChange: 'transform' }}
       >
         {loop.map((s, i) => {
-          const duplicate = i >= withLogo.length
+          const duplicate = i >= ordered.length
           return (
             <div
               key={`${s.id}-${i}`}
