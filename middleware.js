@@ -151,7 +151,30 @@ function sessionCookieName() {
   return process.env.COOKIE_SECURE === 'true' ? '__Host-lvj_session' : 'lvj_session'
 }
 
+// SEGURANÇA (varredura, item 10): o proxy de rewrite do Next (next.config.js, /api/:path* ->
+// backend) só preenche x-forwarded-for/host/port/proto quando ausentes (??=) — nunca sobrescreve
+// um valor já presente na requisição. Como o navegador pode mandar esses cabeçalhos direto (não
+// são "forbidden headers" do fetch/XHR), e o backend confia no primeiro hop (trust proxy: 1)
+// achando que é sempre este proxy, um X-Forwarded-For forjado chegava inalterado e falsificava
+// req.ip (rate limit por IP e audit_logs.ip). Removendo aqui, antes do rewrite, o próprio Next
+// preenche esses cabeçalhos com o endereço real do socket que conectou nele.
+function stripForwardedHeaders(request) {
+  const headers = new Headers(request.headers)
+  headers.delete('x-forwarded-for')
+  headers.delete('x-forwarded-host')
+  headers.delete('x-forwarded-port')
+  headers.delete('x-forwarded-proto')
+  return NextResponse.next({ request: { headers } })
+}
+
 export async function middleware(request) {
+  // /api/:path* não passa pelo resto deste middleware (nonce de CSP, checagem de papel/sessão —
+  // a API já tem seus próprios cabeçalhos de segurança e autenticação no backend), mas precisa
+  // passar por aqui mesmo assim para o rewrite proxy não herdar um X-Forwarded-For forjado.
+  if (request.nextUrl.pathname.startsWith('/api/')) {
+    return stripForwardedHeaders(request)
+  }
+
   // O nonce agora é gerado para TODA requisição de página (matcher abaixo), não só para as rotas
   // protegidas por papel — um CSP real precisa valer no site inteiro, inclusive na home e no
   // cadastro público de atleta.
@@ -204,7 +227,7 @@ export async function middleware(request) {
 }
 
 export const config = {
-  // Roda em toda página (para o CSP valer em todo o site) menos em /api (a API já define os
-  // próprios cabeçalhos de segurança no backend, via helmet) e nos arquivos internos do Next.
-  matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)'],
+  // Roda em toda página (para o CSP valer em todo o site) e também em /api (ver item 10 acima,
+  // stripForwardedHeaders) — só nos arquivos internos do Next é que não precisa rodar.
+  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 }
