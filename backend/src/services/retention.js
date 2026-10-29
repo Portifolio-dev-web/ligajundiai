@@ -1,8 +1,6 @@
-import { DeleteObjectCommand } from '@aws-sdk/client-s3'
 import { config } from '../config.js'
 import { transaction } from '../db/pool.js'
-import { storageClient } from './storage.js'
-import { audit } from '../utils.js'
+import { audit, enqueuePendingBiometryCleanup } from '../utils.js'
 
 // LGPD (varredura, item L9): a eliminação dependia 100% do titular pedir via DELETE /privacy/me —
 // não havia processo que identificasse e eliminasse dados sem base legal remanescente. Um cadastro
@@ -11,14 +9,14 @@ import { audit } from '../utils.js'
 // que passou do prazo configurado em RETENTION_REJECTED_ATHLETE_DAYS, sem esperar pedido de ninguém.
 export async function sweepExpiredRetention() {
   const cutoff = new Date(Date.now() - config.RETENTION_REJECTED_ATHLETE_DAYS * 24 * 60 * 60 * 1000)
-  const { ids, objectKeys } = await transaction(async (client) => {
+  const ids = await transaction(async (client) => {
     const expired = await client.query(
-      `SELECT id, biometry_object_key FROM athletes
+      `SELECT id, biometry_object_key, control_id_reference FROM athletes
        WHERE status = 'rejected' AND deleted_at IS NULL AND updated_at < $1
        FOR UPDATE`,
       [cutoff],
     )
-    if (!expired.rowCount) return { ids: [], objectKeys: [] }
+    if (!expired.rowCount) return []
     const expiredIds = expired.rows.map((row) => row.id)
     const now = new Date()
     // Mesmos campos zerados que a anonimização sob pedido do titular (privacy.js), incluindo os
@@ -32,17 +30,18 @@ export async function sweepExpiredRetention() {
        WHERE id = ANY($1::uuid[])`,
       [expiredIds, now],
     )
-    for (const id of expiredIds) {
-      await audit(client, null, 'privacy.retention_anonymize', 'athlete', id, {
+    for (const row of expired.rows) {
+      await audit(client, null, 'privacy.retention_anonymize', 'athlete', row.id, {
         reason: 'rejected_registration_retention_expired',
         retention_days: config.RETENTION_REJECTED_ATHLETE_DAYS,
       })
+      await enqueuePendingBiometryCleanup(client, row.id, {
+        biometryObjectKey: row.biometry_object_key,
+        controlIdReference: row.control_id_reference,
+      })
     }
-    return { ids: expiredIds, objectKeys: expired.rows.map((row) => row.biometry_object_key).filter(Boolean) }
+    return expiredIds
   })
-  for (const key of objectKeys) {
-    await storageClient.send(new DeleteObjectCommand({ Bucket: config.S3_BUCKET, Key: key }))
-  }
   if (ids.length) console.info(`Retention sweep: anonymized ${ids.length} expired rejected athlete registration(s).`)
   return ids.length
 }

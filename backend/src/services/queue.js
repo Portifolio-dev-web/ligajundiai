@@ -1,10 +1,11 @@
 import IORedis from 'ioredis'
 import { Queue, Worker } from 'bullmq'
+import { DeleteObjectCommand } from '@aws-sdk/client-s3'
 import { config } from '../config.js'
 import { query } from '../db/pool.js'
 import { sendQueuedEmail, enqueueOutboxEvents } from './email.js'
 import { sendQueuedSms } from './sms.js'
-import { createBiometryReadUrl, readBiometry } from './storage.js'
+import { createBiometryReadUrl, readBiometry, storageClient } from './storage.js'
 import { sweepExpiredRetention } from './retention.js'
 
 const connection = new IORedis(config.REDIS_URL, { maxRetriesPerRequest: null })
@@ -51,11 +52,38 @@ async function syncAthleteBiometry({ athleteId }) {
   }
 }
 
+// SEGURANÇA (varredura, item 8): antes, privacy.js/retention.js tentavam apagar o objeto no S3
+// só DEPOIS do commit, sem try/catch nem retentativa — uma falha aqui deixava o objeto órfão no
+// S3, sem nenhum registro de que ainda precisava ser apagado. Agora é um evento do outbox
+// (utils.js#enqueuePendingBiometryCleanup), com as retentativas do BullMQ (worker.on abaixo).
+async function deleteBiometryObject({ key }) {
+  await storageClient.send(new DeleteObjectCommand({ Bucket: config.S3_BUCKET, Key: key }))
+}
+
+// SEGURANÇA (varredura, item 9): o único registro do atleta no Control-ID era criado aqui
+// (syncAthleteBiometry) e nunca revogado — privacy.js/retention.js zeravam control_id_reference
+// sem nunca lê-lo primeiro, então não havia como sequer tentar chamar o fornecedor depois.
+// CONTROL_ID_API_URL não documenta um endpoint de revogação; assumimos o par DELETE do mesmo
+// recurso REST usado para criar (/persons/:reference) — se o contrato real do fornecedor for
+// outro, o worker.on('failed') abaixo garante que isso não passa em silêncio: cai como pendência
+// manual visível para o admin, em vez de só sumir.
+async function revokeControlIdReference({ reference }) {
+  if (config.CONTROL_ID_MODE !== 'live') return
+  const response = await fetch(`${config.CONTROL_ID_API_URL.replace(/\/$/, '')}/persons/${encodeURIComponent(reference)}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${config.CONTROL_ID_API_KEY}` },
+    signal: AbortSignal.timeout(10_000),
+  })
+  if (!response.ok && response.status !== 404) throw new Error(`Control ID revocation returned HTTP ${response.status}`)
+}
+
 export async function startQueueWorkers() {
   const worker = new Worker('lvj-jobs', async (job) => {
     if (job.name === 'email.send') return sendQueuedEmail(job.data.emailId)
     if (job.name === 'sms.send') return sendQueuedSms(job.data.smsId)
     if (job.name === 'biometry.sync') return syncAthleteBiometry(job.data)
+    if (job.name === 'biometry.delete') return deleteBiometryObject(job.data)
+    if (job.name === 'controlid.revoke') return revokeControlIdReference(job.data)
     if (job.name === 'retention.sweep') return sweepExpiredRetention()
     throw new Error(`Unsupported job type: ${job.name}`)
   }, { connection })
@@ -80,6 +108,18 @@ export async function startQueueWorkers() {
           [athlete.manager_user_id, 'admin', 'athlete_biometry_sync_failed', title, body],
         )
       }).catch((updateError) => console.error('Could not record failed biometric synchronization:', updateError))
+    }
+    // SEGURANÇA (varredura, item 9): se a revogação automática esgotar as retentativas (endpoint
+    // de revogação pode não ser exatamente o assumido em revokeControlIdReference, ou o fornecedor
+    // pode não ter um self-service de revogação), o registro biométrico do titular continua ativo
+    // no Control-ID depois de uma exclusão/retenção já confirmada no nosso banco. Isso precisa
+    // virar uma pendência manual/contratual visível, não só um erro no log.
+    if (job?.name === 'controlid.revoke' && job.attemptsMade >= Number(job.opts.attempts ?? 1)) {
+      query(
+        'INSERT INTO notifications (target, type, title, body) VALUES ($1, $2, $3, $4)',
+        ['admin', 'controlid_revoke_failed', 'Revogação pendente no Control-ID',
+          `A revogação automática do registro biométrico ${job.data.reference} (atleta ${job.data.athleteId}) falhou. Revogue manualmente junto ao fornecedor Control-ID.`],
+      ).catch((updateError) => console.error('Could not record failed Control-ID revocation:', updateError))
     }
   })
   const dispatch = () => enqueueOutboxEvents(jobsQueue).catch((error) => console.error('Outbox dispatch failed:', error))

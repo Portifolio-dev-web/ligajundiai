@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes, timingSafeEqual } from 'node:crypto'
+import { createCipheriv, createDecipheriv, createHmac, hkdfSync, randomBytes, timingSafeEqual } from 'node:crypto'
 import { config } from '../config.js'
 
 export function encryptSensitive(value) {
@@ -21,8 +21,18 @@ export function decryptSensitive(value) {
   return Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8')
 }
 
+// SEGURANÇA (varredura, item 2): RG tem um espaço de busca pequeno (5 a 9 dígitos + "X" opcional,
+// ver security/validation.js — 2.222.200.000 valores possíveis). Um SHA-256 sem chave sobre esse
+// espaço permitia reverter qualquer rg_hash vazado por força bruta (minutos numa CPU comum,
+// segundos numa GPU), sem precisar de APP_ENCRYPTION_KEY — derrotando a criptografia do
+// rg_ciphertext por um caminho totalmente diferente. A chave do HMAC é derivada por HKDF a partir
+// de APP_ENCRYPTION_KEY, com um rótulo próprio ("lvj-rg-digest-v1") para não reaproveitar a mesma
+// chave do AES-256-GCM acima em outro algoritmo. Trocar o algoritmo exige rehashear os rg_hash já
+// gravados — ver backend/src/db/rehash-rg-digest.js (execução única, depois de atualizar o código).
+const rgDigestKey = Buffer.from(hkdfSync('sha256', config.encryptionKey, Buffer.alloc(0), Buffer.from('lvj-rg-digest-v1'), 32))
+
 export function rgDigest(rg) {
-  return createHash('sha256').update(rg).digest('hex')
+  return createHmac('sha256', rgDigestKey).update(rg).digest('hex')
 }
 
 export function safeEqual(left, right) {

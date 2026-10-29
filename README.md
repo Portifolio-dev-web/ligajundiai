@@ -151,6 +151,19 @@ base legal para continuar identificados. Ajuste a variável antes de operar com
 dados reais se 180 dias não refletir a política de retenção da organização, e
 atualize o mesmo número em `app/privacidade/page.jsx` (`RETENTION_REJECTED_ATHLETE_DAYS`).
 
+## Rehash do índice cego de RG
+
+`rg_hash` (usado para detectar RG duplicado sem guardar o RG em texto puro)
+passou de SHA-256 sem chave para HMAC-SHA256 com chave derivada de
+`APP_ENCRYPTION_KEY` (`backend/src/security/crypto.js`) — o algoritmo antigo
+tinha um espaço de busca pequeno o bastante (RG validado, 5 a 9 dígitos + "X")
+para ser revertido por força bruta a partir de um `rg_hash` vazado, sem
+precisar da chave de criptografia. Depois de atualizar o código em produção,
+rode **uma vez** `npm run rehash:rg` (dentro de `backend/`) para recalcular os
+valores já gravados — sem isso, a verificação de RG duplicado para de
+reconhecer cadastros feitos antes da troca. O script é idempotente: rodar de
+novo só reprocessa quem ainda estiver com o hash antigo.
+
 ## Migração do MongoDB legado
 
 A importação do MongoDB antigo já foi executada (registrada em

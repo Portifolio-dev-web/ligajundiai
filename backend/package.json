@@ -11,6 +11,7 @@
     "test:integration": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --runInBand --testPathPatterns=integration.test.js",
     "migrate": "node src/db/migrate.js",
     "seed:admin": "node src/db/seed-admin.js",
+    "rehash:rg": "node src/db/rehash-rg-digest.js",
     "lint": "eslint ."
   },
   "dependencies": {

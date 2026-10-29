@@ -4,10 +4,7 @@ import argon2 from 'argon2'
 import { query, transaction } from '../db/pool.js'
 import { AppError } from '../errors.js'
 import { authenticate, sessionCookieName, sessionCookieOptions } from '../security/auth.js'
-import { asyncRoute, audit } from '../utils.js'
-import { storageClient } from '../services/storage.js'
-import { DeleteObjectCommand } from '@aws-sdk/client-s3'
-import { config } from '../config.js'
+import { asyncRoute, audit, enqueuePendingBiometryCleanup } from '../utils.js'
 import { exportRateLimit } from '../security/rate-limit.js'
 
 export const privacyRouter = Router()
@@ -47,9 +44,9 @@ privacyRouter.get('/export', exportRateLimit, asyncRoute(async (req, res) => {
 
 privacyRouter.delete('/me', asyncRoute(async (req, res) => {
   if (req.body?.confirm !== true) throw new AppError(400, 'CONFIRMATION_REQUIRED', 'Confirme explicitamente a exclusão dos dados')
-  const objectKeys = await transaction(async (client) => {
+  await transaction(async (client) => {
     const result = await client.query(
-      `SELECT id, biometry_object_key FROM athletes
+      `SELECT id, biometry_object_key, control_id_reference FROM athletes
        WHERE (user_id = $1 OR manager_user_id = $1) AND deleted_at IS NULL FOR UPDATE`,
       [req.user.id],
     )
@@ -81,12 +78,14 @@ privacyRouter.delete('/me', asyncRoute(async (req, res) => {
       [req.user.id, anonymizedEmail, passwordHash, now],
     )
     await client.query('UPDATE sessions SET revoked_at = $2 WHERE user_id = $1 AND revoked_at IS NULL', [req.user.id, now])
+    for (const row of result.rows) {
+      await enqueuePendingBiometryCleanup(client, row.id, {
+        biometryObjectKey: row.biometry_object_key,
+        controlIdReference: row.control_id_reference,
+      })
+    }
     await audit(client, req.user, 'privacy.anonymize', 'user', req.user.id)
-    return result.rows.map((row) => row.biometry_object_key).filter(Boolean)
   })
-  for (const key of objectKeys) {
-    await storageClient.send(new DeleteObjectCommand({ Bucket: config.S3_BUCKET, Key: key }))
-  }
   // SEGURANÇA (varredura, item S18): usava o nome e as opções do cookie fixos e divergentes do
   // resto do código (sameSite sempre 'lax', nunca o prefixo __Host-) — em produção isso limpava o
   // cookie errado e deixava a sessão de pé depois da anonimização.

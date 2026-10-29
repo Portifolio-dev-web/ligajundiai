@@ -21,6 +21,30 @@ export async function notify(client, target, type, title, body) {
   )
 }
 
+// SEGURANÇA (varredura, itens 8 e 9): privacy.js (exclusão a pedido do titular) e retention.js
+// (varredura de retenção) nulavam biometry_object_key/control_id_reference e só então, DEPOIS do
+// commit, tentavam apagar o objeto no S3/revogar no Control-ID — sem try/catch, sem retentativa, e
+// sem guardar a chave/referência em lugar nenhum se a chamada falhasse (fica um objeto órfão no S3
+// e um registro biométrico esquecido no fornecedor, nos dois casos sem qualquer trilha). Agora a
+// obrigação de limpeza entra no outbox na MESMA transação que zera as colunas — mesmo padrão já
+// usado por email/sms/biometry.sync (services/queue.js), com a durabilidade/retentativa do BullMQ.
+export async function enqueuePendingBiometryCleanup(client, athleteId, { biometryObjectKey, controlIdReference }) {
+  if (biometryObjectKey) {
+    await client.query(
+      `INSERT INTO outbox_events (event_key, event_type, payload)
+       VALUES ($1, 'biometry.delete', $2::jsonb) ON CONFLICT (event_key) DO NOTHING`,
+      [`biometry-delete:${athleteId}`, JSON.stringify({ key: biometryObjectKey })],
+    )
+  }
+  if (controlIdReference) {
+    await client.query(
+      `INSERT INTO outbox_events (event_key, event_type, payload)
+       VALUES ($1, 'controlid.revoke', $2::jsonb) ON CONFLICT (event_key) DO NOTHING`,
+      [`controlid-revoke:${athleteId}`, JSON.stringify({ reference: controlIdReference, athleteId })],
+    )
+  }
+}
+
 // Risco 1 (varredura, análise LVJ 2027): um gestor pode ter mais de uma equipe, então não existe
 // mais "a equipe do gestor" no singular — userTeams lista todas, e teamForManager busca uma
 // equipe específica já confirmando que ela pertence a este gestor (ownership check).
