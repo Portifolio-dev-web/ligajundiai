@@ -7,7 +7,7 @@ import { authenticate, authorize } from '../security/auth.js'
 import { cleanText, justificationSchema, parse } from '../security/validation.js'
 import { enqueueEmail, escapeHtml } from '../services/email.js'
 import { assertRegistrationOpen } from '../services/registration.js'
-import { assertValidCategory } from '../services/categories.js'
+import { assertValidCategory, lockCategoryName } from '../services/categories.js'
 import { financialResponsibilityTerm, consentTextHash } from '../services/legalTexts.js'
 import { asyncRoute, audit, notify } from '../utils.js'
 
@@ -26,6 +26,7 @@ teamsRouter.post('/', asyncRoute(async (req, res) => {
     consent_version: z.string().trim().max(40).optional(),
   }).strict(), req.body)
   const team = await transaction(async (client) => {
+    await lockCategoryName(client, input.category)
     await assertValidCategory(input.category, client)
     await assertRegistrationOpen(input.category, 'team', client)
     // Risco 1 (varredura, análise LVJ 2027): um gestor pode gerenciar mais de uma equipe, em

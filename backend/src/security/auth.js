@@ -105,17 +105,39 @@ export async function verifyPassword(hash, password) {
   }
 }
 
+// SEGURANÇA: verifyUserPassword tinha dois ramos de custo bem diferente (scrypt padrão do Node
+// para contas ainda não migradas vs. argon2id para as demais) e nenhuma equalização entre eles —
+// medido localmente, uma diferença estável de ~35ms (scrypt mais lento que este argon2id na
+// máquina testada). Quem já sabe um e-mail válido conseguia descobrir, só pelo tempo de resposta,
+// se aquela conta ainda está no hash legado (alvo mais fraco para credential stuffing com senhas
+// antigas). PASSWORD_VERIFY_FLOOR_MS garante que login-password sempre leve pelo menos esse tempo,
+// não importa qual ramo (legado, migrado, ou e-mail inexistente via verifyUnknownUserPassword
+// abaixo) realmente rodou — substitui a equalização por "mesmo custo de CPU" (que dependia de qual
+// algoritmo é mais lento em cada máquina) por uma equalização por tempo de parede.
+const PASSWORD_VERIFY_FLOOR_MS = 100
+
+async function padElapsedTo(startedAt, floorMs) {
+  const elapsedMs = Number(process.hrtime.bigint() - startedAt) / 1e6
+  const remaining = floorMs - elapsedMs
+  if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining))
+}
+
 export async function verifyUserPassword(user, password) {
+  const startedAt = process.hrtime.bigint()
+  let result
   if (user.legacy_password_salt && user.legacy_password_hash) {
     try {
       const supplied = scryptSync(String(password), user.legacy_password_salt, 64)
       const expected = Buffer.from(user.legacy_password_hash, 'hex')
-      return expected.length === supplied.length && timingSafeEqual(expected, supplied)
+      result = expected.length === supplied.length && timingSafeEqual(expected, supplied)
     } catch {
-      return false
+      result = false
     }
+  } else {
+    result = await verifyPassword(user.password_hash, password)
   }
-  return verifyPassword(user.password_hash, password)
+  await padElapsedTo(startedAt, PASSWORD_VERIFY_FLOOR_MS)
+  return result
 }
 
 // SEGURANÇA (varredura, item S13): antes, quando o e-mail não existia, o login pulava direto para
@@ -129,7 +151,10 @@ function dummyHash() {
   return dummyHashPromise
 }
 export async function verifyUnknownUserPassword(password) {
-  return verifyPassword(await dummyHash(), password)
+  const startedAt = process.hrtime.bigint()
+  const result = await verifyPassword(await dummyHash(), password)
+  await padElapsedTo(startedAt, PASSWORD_VERIFY_FLOOR_MS)
+  return result
 }
 
 export function unusablePasswordHash() {

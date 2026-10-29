@@ -101,6 +101,21 @@ export const forgotPasswordVerifyRateLimit = rateLimit({
   message: { error: 'Muitas tentativas de verificação. Tente novamente mais tarde.' },
 })
 
+// SEGURANÇA: POST /auth/totp/rotate/start e /confirm ficavam só com apiRateLimit (300/15min por
+// IP, compartilhado com todo o tráfego autenticado) — alguém com uma sessão de admin comprometida
+// podia tentar adivinhar o TOTP atual sem limite por conta, e um acerto troca o segredo de 2FA de
+// forma permanente (reset de senha não desfaz). Chave pelo usuário autenticado, não pelo IP.
+export const totpRotateAccountRateLimit = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  skip: () => config.NODE_ENV === 'test',
+  keyGenerator: (req) => `totp-rotate:${req.user?.id || ipKeyGenerator(req.ip)}`,
+  store: storeFor('lvj:totp-rotate-account:'),
+  message: { error: 'Muitas tentativas de troca de 2FA. Tente novamente mais tarde.' },
+})
+
 // SEGURANÇA (varredura, item S16): a exportação completa dos dados do titular (GET /privacy/export)
 // só exigia sessão válida, sem limite próprio — uma sessão vazada/roubada raspava os dados quantas
 // vezes quisesse. Chave pelo usuário autenticado, não pelo IP (várias contas no mesmo IP não se

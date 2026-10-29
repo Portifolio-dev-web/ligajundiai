@@ -6,7 +6,7 @@ import { authenticate, authorize } from '../security/auth.js'
 import { decryptSensitive, maskRg } from '../security/crypto.js'
 import { cleanText, parse, uuidSchema } from '../security/validation.js'
 import { getRegistrationPeriods, registrationStatus } from '../services/registration.js'
-import { assertValidCategory } from '../services/categories.js'
+import { assertValidCategory, lockCategoryName } from '../services/categories.js'
 import { asyncRoute, audit } from '../utils.js'
 
 export const adminRouter = Router()
@@ -30,6 +30,7 @@ adminRouter.put('/registration-periods/:category/:type', asyncRoute(async (req, 
   if (endsAt <= startsAt) throw new AppError(400, 'INVALID_REGISTRATION_PERIOD', 'A data final deve ser posterior à data inicial')
 
   const period = await transaction(async (client) => {
+    await lockCategoryName(client, input.category)
     await assertValidCategory(input.category, client)
     const result = await client.query(
       `INSERT INTO registration_periods

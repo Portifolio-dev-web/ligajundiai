@@ -5,7 +5,7 @@ import { AppError, notFound } from '../errors.js'
 import { authenticate, authorize } from '../security/auth.js'
 import { cleanText, parse, uuidSchema } from '../security/validation.js'
 import { asyncRoute, audit } from '../utils.js'
-import { listCategories } from '../services/categories.js'
+import { listCategories, lockCategoryName } from '../services/categories.js'
 
 export const adminCategoriesRouter = Router()
 adminCategoriesRouter.use(authenticate, authorize('admin'))
@@ -69,6 +69,7 @@ adminCategoriesRouter.put('/:categoryId', asyncRoute(async (req, res) => {
 
     const nextName = input.name !== undefined ? cleanText(input.name, 80) : existing.name
     if (nextName !== existing.name) {
+      await lockCategoryName(client, existing.name)
       const usage = await categoryUsage(client, existing.name)
       if (categoryInUse(usage)) {
         throw new AppError(
@@ -105,6 +106,7 @@ adminCategoriesRouter.delete('/:categoryId', asyncRoute(async (req, res) => {
     const current = await client.query('SELECT * FROM categories WHERE id = $1', [params.categoryId])
     const existing = current.rows[0]
     if (!existing) throw notFound('Categoria não encontrada')
+    await lockCategoryName(client, existing.name)
     const usage = await categoryUsage(client, existing.name)
     if (categoryInUse(usage)) {
       throw new AppError(

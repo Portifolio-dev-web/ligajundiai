@@ -5,7 +5,7 @@ import { AppError, forbidden, notFound } from '../errors.js'
 import { authenticate, authorize } from '../security/auth.js'
 import { cleanText, parse, uuidSchema } from '../security/validation.js'
 import { asyncRoute, audit, notify } from '../utils.js'
-import { assertValidCategory, listCategoryNames } from '../services/categories.js'
+import { assertValidCategory, listCategoryNames, lockCategoryName } from '../services/categories.js'
 
 export const gamesRouter = Router()
 export const adminGamesRouter = Router()
@@ -35,18 +35,21 @@ adminGamesRouter.post('/game-dates', asyncRoute(async (req, res) => {
     venue: z.string().trim().max(200).optional().default(''),
     category: z.string().trim().min(1).max(80),
   }).strict(), req.body)
-  await assertValidCategory(input.category)
-  const result = await query(
-    `INSERT INTO game_dates (available_at, venue, category, created_by)
-     VALUES ($1, $2, $3, $4) RETURNING *`,
-    [input.available_at, cleanText(input.venue, 200), input.category, req.user.id],
-  )
-  await query(
-    `INSERT INTO audit_logs (actor_id, actor_name, action, entity_type, entity_id)
-     VALUES ($1, $2, 'game_date.create', 'game_date', $3)`,
-    [req.user.id, req.user.name, result.rows[0].id],
-  )
-  res.status(201).json({ game_date: result.rows[0] })
+  // SEGURANÇA: lockCategoryName serializa esta criação contra o guard de uso de categoria
+  // (categories.js#categoryUsage) — exige uma transação própria (pg_advisory_xact_lock só vale
+  // dentro de uma transação) em vez dos query() soltos que este handler usava antes.
+  const gameDate = await transaction(async (client) => {
+    await lockCategoryName(client, input.category)
+    await assertValidCategory(input.category, client)
+    const result = await client.query(
+      `INSERT INTO game_dates (available_at, venue, category, created_by)
+       VALUES ($1, $2, $3, $4) RETURNING *`,
+      [input.available_at, cleanText(input.venue, 200), input.category, req.user.id],
+    )
+    await audit(client, req.user, 'game_date.create', 'game_date', result.rows[0].id, { category: input.category })
+    return result.rows[0]
+  })
+  res.status(201).json({ game_date: gameDate })
 }))
 
 adminGamesRouter.get('/game-dates', asyncRoute(async (req, res) => {

@@ -13,7 +13,7 @@ import { enqueueSms } from '../services/sms.js'
 import { asyncRoute, audit } from '../utils.js'
 import {
   authRateLimit, loginAccountRateLimit, otpRequestAccountRateLimit,
-  forgotPasswordRequestRateLimit, forgotPasswordVerifyRateLimit,
+  forgotPasswordRequestRateLimit, forgotPasswordVerifyRateLimit, totpRotateAccountRateLimit,
 } from '../security/rate-limit.js'
 
 export const authRouter = Router()
@@ -22,8 +22,10 @@ export const authRouter = Router()
 // cada página protegida) e pelo front ao carregar. Isso consumia o orçamento de 10 req/15min só de
 // navegar, e a tentativa de login seguinte (mesmo sendo a única "tentativa" de verdade) já caía
 // bloqueada. Agora o limitador só vale nas rotas que são tentativas de autenticação de fato
-// (registro, login, pedido/confirmação de código) — /me, /logout, /reconsent e /totp/rotate/* exigem
-// sessão já autenticada e não são o alvo deste limite.
+// (registro, login, pedido/confirmação de código) — /me, /logout e /reconsent exigem sessão já
+// autenticada e não são o alvo deste limite. /totp/rotate/start e /confirm também exigem sessão
+// autenticada, mas por trocarem o segredo de 2FA (ação sensível e irreversível por senha) têm seu
+// próprio limite por conta (totpRotateAccountRateLimit), não apenas o apiRateLimit genérico.
 
 const registerSchema = z.object({
   name: z.string().trim().min(2).max(120),
@@ -373,7 +375,7 @@ const totpAccountName = (email) => email
 const totpIssuer = 'Liga de Voleibol Jundiaí (LVJ)'
 const TOTP_PENDING_TTL_MS = 10 * 60 * 1000
 
-authRouter.post('/totp/rotate/start', authenticate, authorize('admin'), asyncRoute(async (req, res) => {
+authRouter.post('/totp/rotate/start', authenticate, authorize('admin'), totpRotateAccountRateLimit, asyncRoute(async (req, res) => {
   const input = parse(z.object({ current_totp: z.string().trim().regex(/^\d{6}$/) }).strict(), req.body)
   const result = await query('SELECT totp_secret_ciphertext FROM users WHERE id = $1', [req.user.id])
   const currentSecret = decryptSensitive(result.rows[0]?.totp_secret_ciphertext)
@@ -395,7 +397,7 @@ authRouter.post('/totp/rotate/start', authenticate, authorize('admin'), asyncRou
   })
 }))
 
-authRouter.post('/totp/rotate/confirm', authenticate, authorize('admin'), asyncRoute(async (req, res) => {
+authRouter.post('/totp/rotate/confirm', authenticate, authorize('admin'), totpRotateAccountRateLimit, asyncRoute(async (req, res) => {
   const input = parse(z.object({ new_totp: z.string().trim().regex(/^\d{6}$/) }).strict(), req.body)
   const result = await query(
     'SELECT totp_pending_secret_ciphertext, totp_pending_expires_at FROM users WHERE id = $1',
