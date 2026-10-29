@@ -54,6 +54,14 @@ webhooksRouter.post('/turnstile', asyncRoute(async (req, res) => {
       throw new AppError(400, 'ATHLETE_NOT_IN_MATCH', 'O atleta não pertence a uma das equipes deste jogo')
     }
     const occurredAt = new Date(input.occurred_at)
+    // SEGURANÇA: occurred_at só era validado contra scheduled_at (±24h), nunca contra o
+    // instante real da requisição (já autenticado por HMAC+timestamp acima) — um portador do
+    // WEBHOOK_SECRET podia reportar presença em qualquer momento dentro da janela do jogo,
+    // independente de quando o scan realmente ocorreu. Tolerância generosa para cobrir buffer
+    // de dispositivo offline, sem permitir que o evento seja arbitrariamente adiantado/atrasado.
+    if (Math.abs(Date.now() - occurredAt.getTime()) > 6 * 60 * 60 * 1000) {
+      throw new AppError(400, 'OCCURRED_AT_NOT_REALTIME', 'occurred_at não reflete o momento real do evento')
+    }
     if (Math.abs(occurredAt.getTime() - new Date(game.scheduled_at).getTime()) > 24 * 60 * 60 * 1000) {
       throw new AppError(400, 'ACCESS_OUTSIDE_GAME_WINDOW', 'O acesso está fora da janela do jogo')
     }

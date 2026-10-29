@@ -179,36 +179,6 @@ services:
       timeout: 5s
       retries: 10
 
-  legacy-mongodb:
-    profiles: ["legacy"]
-    image: mongo:7.0
-    ports:
-      - "27018:27017"
-    volumes:
-      - mongo_data:/data/db
-    healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
-  legacy-migrate:
-    profiles: ["legacy"]
-    build:
-      context: .
-      dockerfile: backend/Dockerfile
-      target: development
-    command: ["npm", "run", "migrate:legacy"]
-    environment:
-      <<: *api-environment
-      LEGACY_MONGO_URL: mongodb://legacy-mongodb:27017
-      LEGACY_MONGO_DATABASE: ligajundiai
-    depends_on:
-      postgres:
-        condition: service_healthy
-      legacy-mongodb:
-        condition: service_healthy
-
   backend-test:
     profiles: ["test"]
     build:
@@ -236,4 +206,3 @@ volumes:
   object_storage_1:
   object_storage_2:
   object_storage_3:
-  mongo_data:

@@ -11,13 +11,23 @@ export const adminCategoriesRouter = Router()
 adminCategoriesRouter.use(authenticate, authorize('admin'))
 
 async function categoryUsage(client, name) {
+  // SEGURANÇA: antes só contava teams/matches; game_dates e registration_periods também
+  // guardam category como texto livre (sem FK) e eram ignorados, permitindo renomear/excluir
+  // uma categoria com horários/janelas de inscrição agendados, apesar da mensagem de erro
+  // afirmar proteção completa.
   const result = await client.query(
     `SELECT
        (SELECT count(*)::int FROM teams WHERE category = $1 AND deleted_at IS NULL) AS teams,
-       (SELECT count(*)::int FROM matches WHERE category = $1 AND deleted_at IS NULL) AS matches`,
+       (SELECT count(*)::int FROM matches WHERE category = $1 AND deleted_at IS NULL) AS matches,
+       (SELECT count(*)::int FROM game_dates WHERE category = $1 AND deleted_at IS NULL) AS game_dates,
+       (SELECT count(*)::int FROM registration_periods WHERE category = $1) AS registration_periods`,
     [name],
   )
   return result.rows[0]
+}
+
+function categoryInUse(usage) {
+  return usage.teams > 0 || usage.matches > 0 || usage.game_dates > 0 || usage.registration_periods > 0
 }
 
 adminCategoriesRouter.get('/', asyncRoute(async (_req, res) => {
@@ -60,11 +70,11 @@ adminCategoriesRouter.put('/:categoryId', asyncRoute(async (req, res) => {
     const nextName = input.name !== undefined ? cleanText(input.name, 80) : existing.name
     if (nextName !== existing.name) {
       const usage = await categoryUsage(client, existing.name)
-      if (usage.teams > 0 || usage.matches > 0) {
+      if (categoryInUse(usage)) {
         throw new AppError(
           409,
           'CATEGORY_IN_USE',
-          'Não é possível renomear: já existem equipes ou jogos cadastrados nesta categoria. Desative-a e crie uma nova em vez disso.',
+          'Não é possível renomear: já existem equipes, jogos, horários ou janelas de inscrição cadastrados nesta categoria. Desative-a e crie uma nova em vez disso.',
         )
       }
     }
@@ -96,11 +106,11 @@ adminCategoriesRouter.delete('/:categoryId', asyncRoute(async (req, res) => {
     const existing = current.rows[0]
     if (!existing) throw notFound('Categoria não encontrada')
     const usage = await categoryUsage(client, existing.name)
-    if (usage.teams > 0 || usage.matches > 0) {
+    if (categoryInUse(usage)) {
       throw new AppError(
         409,
         'CATEGORY_IN_USE',
-        'Não é possível remover: existem equipes ou jogos cadastrados nesta categoria. Desative-a em vez de remover.',
+        'Não é possível remover: existem equipes, jogos, horários ou janelas de inscrição cadastrados nesta categoria. Desative-a em vez de remover.',
       )
     }
     await client.query('DELETE FROM categories WHERE id = $1', [existing.id])

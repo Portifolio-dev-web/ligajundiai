@@ -151,18 +151,11 @@ base legal para continuar identificados. Ajuste a variável antes de operar com
 dados reais se 180 dias não refletir a política de retenção da organização, e
 atualize o mesmo número em `app/privacidade/page.jsx` (`RETENTION_REJECTED_ATHLETE_DAYS`).
 
-## Importação opcional do MongoDB legado
+## Migração do MongoDB legado
 
-A importação é opt-in e não é iniciada junto com a aplicação. Se o MongoDB antigo
-estiver no perfil `legacy`, suba os serviços e execute:
-
-```powershell
-docker compose --profile legacy up -d postgres legacy-mongodb
-docker compose --profile legacy run --build --rm legacy-migrate
-```
-
-O serviço usa `LEGACY_MONGO_DATABASE=ligajundiai` e `LEGACY_MONGO_URL` definidos
-no Compose. A importação é transacional e registra a execução em
-`legacy_imports`; ela não substitui a revisão dos dados antes da migração. Os
-consentimentos que não existiam no sistema antigo ficam marcados como não
-registrados, e senhas scrypt são atualizadas para Argon2id no próximo login.
+A importação do MongoDB antigo já foi executada (registrada em
+`legacy_imports`) e as ferramentas de importação (`legacy-mongodb`,
+`legacy-migrate`, `migrate-legacy.js`) foram removidas do projeto. Contas que
+ainda não fizeram login desde a migração continuam com `legacy_password_salt`/
+`legacy_password_hash` preenchidos e são verificadas via scrypt até o próximo
+login, quando a senha é atualizada para Argon2id automaticamente.

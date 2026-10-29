@@ -150,7 +150,7 @@ authRouter.post('/otp/verify', authRateLimit, asyncRoute(async (req, res) => {
   const result = await query(
     `SELECT o.id AS otp_id, o.user_id, o.code_hash, u.id, u.role, u.name, u.email, u.consent_version
      FROM otp_codes o JOIN users u ON u.id = o.user_id
-     WHERE lower(u.email) = $1 AND o.consumed_at IS NULL AND o.expires_at > now()
+     WHERE lower(u.email) = $1 AND o.purpose = 'login' AND o.consumed_at IS NULL AND o.expires_at > now()
        AND o.attempts < 5 AND u.status = 'active' AND u.deleted_at IS NULL
      ORDER BY o.created_at DESC LIMIT 1`,
     [codeHashPrefix],
