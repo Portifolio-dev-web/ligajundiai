@@ -20,6 +20,14 @@ module.exports = {
       },
       extend: {
         colors: {
+          // Cores de marca da LVJ (vinham só como hex cru em lib/theme.js, aplicadas via style
+          // inline). Nomeadas sob "brand" para não colidir com a paleta padrão red-*/blue-* do
+          // Tailwind, já usada em vários componentes (badges, botões).
+          brand: {
+            navy: '#1E1B4B',
+            red: '#E4242A',
+            blue: '#2458A6',
+          },
           border: 'hsl(var(--border))',
           input: 'hsl(var(--input))',
           ring: 'hsl(var(--ring))',
